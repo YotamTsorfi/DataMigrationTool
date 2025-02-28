@@ -55,9 +55,13 @@ export const vehiclesController = {
         perfMonitor.logResponseMetrics(response.data, response.status);
 
         const result = {
-            message: 'Batch vehicles created successfully',
-            vehiclesCount: vehicles.length,
-            data: response.data
+          message: "Batch vehicles created successfully",
+          vehiclesCount: vehicles.length,
+          data: response.data,
+          requestSize: perfMonitor.metrics.requestSize,
+          responseSize: perfMonitor.metrics.responseSize,
+          duration: perfMonitor.metrics.duration,
+          averageTimePerRecord: perfMonitor.metrics.averageTimePerRecord,
         };
 
         perfMonitor.endOperation();
