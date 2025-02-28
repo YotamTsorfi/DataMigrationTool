@@ -1,0 +1,14 @@
+{
+    "compilerOptions": {
+      "target": "ES6",                     // גרסת JavaScript המוזנת
+      "module": "commonjs",                   // משמש ב-Node.js
+      "rootDir": "./src",                     // תיקיית קבצי המקור שלך
+      "outDir": "./dist",                     // תיקיית הפלט לקוד המומר
+      "strict": true,                         // הפעלת בדיקות טיפוסים קפדניות
+      "esModuleInterop": true,                // תאימות טובה יותר עם מודולים ES6
+      "skipLibCheck": true,
+      "forceConsistentCasingInFileNames": true
+    },
+    "include": ["src/**/*"],
+    "exclude": ["node_modules", "dist"]
+  }
