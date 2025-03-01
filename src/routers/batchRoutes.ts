@@ -17,4 +17,15 @@ router.post('/process', async (req, res) => {
     }
 });
 
+router.post("/process-files", async (req, res) => {
+  try {
+    await BatchService.processBatchVehiclesFiles(req, res);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+});
+
 export default router;
