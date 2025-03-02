@@ -1,7 +1,6 @@
 //vehiclesController.ts
 
-import { Request, Response, NextFunction } from "express";
-//import { RequestHandler } from "express";
+import { Request, Response } from "express";
 import axios, { AxiosError } from "axios";
 import { config } from "../config/config";
 import PerformanceMonitor from "../utils/performanceMonitor";

@@ -4,9 +4,10 @@ import path from "path";
 import fs from "fs";
 import axios from "axios";
 import { writeToLogFile } from "../config/logger";
-import { vehiclesController } from "../controllers/vehiclesController";
 import { performBatchCreateVehicles } from "../controllers/vehiclesController";
 import { Request, Response } from "express";
+import { Scheduler } from "../utils/scheduler";
+import { handleError } from "../utils/errorHandler";
 
 export class BatchService {
   //------------------------------------------------------------
@@ -23,9 +24,17 @@ export class BatchService {
         .readdirSync(dataDir)
         .filter((file) => file.startsWith("vehicles_batch_"));
 
+      const batchSize = 100; // Define the batch size to 100 to avoid exceeding the limit
+      const maxParallelRequests = 10; // Define the maximum number of parallel requests
+      const scheduler = new Scheduler(maxParallelRequests, 6000); // 10 requests per minute
+
       for (const file of files) {
         const vehiclesPath = path.join(dataDir, file);
         console.log("Reading vehicles from:", vehiclesPath);
+        writeToLogFile(
+          "general.log",
+          `[INFO] Reading vehicles from: ${vehiclesPath}`
+        );
 
         if (!fs.existsSync(vehiclesPath)) {
           throw new Error(`Vehicles file not found at: ${vehiclesPath}`);
@@ -39,6 +48,10 @@ export class BatchService {
           console.log(
             `Successfully loaded ${vehicles.length} vehicles from file`
           );
+          writeToLogFile(
+            "general.log",
+            `[INFO] Successfully loaded ${vehicles.length} vehicles from file`
+          );
         } catch (error) {
           const parseError =
             error instanceof Error ? error : new Error("Unknown parsing error");
@@ -51,15 +64,23 @@ export class BatchService {
           throw new Error("Vehicles data must be an array");
         }
 
-        const batchSize = 100; // Define the batch size to 100 to avoid exceeding the limit
+        const batches = [];
         for (let i = 0; i < vehicles.length; i += batchSize) {
           const batch = vehicles.slice(i, i + batchSize);
+          batches.push(batch);
+        }
+
+        const processBatch = async (batch: any[]) => {
           const requestData = {
             body: { vehicles: batch },
             priorityBatchAxios: req.priorityBatchAxios,
           };
 
           console.log(`Processing batch with ${batch.length} vehicles...`);
+          writeToLogFile(
+            "general.log",
+            `[INFO] Processing batch with ${batch.length} vehicles...`
+          );
 
           // Call performBatchCreateVehicles directly
           const result = await performBatchCreateVehicles(requestData as any);
@@ -67,6 +88,10 @@ export class BatchService {
           if (!result.success) {
             throw new Error(result.error);
           }
+        };
+
+        for (const batch of batches) {
+          await scheduler.schedule(() => processBatch(batch));
         }
       }
 
@@ -80,26 +105,7 @@ export class BatchService {
         message: "Batch processing completed successfully",
       });
     } catch (error) {
-      let errorMessage: string;
-
-      if (axios.isAxiosError(error)) {
-        errorMessage = `${error.message} - ${JSON.stringify(error.response?.data)}`;
-      } else if (error instanceof Error) {
-        errorMessage = error.message;
-      } else {
-        errorMessage = "An unknown error occurred";
-      }
-
-      console.error("Batch Processing Error:", errorMessage);
-      writeToLogFile(
-        "general.log",
-        `[ERROR] Batch processing failed: ${errorMessage}`
-      );
-
-      res.status(500).json({
-        success: false,
-        error: errorMessage,
-      });
+      handleError(error, res);
     }
   }
   //------------------------------------------------------------
