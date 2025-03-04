@@ -18,7 +18,8 @@
     "format": "prettier --write \"src/**/*.ts\"",
     "clean": "rimraf dist",
     "prebuild": "npm run clean",
-    "postbuild": "copy .env dist\\.env || cp .env dist/.env"
+    "postbuild": "copy .env dist\\.env || cp .env dist/.env",
+    "run-job": "ts-node src/jobs/runJob.ts"
   },
   "keywords": [],
   "author": "Yotam Tsorfy Shaked",
@@ -49,7 +50,8 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
-    "mssql": "^11.0.1"
+    "mssql": "^11.0.1",
+    "p-limit": "^6.2.0"
   },
   "nodemonConfig": {
     "ignore": [

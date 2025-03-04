@@ -1,8 +1,7 @@
 // src/utils/performanceMonitor.ts
 
 import { performance } from 'perf_hooks';
-import { writeToLogFile } from '../config/logger';
-import fs from 'fs';
+import { writeToLogFile } from "../config/logger";
 
 interface PerformanceMetrics {
   startTime: number;

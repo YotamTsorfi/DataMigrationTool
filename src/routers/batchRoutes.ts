@@ -28,4 +28,16 @@ router.post("/process-files", async (req, res) => {
   }
 });
 
+router.post("/process-batches", async (req, res) => {
+  try {
+    const results = await BatchService.processBatches();
+    res.status(200).json(results);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+});
+
 export default router;
