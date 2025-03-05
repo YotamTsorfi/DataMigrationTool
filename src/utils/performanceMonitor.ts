@@ -14,6 +14,9 @@ interface PerformanceMetrics {
   errorType?: string;
   recordCount: number;
   averageTimePerRecord?: string;
+  successCount: number;
+  failureCount: number;
+  lastProcessedIndex: number;
 }
 
 class PerformanceMonitor {
@@ -29,6 +32,9 @@ class PerformanceMonitor {
       responseSize: 0,
       success: false,
       recordCount: 0,
+      successCount: 0,
+      failureCount: 0,
+      lastProcessedIndex: 0,
     };
     this.requestData = null;
   }
@@ -140,6 +146,26 @@ class PerformanceMonitor {
 
     console.log("Performance Summary:", performanceLog);
     writeToLogFile("performance.log", JSON.stringify(performanceLog));
+  }
+
+  incrementSuccessCount() {
+    this.metrics.successCount += 1;
+  }
+
+  incrementFailureCount() {
+    this.metrics.failureCount += 1;
+  }
+
+  setLastProcessedIndex(index: number) {
+    this.metrics.lastProcessedIndex = index;
+  }
+
+  logVehicleResponse(index: number, response: any) {
+    console.log(`Vehicle ${index} Response:`, {
+      status: response.status,
+      data: response.data,
+      timestamp: this.formatDate(new Date()),
+    });
   }
 
   static logServerMetrics() {

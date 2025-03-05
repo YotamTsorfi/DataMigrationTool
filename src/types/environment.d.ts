@@ -2,17 +2,16 @@
 
 declare namespace NodeJS {
     interface ProcessEnv {
-      PRIORITY_BASE_URL: string;
+      PRIORITY_DEV_BASE_URL: string;
       PRIORITY_PAT: string;
       PRIORITY_PASSWORD: string;
 
-      PORT?: string;
-      CARMELTON_DB_USER:string;
-      CARMELTON_DB_PASSWORD:string;
-      CARMELTON_DB_SERVER:string;
-      CARMELTON_DB_NAME:string;
-      CARMELTON_DB_PORT:string;
+      SERVER_PORT?: string;
 
-    
+      CARMELTON_DB_USER: string;
+      CARMELTON_DB_PASSWORD: string;
+      CARMELTON_DB_SERVER: string;
+      CARMELTON_DB_NAME: string;
+      CARMELTON_DB_PORT: string;
     }
   }

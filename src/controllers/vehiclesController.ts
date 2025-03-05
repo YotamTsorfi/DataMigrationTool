@@ -97,7 +97,7 @@ export const vehiclesController = {
   async getAllVehicles(req: Request, res: Response) {
     try {
       const response = await req.priorityAxios?.get(
-        `${config.priorityBaseUrl}/NATF_VEHICLES`
+        `${config.priorityDEVBaseUrl}/NATF_VEHICLES`
       );
 
       res.status(200).json({
@@ -114,7 +114,7 @@ export const vehiclesController = {
       const { id } = req.params;
       // TODO - Needs to change to NATF_VEHICLES('42972502')
       const response = await req.priorityAxios?.get(
-        `${config.priorityBaseUrl}/NATF_VEHICLES(${id})`
+        `${config.priorityDEVBaseUrl}/NATF_VEHICLES(${id})`
       );
 
       res.status(200).json({
@@ -130,7 +130,7 @@ export const vehiclesController = {
     try {
       const newVehicle = req.body;
       const response = await req.priorityAxios?.post(
-        `${config.priorityBaseUrl}/NATF_VEHICLES`,
+        `${config.priorityDEVBaseUrl}/NATF_VEHICLES`,
         newVehicle
       );
 
@@ -148,7 +148,7 @@ export const vehiclesController = {
       const { id } = req.params;
       const updatedVehicle = req.body;
       const response = await req.priorityAxios?.put(
-        `${config.priorityBaseUrl}/NATF_VEHICLES(${id})`,
+        `${config.priorityDEVBaseUrl}/NATF_VEHICLES(${id})`,
         updatedVehicle
       );
 
@@ -165,7 +165,7 @@ export const vehiclesController = {
     try {
       const { id } = req.params;
       await req.priorityAxios?.delete(
-        `${config.priorityBaseUrl}/NATF_VEHICLES(${id})`
+        `${config.priorityDEVBaseUrl}/NATF_VEHICLES(${id})`
       );
 
       res.status(200).json({

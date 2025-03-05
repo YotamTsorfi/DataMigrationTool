@@ -15,34 +15,34 @@ declare global {
 export function priorityAuthMiddleware(req: Request, res: Response, next: NextFunction) {
   try {
     const priorityAxios = axios.create({
-      baseURL: config.priorityBaseUrl,
+      baseURL: config.priorityDEVBaseUrl,
       auth: {
         username: config.priorityPAT,
-        password: config.priorityPassword
+        password: config.priorityPassword,
       },
       headers: {
-        'Content-Type': 'application/json',
-        'OData-Version': '4.0',
-        'Accept': 'application/json'
+        "Content-Type": "application/json",
+        "OData-Version": "4.0",
+        Accept: "application/json",
       },
       timeout: 30000, // 30 שניות
       validateStatus: function (status) {
         return status >= 200 && status < 300; // ברירת מחדל
-      }
+      },
     });
 
     const priorityBatchAxios = axios.create({
-      baseURL: config.priorityBaseUrl.replace(/\/$/, ''), // מסיר סלאש בסוף אם קיים
+      baseURL: config.priorityDEVBaseUrl.replace(/\/$/, ""), // מסיר סלאש בסוף אם קיים
       auth: {
-          username: config.priorityPAT,
-          password: config.priorityPassword
+        username: config.priorityPAT,
+        password: config.priorityPassword,
       },
       headers: {
-          'Content-Type': 'multipart/mixed',
-          'OData-Version': '4.0'
+        "Content-Type": "multipart/mixed",
+        "OData-Version": "4.0",
       },
-      timeout: 30000
-  });
+      timeout: 30000,
+    });
 
   // הוספת interceptors לדיבוג
 priorityBatchAxios.interceptors.request.use(

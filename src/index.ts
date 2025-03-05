@@ -8,14 +8,16 @@ import PerformanceMonitor from "./utils/performanceMonitor";
 
 import priorityRoutes from "./routers/priorityRoutes";
 import userRouter from "./routers/userRouter";
-import batchRoutes from "./routers/batchRoutes";
+// import batchRoutes from "./routers/batchRoutes";
 
+//TODO - Check if needed because the connection-pool later on
 import { connectToCarmeltonDatabase } from "./database/connection";
 
 // Initialize Express app
 const app = express();
 
 // Connect to DB
+//TODO - Check if needed because the connection-pool later on
 connectToCarmeltonDatabase();
 
 const port = config.port;
@@ -36,7 +38,7 @@ app.use(express.urlencoded({ extended: true }));
 //Routers
 app.use("/priority", priorityRoutes);
 app.use("/api", userRouter);
-app.use("/api/batch", batchRoutes);
+// app.use("/api/batch", batchRoutes);
 
 // Start server
 http.listen(port, "0.0.0.0", () => {

@@ -19,7 +19,8 @@
     "clean": "rimraf dist",
     "prebuild": "npm run clean",
     "postbuild": "copy .env dist\\.env || cp .env dist/.env",
-    "run-job": "ts-node src/jobs/runJob.ts"
+    "run-job": "ts-node src/jobs/runJob.ts",
+    "insert-to-db": "ts-node src/scripts/populateAllvehiclesTest.ts"
   },
   "keywords": [],
   "author": "Yotam Tsorfy Shaked",
@@ -51,7 +52,8 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "mssql": "^11.0.1",
-    "p-limit": "^6.2.0"
+    "p-limit": "^6.2.0",
+    "uuid": "^11.1.0"
   },
   "nodemonConfig": {
     "ignore": [
