@@ -17,18 +17,25 @@ interface BatchResponse {
 const BatchProcessor: React.FC = () => {
     const [isProcessing, setIsProcessing] = useState(false);
     const [results, setResults] = useState<BatchResponse[]>([]);
+    const [recordCount, setRecordCount] = useState(200);
+    const [startRow, setStartRow] = useState(401);
+    const [batchResults, setBatchResults] = useState([]);
+    const [failedVehicles, setFailedVehicles] = useState([]);
 
     const handleBatchProcess = async () => {
       setIsProcessing(true);
       setResults([]);
 
       try {
-        const response = await axios.post<BatchResponse[]>(
-          // 'http://localhost:3001/api/batch/process' // One File
-          "http://localhost:3001/api/batch/process-files" // Multiple Files
+        await axios.post("http://localhost:3001/api/batch/run-job", {
+          recordCount,
+          startRow,
+        });
+        const response = await axios.get(
+          "http://localhost:3001/api/batch/results"
         );
-        console.log("Batch process response:", response.data);
-        setResults(response.data);
+        setBatchResults(response.data.batchResults);
+        setFailedVehicles(response.data.failedVehicles);
       } catch (error) {
         console.error("Batch process error:", error);
         setResults([
@@ -49,6 +56,25 @@ const BatchProcessor: React.FC = () => {
       <div className="batch-processor">
         <h2>Priority Vehicles Batch Processor</h2>
 
+        <div>
+          <label>
+            Record Count:
+            <input
+              type="number"
+              value={recordCount}
+              onChange={(e) => setRecordCount(Number(e.target.value))}
+            />
+          </label>
+          <label>
+            Start Row:
+            <input
+              type="number"
+              value={startRow}
+              onChange={(e) => setStartRow(Number(e.target.value))}
+            />
+          </label>
+        </div>
+
         <button
           onClick={handleBatchProcess}
           disabled={isProcessing}
@@ -57,31 +83,31 @@ const BatchProcessor: React.FC = () => {
           {isProcessing ? "Processing..." : "Process Batch"}
         </button>
 
-        {results.length > 0 && (
+        {batchResults.length > 0 && (
           <div className="results">
-            {results.map((result, index) => (
-              <div
-                key={index}
-                className={`result ${result.success ? "success" : "error"}`}
-              >
-                {result.success ? (
-                  <>
-                    <h3>Success!</h3>
-                    <p>Processed {result.vehiclesCount} vehicles</p>
-                    <p>{result.message}</p>
-                    <p>Request Size: {result.requestSize} bytes</p>
-                    <p>Response Size: {result.responseSize} bytes</p>
-                    <p>Duration: {result.duration} ms</p>
-                    <p>
-                      Average Time Per Record: {result.averageTimePerRecord}
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <h3>Error</h3>
-                    <p>{result.error}</p>
-                  </>
-                )}
+            <h3>Batch Results</h3>
+            {batchResults.map((result: any, index: number) => (
+              <div key={index} className="result">
+                <p>Batch ID: {result.BatchID}</p>
+                <p>Start Time: {result.StartTime}</p>
+                <p>End Time: {result.EndTime}</p>
+                <p>Total Records: {result.TotalRecords}</p>
+                <p>Success Count: {result.SuccessCount}</p>
+                <p>Failure Count: {result.FailureCount}</p>
+                <p>Status: {result.Status}</p>
+                <p>Error Message: {result.ErrorMessage}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {failedVehicles.length > 0 && (
+          <div className="results">
+            <h3>Failed Vehicles</h3>
+            {failedVehicles.map((vehicle: any, index: number) => (
+              <div key={index} className="result error">
+                <p>Row ID: {vehicle.RowId}</p>
+                <p>Error: {vehicle.Error}</p>
               </div>
             ))}
           </div>
