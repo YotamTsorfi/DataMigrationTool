@@ -6,17 +6,21 @@ async function generateVehicles(count: number) {
   for (let i = 0; i < count; i++) {
     const vehicle = {
       Data: JSON.stringify({
-        VEHICLENUM: `${4397344 + i}`,
+        VEHICLENUM: `${5557344 + i}`,
         VEHICLETYPECODE: Math.floor(Math.random() * 2) + 1,
-        MNFCODE: ["005", "006", "007", "002", "014"][Math.floor(Math.random() * 5)],
-        COLORCODE: ["50", "51", "17", "52", "56", "77", "98"][Math.floor(Math.random() * 7)],
+        MNFCODE: ["005", "006", "007", "002", "014"][
+          Math.floor(Math.random() * 5)
+        ],
+        COLORCODE: ["50", "51", "17", "52", "56", "77", "98"][
+          Math.floor(Math.random() * 7)
+        ],
         JRSDICTCODE: "ISR",
         YEARONROAD: `${2015 + Math.floor(Math.random() * 10)}`,
         WEIGHT: Math.floor(Math.random() * 2000) + 1000,
         STATDES: "פעיל",
         PLACES: Math.floor(Math.random() * 5),
         PLACENEXTDRIVER: 0,
-      })
+      }),
     };
 
     vehicles.push(vehicle);
