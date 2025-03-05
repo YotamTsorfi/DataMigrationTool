@@ -1,22 +1,42 @@
 import React from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 
 interface BatchDashboardProps {
   batchResults: any[];
 }
 
+const COLORS = ["#0088FE", "#FF8042"];
+
 const BatchDashboard: React.FC<BatchDashboardProps> = ({ batchResults }) => {
+  const data = [
+    {
+      name: "Success",
+      value: batchResults.reduce((acc, result) => acc + result.SuccessCount, 0),
+    },
+    {
+      name: "Failure",
+      value: batchResults.reduce((acc, result) => acc + result.FailureCount, 0),
+    },
+  ];
+
   return (
     <ResponsiveContainer width="100%" height={400}>
-      <LineChart data={batchResults}>
-        <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey="BatchID" />
-        <YAxis />
+      <PieChart>
+        <Pie
+          data={data}
+          cx="50%"
+          cy="50%"
+          labelLine={false}
+          outerRadius={150}
+          fill="#8884d8"
+          dataKey="value"
+        >
+          {data.map((entry, index) => (
+            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+          ))}
+        </Pie>
         <Tooltip />
-        <Legend />
-        <Line type="monotone" dataKey="SuccessCount" stroke="#82ca9d" />
-        <Line type="monotone" dataKey="FailureCount" stroke="#ff7300" />
-      </LineChart>
+      </PieChart>
     </ResponsiveContainer>
   );
 };
