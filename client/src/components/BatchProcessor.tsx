@@ -110,6 +110,7 @@ const BatchProcessor: React.FC = () => {
                   <Th>End Time</Th>
                   <Th>Total Records</Th>
                   <Th>Success Count</Th>
+                  <Th>Last Processed Index</Th>
                   <Th>Failure Count</Th>
                   <Th>Status</Th>
                   <Th>Error Message</Th>
@@ -124,6 +125,7 @@ const BatchProcessor: React.FC = () => {
                     <Td>{formatDate(result.EndTime)}</Td>
                     <Td>{result.TotalRecords}</Td>
                     <Td>{result.SuccessCount}</Td>
+                    <Td>{result.LastProcessedIndex}</Td>
                     <Td>{result.FailureCount}</Td>
                     <Td>{result.Status}</Td>
                     <Td>{result.ErrorMessage}</Td>
