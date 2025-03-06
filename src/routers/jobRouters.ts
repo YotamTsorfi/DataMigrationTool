@@ -1,7 +1,7 @@
 import express from "express";
 import { priorityAuthMiddleware } from "../middleware/priorityAuth";
 import { poolPromise } from "../config/db";
-import { runJobWithInput } from "../controllers/jobController";
+import { runJobWithInput, getJobTypes } from "../controllers/jobController";
 
 const router = express.Router();
 
@@ -34,5 +34,7 @@ router.get("/results", async (req, res) => {
     });
   }
 });
+
+router.get("/job-types", getJobTypes);
 
 export default router;

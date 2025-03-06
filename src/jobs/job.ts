@@ -33,7 +33,7 @@ const adjustTimeZone = (date: Date): Date => {
 async function processBatch(
   rows: any[],
   batchId: string,
-  jobId: string,
+  jobType: string,
   tableName: string,
   priorityScreenName: string
 ) {
@@ -107,11 +107,11 @@ async function processBatch(
         .request()
         .input("RowId", sql.Int, row.RowId)
         .input("BatchId", sql.UniqueIdentifier, batchId)
-        .input("JobId", sql.UniqueIdentifier, jobId)
+        .input("JobName", sql.NVarChar, jobType)
         .input("Status", sql.NVarChar, status)
         .input("ErrorMessage", sql.NVarChar, errorMessage).query(`
           UPDATE ${tableName}
-          SET BatchId = @BatchId, JobId = @JobId, Status = @Status, Error = @ErrorMessage
+          SET BatchId = @BatchId, JobName = @JobName, Status = @Status, Error = @ErrorMessage
           WHERE RowId = @RowId
         `);
 
@@ -127,7 +127,7 @@ async function processBatch(
 
     await pool
       .request()
-      .input("JobID", sql.UniqueIdentifier, jobId)
+      .input("JobName", sql.NVarChar, jobType)
       .input("BatchID", sql.UniqueIdentifier, batchId)
       .input(
         "StartTime",
@@ -150,8 +150,8 @@ async function processBatch(
       .input("Status", sql.NVarChar, result.success ? "Completed" : "Failed")
       .input("ErrorMessage", sql.NVarChar, result.success ? null : result.error)
       .input("TableName", sql.NVarChar, tableName).query(`
-        INSERT INTO PriorityBatchProcessing (JobID, BatchID, StartTime, EndTime, TotalRecords, SuccessCount, FailureCount, LastProcessedIndex, Status, ErrorMessage, TableName)
-        VALUES (@JobID, @BatchID, @StartTime, @EndTime, @TotalRecords, @SuccessCount, @FailureCount, @LastProcessedIndex, @Status, @ErrorMessage, @TableName)
+        INSERT INTO PriorityBatchProcessing (JobName, BatchID, StartTime, EndTime, TotalRecords, SuccessCount, FailureCount, LastProcessedIndex, Status, ErrorMessage, TableName)
+        VALUES (@JobName, @BatchID, @StartTime, @EndTime, @TotalRecords, @SuccessCount, @FailureCount, @LastProcessedIndex, @Status, @ErrorMessage, @TableName)
       `);
 
     return result;
@@ -169,7 +169,8 @@ async function processBatches(
   recordCount: number,
   startRow: number,
   tableName: string,
-  priorityScreenName: string
+  priorityScreenName: string,
+  jobType: string
 ) {
   const pool = await poolPromise;
   if (!pool) {
@@ -193,10 +194,9 @@ async function processBatches(
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
     const batch = rows.slice(i, i + BATCH_SIZE);
     const batchId = uuidv4();
-    const jobId = uuidv4();
     batchPromises.push(
       limit(() =>
-        processBatch(batch, batchId, jobId, tableName, priorityScreenName)
+        processBatch(batch, batchId, jobType, tableName, priorityScreenName)
       )
     );
   }

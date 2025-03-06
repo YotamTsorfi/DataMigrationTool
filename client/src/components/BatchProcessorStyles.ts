@@ -62,3 +62,10 @@ export const Td = styled.td`
   padding: 10px;
   border: 1px solid #ddd;
 `;
+
+export const ReadOnlyInput = styled.input`
+  background-color: #f0f0f0; /* Light gray background */
+  border: 1px solid #ccc; /* Light gray border */
+  color: #666; /* Gray text color */
+  cursor: not-allowed; /* Change cursor to indicate non-editable */
+`;
