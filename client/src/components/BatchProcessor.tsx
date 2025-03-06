@@ -21,7 +21,7 @@ const formatDate = (dateString: string): string => {
 };
 const BatchProcessor: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
-  const [recordCount, setRecordCount] = useState(200);
+  const [recordCount, setRecordCount] = useState(100);
   const [startRow, setStartRow] = useState(1);
   const [batchResults, setBatchResults] = useState([]);
   const [failedVehicles, setFailedVehicles] = useState([]);
@@ -104,6 +104,7 @@ const BatchProcessor: React.FC = () => {
             <Table>
               <thead>
                 <tr>
+                  <Th>Job ID</Th>
                   <Th>Batch ID</Th>
                   <Th>Start Time</Th>
                   <Th>End Time</Th>
@@ -117,6 +118,7 @@ const BatchProcessor: React.FC = () => {
               <tbody>
                 {batchResults.map((result: any, index: number) => (
                   <tr key={index}>
+                    <Td>{result.JobID}</Td>
                     <Td>{result.BatchID}</Td>
                     <Td>{formatDate(result.StartTime)}</Td>
                     <Td>{formatDate(result.EndTime)}</Td>

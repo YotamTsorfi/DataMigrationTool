@@ -131,6 +131,7 @@ async function processBatch(vehicles: any[], batchId: string, jobId: string) {
 
     await pool
       .request()
+      .input("JobID", sql.UniqueIdentifier, jobId)
       .input("BatchID", sql.UniqueIdentifier, batchId)
       .input(
         "StartTime",
@@ -153,8 +154,8 @@ async function processBatch(vehicles: any[], batchId: string, jobId: string) {
       .input("Status", sql.NVarChar, result.success ? "Completed" : "Failed")
       .input("ErrorMessage", sql.NVarChar, result.success ? null : result.error)
       .query(`
-        INSERT INTO PriorityBatchProcessing (BatchID, StartTime, EndTime, TotalRecords, SuccessCount, FailureCount, LastProcessedIndex, Status, ErrorMessage)
-        VALUES (@BatchID, @StartTime, @EndTime, @TotalRecords, @SuccessCount, @FailureCount, @LastProcessedIndex, @Status, @ErrorMessage)
+        INSERT INTO PriorityBatchProcessing (JobID, BatchID, StartTime, EndTime, TotalRecords, SuccessCount, FailureCount, LastProcessedIndex, Status, ErrorMessage)
+        VALUES (@JobID, @BatchID, @StartTime, @EndTime, @TotalRecords, @SuccessCount, @FailureCount, @LastProcessedIndex, @Status, @ErrorMessage)
       `);
 
     return result;
