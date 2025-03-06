@@ -6,7 +6,7 @@ import { priorityAuthMiddleware } from "../middleware/priorityAuth";
 
 const router = express.Router();
 
-// החלת Middleware על כל נתיבי Priority
+// Middleware to authenticate with Priority API
 router.use(priorityAuthMiddleware);
 // ----------------------------------------------------
 

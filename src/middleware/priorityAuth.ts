@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import axios, { AxiosInstance } from 'axios';
 import { config } from '../config/config';
 
-// הרחבת אובייקט Request
+// set up global namespace for Express Request
 declare global {
   namespace Express {
     interface Request {
@@ -25,14 +25,14 @@ export function priorityAuthMiddleware(req: Request, res: Response, next: NextFu
         "OData-Version": "4.0",
         Accept: "application/json",
       },
-      timeout: 30000, // 30 שניות
+      timeout: 30000, // 30 seconds
       validateStatus: function (status) {
-        return status >= 200 && status < 300; // ברירת מחדל
+        return status >= 200 && status < 300; // default
       },
     });
 
     const priorityBatchAxios = axios.create({
-      baseURL: config.priorityDEVBaseUrl.replace(/\/$/, ""), // מסיר סלאש בסוף אם קיים
+      baseURL: config.priorityDEVBaseUrl.replace(/\/$/, ""), // remove trailing slash
       auth: {
         username: config.priorityPAT,
         password: config.priorityPassword,
@@ -44,7 +44,7 @@ export function priorityAuthMiddleware(req: Request, res: Response, next: NextFu
       timeout: 30000,
     });
 
-  // הוספת interceptors לדיבוג
+  // add interceptors for request logging
 priorityBatchAxios.interceptors.request.use(
   config => {
       console.log('Request Config:', {
@@ -61,7 +61,7 @@ priorityBatchAxios.interceptors.request.use(
   }
 );
 
-    // הוספת interceptors לטיפול בתגובות ושגיאות
+  // add interceptors for response logging
     [priorityAxios, priorityBatchAxios].forEach(instance => {
       instance.interceptors.response.use(
         response => {

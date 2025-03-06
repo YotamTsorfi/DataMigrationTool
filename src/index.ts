@@ -19,7 +19,7 @@ const http = require("http").createServer(app);
 //app.use(cors());
 app.use(
   cors({
-    origin: "http://localhost:3000", // או הדומיין שבו ירוץ הקליינט
+    origin: "http://localhost:3000", // restrict calls to those this address
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
@@ -32,47 +32,30 @@ app.use("/priority", priorityRoutes);
 app.use("/api", userRouter);
 app.use("/job", jobRoutes);
 
-
 // Start server
 http.listen(port, "0.0.0.0", () => {
   const startupTime = Date.now();
   console.log(`App is listening at http://0.0.0.0:${port}`);
   console.log(`Logs are at ./logs under root folder.`);
-
-  // רישום זמן עליית השרת
   writeToLogFile(
     "general.log",
     `[INFO] Server started in ${Date.now() - startupTime}ms`
   );
 
-  // רישום מדדי ביצועים ראשוניים של השרת
+  // Write server metrics to log file
   PerformanceMonitor.logServerMetrics();
-
-  // הרצת הטסט לאחר השהייה קצרה
-  // setTimeout(async () => {
-  //     try {
-  //         await testBatchVehicles();
-  //     } catch (error) {
-  //         const errorMessage = error instanceof Error
-  //             ? error.message
-  //             : 'An unknown error occurred';
-
-  //         console.error('Failed to run batch test:', errorMessage);
-  //         writeToLogFile('general.log', `[ERROR] Failed to run batch test: ${errorMessage}`);
-  //     }
-  // }, 2000);
 });
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
-    console.log('Received SIGTERM. Performing graceful shutdown...');
-    writeToLogFile('general.log', '[INFO] Server shutting down...');
-    
-    // רישום מדדי ביצועים אחרונים
-    PerformanceMonitor.logServerMetrics();
-    
-    http.close(() => {
-        console.log('Server closed');
-        process.exit(0);
-    });
+process.on("SIGTERM", () => {
+  console.log("Received SIGTERM. Performing graceful shutdown...");
+  writeToLogFile("general.log", "[INFO] Server shutting down...");
+
+  // Write server metrics to log file
+  PerformanceMonitor.logServerMetrics();
+
+  http.close(() => {
+    console.log("Server closed");
+    process.exit(0);
+  });
 });

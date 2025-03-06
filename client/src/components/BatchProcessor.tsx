@@ -36,23 +36,34 @@ const BatchProcessor: React.FC = () => {
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [batchResults, setBatchResults] = useState([]);
-  const [failedVehicles, setFailedVehicles] = useState([]);
   const [jobTypes, setJobTypes] = useState<JobType[]>([]);
   const [selectedJobType, setSelectedJobType] = useState("");
+  const [errorLogs, setErrorLogs] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await axios.get("http://localhost:3001/job/results");
+        const response = await axios.get("http://localhost:3001/job/results", {
+          params: { tableName },
+        });
         setBatchResults(response.data.batchResults);
-        setFailedVehicles(response.data.failedVehicles);
       } catch (error) {
         console.error("Error fetching initial data:", error);
       }
     };
 
+    const fetchErrorLogs = async () => {
+      try {
+        const response = await axios.get("http://localhost:3001/job/errors");
+        setErrorLogs(response.data.errorLogs);
+      } catch (error) {
+        console.error("Error fetching error logs:", error);
+      }
+    };
+
     fetchData();
-  }, []);
+    fetchErrorLogs();
+  }, [tableName]);
 
   useEffect(() => {
     const fetchJobTypes = async () => {
@@ -92,9 +103,12 @@ const BatchProcessor: React.FC = () => {
         priorityScreenName,
         jobType: selectedJobType,
       });
-      const response = await axios.get("http://localhost:3001/job/results");
+      const response = await axios.get("http://localhost:3001/job/results", {
+        params: { tableName },
+      });
       setBatchResults(response.data.batchResults);
-      setFailedVehicles(response.data.failedVehicles);
+      const errorResponse = await axios.get("http://localhost:3001/job/errors");
+      setErrorLogs(errorResponse.data.errorLogs);
     } catch (error) {
       console.error("Batch process error:", error);
     } finally {
@@ -207,21 +221,32 @@ const BatchProcessor: React.FC = () => {
           </TableContainer>
         </>
       )}
-      {failedVehicles.length > 0 && (
+
+      {errorLogs.length > 0 && (
         <TableContainer>
-          <h3>Failed Vehicles</h3>
+          <h3>Error Logs</h3>
           <Table>
             <thead>
               <tr>
-                <Th>Row ID</Th>
-                <Th>Error</Th>
+                <Th>Error ID</Th>
+                <Th>Job Name</Th>
+                <Th>Batch Id</Th>
+                <Th>TableName</Th>
+                <Th>Error Message</Th>
+                <Th>RowId</Th>
+                <Th>Timestamp</Th>
               </tr>
             </thead>
             <tbody>
-              {failedVehicles.map((vehicle: any, index: number) => (
+              {errorLogs.map((log: any, index: number) => (
                 <tr key={index}>
-                  <Td>{vehicle.RowId}</Td>
-                  <Td>{vehicle.Error}</Td>
+                  <Td>{log.ErrorID}</Td>
+                  <Td>{log.JobName}</Td>
+                  <Td>{log.BatchId}</Td>
+                  <Td>{log.TableName}</Td>
+                  <Td>{log.Error}</Td>
+                  <Td>{log.RowId}</Td>
+                  <Td>{formatDate(log.Timestamp)}</Td>
                 </tr>
               ))}
             </tbody>

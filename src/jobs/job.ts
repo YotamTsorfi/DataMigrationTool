@@ -21,13 +21,34 @@ interface BatchCreateRowsResult {
   details?: string;
 }
 
-const BATCH_SIZE = 100; // מספר השורות שיכנסו ב-Batch
-const CONCURRENT_BATCHES = 10; // כמות ה-Batch שיכולים לרוץ במקביל
-const DELAY_BETWEEN_BATCHES = 6000; // דיליי בין השליחות במילישניות
+const BATCH_SIZE = 100; // Number of records to send in each batch
+const CONCURRENT_BATCHES = 10; // Number of batches to send concurrently
+const DELAY_BETWEEN_BATCHES = 6000; // Delay between each batch in milliseconds
 
 const adjustTimeZone = (date: Date): Date => {
   const offset = date.getTimezoneOffset() * 60000; // offset in milliseconds
   return new Date(date.getTime() - offset);
+};
+
+const logErrorToTable = async (
+  pool: sql.ConnectionPool,
+  jobType: string,
+  batchId: string,
+  tableName: string,
+  rowId: number,
+  error: string
+) => {
+  await pool
+    .request()
+    .input("JobName", sql.NVarChar, jobType)
+    .input("BatchId", sql.UniqueIdentifier, batchId)
+    .input("TableName", sql.NVarChar, tableName)
+    .input("RowId", sql.Int, rowId)
+    .input("Error", sql.NVarChar, error)
+    .input("Timestamp", sql.DateTime, new Date()).query(`
+      INSERT INTO PriorityErrorLogs (JobName, BatchId, TableName, RowId, Error, Timestamp)
+      VALUES (@JobName, @BatchId, @TableName, @RowId, @Error, @Timestamp)
+    `);
 };
 
 async function processBatch(
@@ -94,13 +115,15 @@ async function processBatch(
     for (const [index, row] of rows.entries()) {
       const responseItem = response.data.responses[index];
 
+      // perfMonitor.logResponse(index, responseItem);
+
       const status =
         responseItem && responseItem.status >= 200 && responseItem.status < 300
           ? "Completed"
           : "Failed";
       const errorMessage =
         status === "Failed"
-          ? JSON.stringify(responseItem.body?.error?.message)
+          ? JSON.stringify(responseItem.body?.FORM?.InterfaceErrors)
           : null;
 
       await pool
@@ -119,6 +142,14 @@ async function processBatch(
         perfMonitor.incrementSuccessCount();
       } else {
         perfMonitor.incrementFailureCount();
+        await logErrorToTable(
+          pool,
+          jobType,
+          batchId,
+          tableName,
+          row.RowId,
+          errorMessage ?? ""
+        );
       }
       perfMonitor.setLastProcessedIndex(row.RowId);
     }

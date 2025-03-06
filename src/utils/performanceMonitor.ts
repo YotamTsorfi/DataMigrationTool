@@ -122,7 +122,7 @@ class PerformanceMonitor {
 
     const performanceLog = {
       timestamp: this.formatDate(new Date()),
-      operation: "batchVehicles",
+      operation: "batchProcessing",
       metrics: {
         totalDuration: `${this.metrics.duration}ms`,
         requestSize: this.formatSize(this.metrics.requestSize),
@@ -154,10 +154,24 @@ class PerformanceMonitor {
     this.metrics.lastProcessedIndex = index;
   }
 
-  logVehicleResponse(index: number, response: any) {
-    console.log(`Vehicle ${index} Response:`, {
+  logResponse(index: number, response: any) {
+    let errorMessage = null;
+    if (response.status >= 400) {
+      if (
+        response.body &&
+        response.body.FORM &&
+        response.body.FORM.InterfaceErrors
+      ) {
+        errorMessage = response.body.FORM.InterfaceErrors;
+      } else {
+        errorMessage = "Unknown error";
+      }
+    }
+
+    console.log(`row ${index} Response:`, {
       status: response.status,
       data: response.data,
+      error: errorMessage,
       timestamp: this.formatDate(new Date()),
     });
   }
