@@ -51,10 +51,10 @@ async function processBatch(vehicles: any[], batchId: string, jobId: string) {
       batchBody += `Content-Transfer-Encoding: binary\r\n\r\n`;
       batchBody += `POST NATF_VEHICLES HTTP/1.1\r\n`;
       batchBody += `Content-Type: application/json\r\n\r\n`;
-      batchBody += `${JSON.stringify(vehicleData)}\r\n\r\n`;
+      batchBody += `${JSON.stringify(vehicleData)}\r\n`; // Remove extra newline here
     });
 
-    batchBody += `--${boundary}--`;
+    batchBody += `--${boundary}--\r\n`; // Add newline here
 
     // Debug Request (all rows) Log the request body for debugging
     //console.log("Batch Request Body:", batchBody);
