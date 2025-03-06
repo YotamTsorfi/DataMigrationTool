@@ -11,7 +11,7 @@ import {
   Table,
   Th,
   Td,
-  FlexContainer, // Import the new styled component
+  FlexContainer,
 } from "./BatchProcessorStyles";
 import BatchDashboard from "./BatchDashboard";
 
@@ -20,18 +20,19 @@ const formatDate = (dateString: string): string => {
   return date.format("DD/MM/YYYY HH:mm:ss");
 };
 const BatchProcessor: React.FC = () => {
-  const [isProcessing, setIsProcessing] = useState(false);
   const [recordCount, setRecordCount] = useState(100);
   const [startRow, setStartRow] = useState(1);
+  const [tableName, setTableName] = useState("AllvehiclesTest");
+  const [priorityScreenName, setPriorityScreenName] = useState("NATF_VEHICLES");
+
+  const [isProcessing, setIsProcessing] = useState(false);
   const [batchResults, setBatchResults] = useState([]);
   const [failedVehicles, setFailedVehicles] = useState([]);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await axios.get(
-          "http://localhost:3001/api/batch/results"
-        );
+        const response = await axios.get("http://localhost:3001/job/results");
         setBatchResults(response.data.batchResults);
         setFailedVehicles(response.data.failedVehicles);
       } catch (error) {
@@ -46,13 +47,13 @@ const BatchProcessor: React.FC = () => {
     setIsProcessing(true);
 
     try {
-      await axios.post("http://localhost:3001/api/batch/run-job", {
+      await axios.post("http://localhost:3001/job/run-job", {
         recordCount,
         startRow,
+        tableName,
+        priorityScreenName,
       });
-      const response = await axios.get(
-        "http://localhost:3001/api/batch/results"
-      );
+      const response = await axios.get("http://localhost:3001/job/results");
       setBatchResults(response.data.batchResults);
       setFailedVehicles(response.data.failedVehicles);
     } catch (error) {
@@ -84,6 +85,22 @@ const BatchProcessor: React.FC = () => {
                 onChange={(e) => setStartRow(Number(e.target.value))}
               />
             </InputLabel>
+            <InputLabel>
+              DB Table Name:
+              <input
+                type="text"
+                value={tableName}
+                onChange={(e) => setTableName(e.target.value)}
+              />
+            </InputLabel>
+            <InputLabel>
+              Priority Screen Name:
+              <input
+                type="text"
+                value={priorityScreenName}
+                onChange={(e) => setPriorityScreenName(e.target.value)}
+              />
+            </InputLabel>
           </InputContainer>
 
           <Button
@@ -94,13 +111,13 @@ const BatchProcessor: React.FC = () => {
             {isProcessing ? "Processing..." : "Process Batch"}
           </Button>
         </FlexContainer>
+        <BatchDashboard batchResults={batchResults} />
       </Container>
 
       {batchResults.length > 0 && (
         <>
-          <BatchDashboard batchResults={batchResults} />
           <TableContainer>
-            <h3>Vehicles Batch Results</h3>
+            <h3>Batches Results</h3>
             <Table>
               <thead>
                 <tr>
@@ -108,6 +125,7 @@ const BatchProcessor: React.FC = () => {
                   <Th>Batch ID</Th>
                   <Th>Start Time</Th>
                   <Th>End Time</Th>
+                  <Th>Table Name</Th>
                   <Th>Total Records</Th>
                   <Th>Success Count</Th>
                   <Th>Last Processed Index</Th>
@@ -123,6 +141,7 @@ const BatchProcessor: React.FC = () => {
                     <Td>{result.BatchID}</Td>
                     <Td>{formatDate(result.StartTime)}</Td>
                     <Td>{formatDate(result.EndTime)}</Td>
+                    <Td>{result.TableName}</Td>
                     <Td>{result.TotalRecords}</Td>
                     <Td>{result.SuccessCount}</Td>
                     <Td>{result.LastProcessedIndex}</Td>
@@ -136,7 +155,6 @@ const BatchProcessor: React.FC = () => {
           </TableContainer>
         </>
       )}
-
       {failedVehicles.length > 0 && (
         <TableContainer>
           <h3>Failed Vehicles</h3>

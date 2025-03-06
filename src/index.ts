@@ -5,21 +5,13 @@ import cors from 'cors';
 import { config } from './config/config';
 import { writeToLogFile } from "./config/logger";
 import PerformanceMonitor from "./utils/performanceMonitor";
-
 import priorityRoutes from "./routers/priorityRoutes";
 import userRouter from "./routers/userRouter";
-import batchRoutes from "./routers/batchRoutes";
-
-//TODO - Check if needed because the connection-pool later on
-import { connectToCarmeltonDatabase } from "./database/connection";
+import jobRoutes from "./routers/jobRouters";
+// -----------------------------------------------------------------
 
 // Initialize Express app
 const app = express();
-
-// Connect to DB
-//TODO - Check if needed because the connection-pool later on
-connectToCarmeltonDatabase();
-
 const port = config.port;
 const http = require("http").createServer(app);
 
@@ -38,7 +30,8 @@ app.use(express.urlencoded({ extended: true }));
 //Routers
 app.use("/priority", priorityRoutes);
 app.use("/api", userRouter);
-app.use("/api/batch", batchRoutes);
+app.use("/job", jobRoutes);
+
 
 // Start server
 http.listen(port, "0.0.0.0", () => {

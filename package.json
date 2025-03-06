@@ -4,8 +4,6 @@
   "description": "WS - Transfer data via restApi Or ODBC to Priority",
   "main": "index.js",
   "scripts": {
-    "generate-vehicles": "ts-node src/scripts/generateVehicles.ts",
-    "generate-vehicles-files": "ts-node src/scripts/generateVehiclesFiles.ts",
     "build": "tsc",
     "start": "cross-env NODE_OPTIONS=--max-old-space-size=4096 node dist/index.js",
     "start:prod": "cross-env NODE_OPTIONS=--max-old-space-size=8192 node dist/index.js",
@@ -19,8 +17,7 @@
     "clean": "rimraf dist",
     "prebuild": "npm run clean",
     "postbuild": "copy .env dist\\.env || cp .env dist/.env",
-    "run-job": "ts-node src/jobs/runJob.ts",
-    "insert-to-db": "ts-node src/scripts/populateAllvehiclesTest.ts"
+    "insert-to-db": "ts-node src/scripts/populateAllvehicles.ts"
   },
   "keywords": [],
   "author": "Yotam Tsorfy Shaked",

@@ -8,10 +8,10 @@ import sql from "mssql";
 import pLimit from "p-limit";
 import { v4 as uuidv4 } from "uuid";
 
-interface BatchCreateVehiclesResult {
+interface BatchCreateRowsResult {
   success: boolean;
   message?: string;
-  vehiclesCount?: number;
+  rowsCount?: number;
   data?: any;
   requestSize?: number;
   responseSize?: number;
@@ -30,7 +30,13 @@ const adjustTimeZone = (date: Date): Date => {
   return new Date(date.getTime() - offset);
 };
 
-async function processBatch(vehicles: any[], batchId: string, jobId: string) {
+async function processBatch(
+  rows: any[],
+  batchId: string,
+  jobId: string,
+  tableName: string,
+  priorityScreenName: string
+) {
   const pool = await poolPromise;
   if (!pool) {
     throw new Error("Failed to connect to the database");
@@ -40,29 +46,26 @@ async function processBatch(vehicles: any[], batchId: string, jobId: string) {
   perfMonitor.startOperation();
 
   try {
-    if (!Array.isArray(vehicles) || vehicles.length === 0) {
-      throw new Error("Invalid vehicles data");
+    if (!Array.isArray(rows) || rows.length === 0) {
+      throw new Error("Invalid rows data");
     }
 
-    perfMonitor.logRequestMetrics({ vehicles });
+    perfMonitor.logRequestMetrics(rows);
 
     const boundary = `batch_${Date.now()}`;
     let batchBody = "";
 
-    vehicles.forEach((vehicle: any, index: number) => {
-      const { RowId, ...vehicleData } = vehicle; // Remove RowId from vehicle object
+    rows.forEach((row: any, index: number) => {
+      const { RowId, ...rowData } = row; // Remove RowId from row object
       batchBody += `--${boundary}\r\n`;
       batchBody += `Content-Type: application/http\r\n`;
       batchBody += `Content-Transfer-Encoding: binary\r\n\r\n`;
-      batchBody += `POST NATF_VEHICLES HTTP/1.1\r\n`;
+      batchBody += `POST ${priorityScreenName} HTTP/1.1\r\n`;
       batchBody += `Content-Type: application/json\r\n\r\n`;
-      batchBody += `${JSON.stringify(vehicleData)}\r\n`; // Remove extra newline here
+      batchBody += `${JSON.stringify(rowData)}\r\n`; // Remove extra newline here
     });
 
     batchBody += `--${boundary}--\r\n`; // Add newline here
-
-    // Debug Request (all rows) Log the request body for debugging
-    //console.log("Batch Request Body:", batchBody);
 
     const response = await axios.post(
       `${config.priorityDEVBaseUrl}/$batch`,
@@ -75,13 +78,12 @@ async function processBatch(vehicles: any[], batchId: string, jobId: string) {
       }
     );
 
-    //FOR TESTING ONLY
     perfMonitor.logResponseMetrics(response.data, response.status);
 
-    const result: BatchCreateVehiclesResult = {
+    const result: BatchCreateRowsResult = {
       success: true,
-      message: "Batch vehicles created successfully",
-      vehiclesCount: vehicles.length,
+      message: "Batch created successfully",
+      rowsCount: rows.length,
       data: response.data,
       requestSize: perfMonitor.metrics.requestSize,
       responseSize: perfMonitor.metrics.responseSize,
@@ -89,14 +91,8 @@ async function processBatch(vehicles: any[], batchId: string, jobId: string) {
       averageTimePerRecord: perfMonitor.metrics.averageTimePerRecord,
     };
 
-    for (const [index, vehicle] of vehicles.entries()) {
+    for (const [index, row] of rows.entries()) {
       const responseItem = response.data.responses[index];
-
-      //FOR TESTING ONLY
-      //perfMonitor.logVehicleResponse(index, responseItem);
-
-      //Debug Response (all rows) Log the response for each vehicle for debugging
-      //console.log(`Vehicle ${index} Response:`, responseItem);
 
       const status =
         responseItem && responseItem.status >= 200 && responseItem.status < 300
@@ -109,12 +105,12 @@ async function processBatch(vehicles: any[], batchId: string, jobId: string) {
 
       await pool
         .request()
-        .input("RowId", sql.Int, vehicle.RowId)
+        .input("RowId", sql.Int, row.RowId)
         .input("BatchId", sql.UniqueIdentifier, batchId)
         .input("JobId", sql.UniqueIdentifier, jobId)
         .input("Status", sql.NVarChar, status)
         .input("ErrorMessage", sql.NVarChar, errorMessage).query(`
-          UPDATE AllvehiclesTest
+          UPDATE ${tableName}
           SET BatchId = @BatchId, JobId = @JobId, Status = @Status, Error = @ErrorMessage
           WHERE RowId = @RowId
         `);
@@ -124,7 +120,7 @@ async function processBatch(vehicles: any[], batchId: string, jobId: string) {
       } else {
         perfMonitor.incrementFailureCount();
       }
-      perfMonitor.setLastProcessedIndex(vehicle.RowId);
+      perfMonitor.setLastProcessedIndex(row.RowId);
     }
 
     perfMonitor.endOperation();
@@ -143,7 +139,7 @@ async function processBatch(vehicles: any[], batchId: string, jobId: string) {
         sql.DateTime,
         adjustTimeZone(new Date(perfMonitor.metrics.endTime))
       )
-      .input("TotalRecords", sql.Int, vehicles.length)
+      .input("TotalRecords", sql.Int, rows.length)
       .input("SuccessCount", sql.Int, perfMonitor.metrics.successCount)
       .input("FailureCount", sql.Int, perfMonitor.metrics.failureCount)
       .input(
@@ -153,9 +149,9 @@ async function processBatch(vehicles: any[], batchId: string, jobId: string) {
       )
       .input("Status", sql.NVarChar, result.success ? "Completed" : "Failed")
       .input("ErrorMessage", sql.NVarChar, result.success ? null : result.error)
-      .query(`
-        INSERT INTO PriorityBatchProcessing (JobID, BatchID, StartTime, EndTime, TotalRecords, SuccessCount, FailureCount, LastProcessedIndex, Status, ErrorMessage)
-        VALUES (@JobID, @BatchID, @StartTime, @EndTime, @TotalRecords, @SuccessCount, @FailureCount, @LastProcessedIndex, @Status, @ErrorMessage)
+      .input("TableName", sql.NVarChar, tableName).query(`
+        INSERT INTO PriorityBatchProcessing (JobID, BatchID, StartTime, EndTime, TotalRecords, SuccessCount, FailureCount, LastProcessedIndex, Status, ErrorMessage, TableName)
+        VALUES (@JobID, @BatchID, @StartTime, @EndTime, @TotalRecords, @SuccessCount, @FailureCount, @LastProcessedIndex, @Status, @ErrorMessage, @TableName)
       `);
 
     return result;
@@ -169,7 +165,12 @@ async function processBatch(vehicles: any[], batchId: string, jobId: string) {
   }
 }
 
-async function processBatches(recordCount: number, startRow: number) {
+async function processBatches(
+  recordCount: number,
+  startRow: number,
+  tableName: string,
+  priorityScreenName: string
+) {
   const pool = await poolPromise;
   if (!pool) {
     throw new Error("Failed to connect to the database");
@@ -177,23 +178,27 @@ async function processBatches(recordCount: number, startRow: number) {
 
   const limit = pLimit(CONCURRENT_BATCHES);
 
-  const vehiclesData = await pool.request().query(`
+  const rowsData = await pool.request().query(`
     SELECT TOP (${recordCount}) RowId, Data
-    FROM AllvehiclesTest
+    FROM ${tableName}
     WHERE Status IS NULL AND RowId >= ${startRow}
   `);
 
-  const vehicles = vehiclesData.recordset.map((record: any) => ({
+  const rows = rowsData.recordset.map((record: any) => ({
     RowId: record.RowId,
     ...JSON.parse(record.Data),
   }));
 
   const batchPromises = [];
-  for (let i = 0; i < vehicles.length; i += BATCH_SIZE) {
-    const batch = vehicles.slice(i, i + BATCH_SIZE);
+  for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+    const batch = rows.slice(i, i + BATCH_SIZE);
     const batchId = uuidv4();
     const jobId = uuidv4();
-    batchPromises.push(limit(() => processBatch(batch, batchId, jobId)));
+    batchPromises.push(
+      limit(() =>
+        processBatch(batch, batchId, jobId, tableName, priorityScreenName)
+      )
+    );
   }
 
   const results = [];

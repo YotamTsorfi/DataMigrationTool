@@ -63,8 +63,8 @@ class PerformanceMonitor {
       this.requestData = requestData;
       const requestString = JSON.stringify(requestData);
       this.metrics.requestSize = Buffer.byteLength(requestString, "utf8");
-      this.metrics.recordCount = Array.isArray(requestData.vehicles)
-        ? requestData.vehicles.length
+      this.metrics.recordCount = Array.isArray(requestData)
+        ? requestData.length
         : 0;
 
       console.log("Request Metrics:", {

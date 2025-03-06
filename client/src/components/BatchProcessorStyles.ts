@@ -18,7 +18,7 @@ export const InputLabel = styled.label`
   display: flex;
   flex-direction: column;
   margin-right: 10px;
-  width: 100px; /* Set a fixed width */
+  width: 200px; /* Set a fixed width */
   /* Alternatively, you can use max-width */
   /* max-width: 100px; */
 `;

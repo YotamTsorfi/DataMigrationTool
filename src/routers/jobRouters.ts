@@ -1,27 +1,14 @@
 import express from "express";
 import { priorityAuthMiddleware } from "../middleware/priorityAuth";
-import { runJobWithInput } from "../jobs/runJob";
 import { poolPromise } from "../config/db";
+import { runJobWithInput } from "../controllers/jobController";
 
 const router = express.Router();
 
 router.use(priorityAuthMiddleware);
-
 //-------------------------------------------------
-router.post("/run-job", async (req, res) => {
-  const { recordCount, startRow } = req.body;
-  try {
-    await runJobWithInput(recordCount, startRow);
-    res
-      .status(200)
-      .json({ success: true, message: "Job executed successfully" });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : "Unknown error",
-    });
-  }
-});
+
+router.post("/run-job", runJobWithInput);
 
 router.get("/results", async (req, res) => {
   try {
