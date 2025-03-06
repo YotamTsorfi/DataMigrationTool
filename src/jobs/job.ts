@@ -25,6 +25,11 @@ const BATCH_SIZE = 100; // מספר השורות שיכנסו ב-Batch
 const CONCURRENT_BATCHES = 10; // כמות ה-Batch שיכולים לרוץ במקביל
 const DELAY_BETWEEN_BATCHES = 6000; // דיליי בין השליחות במילישניות
 
+const adjustTimeZone = (date: Date): Date => {
+  const offset = date.getTimezoneOffset() * 60000; // offset in milliseconds
+  return new Date(date.getTime() - offset);
+};
+
 async function processBatch(vehicles: any[], batchId: string, jobId: string) {
   const pool = await poolPromise;
   if (!pool) {
@@ -70,6 +75,7 @@ async function processBatch(vehicles: any[], batchId: string, jobId: string) {
       }
     );
 
+    //FOR TESTING ONLY
     perfMonitor.logResponseMetrics(response.data, response.status);
 
     const result: BatchCreateVehiclesResult = {
@@ -85,7 +91,9 @@ async function processBatch(vehicles: any[], batchId: string, jobId: string) {
 
     for (const [index, vehicle] of vehicles.entries()) {
       const responseItem = response.data.responses[index];
-      perfMonitor.logVehicleResponse(index, responseItem);
+
+      //FOR TESTING ONLY
+      //perfMonitor.logVehicleResponse(index, responseItem);
 
       //Debug Response (all rows) Log the response for each vehicle for debugging
       //console.log(`Vehicle ${index} Response:`, responseItem);
@@ -124,8 +132,16 @@ async function processBatch(vehicles: any[], batchId: string, jobId: string) {
     await pool
       .request()
       .input("BatchID", sql.UniqueIdentifier, batchId)
-      .input("StartTime", sql.DateTime, new Date(perfMonitor.metrics.startTime))
-      .input("EndTime", sql.DateTime, new Date(perfMonitor.metrics.endTime))
+      .input(
+        "StartTime",
+        sql.DateTime,
+        adjustTimeZone(new Date(perfMonitor.metrics.startTime))
+      )
+      .input(
+        "EndTime",
+        sql.DateTime,
+        adjustTimeZone(new Date(perfMonitor.metrics.endTime))
+      )
       .input("TotalRecords", sql.Int, vehicles.length)
       .input("SuccessCount", sql.Int, perfMonitor.metrics.successCount)
       .input("FailureCount", sql.Int, perfMonitor.metrics.failureCount)

@@ -1,6 +1,7 @@
 // client/src/components/BatchProcessor.tsx
-import React, { useState } from 'react';
-import axios from 'axios';
+import React, { useState, useEffect } from "react";
+import axios from "axios";
+import moment from "moment-timezone";
 import {
   Container,
   InputContainer,
@@ -14,29 +15,35 @@ import {
 } from "./BatchProcessorStyles";
 import BatchDashboard from "./BatchDashboard";
 
-interface BatchResponse {
-  success: boolean;
-  status?: number;
-  vehiclesCount?: number;
-  message?: string;
-  error?: string;
-  requestSize?: number;
-  responseSize?: number;
-  duration?: number;
-  averageTimePerRecord?: string;
-}
-
+const formatDate = (dateString: string): string => {
+  const date = moment.utc(dateString);
+  return date.format("DD/MM/YYYY HH:mm:ss");
+};
 const BatchProcessor: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
-  const [results, setResults] = useState<BatchResponse[]>([]);
   const [recordCount, setRecordCount] = useState(200);
-  const [startRow, setStartRow] = useState(401);
+  const [startRow, setStartRow] = useState(1);
   const [batchResults, setBatchResults] = useState([]);
   const [failedVehicles, setFailedVehicles] = useState([]);
 
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const response = await axios.get(
+          "http://localhost:3001/api/batch/results"
+        );
+        setBatchResults(response.data.batchResults);
+        setFailedVehicles(response.data.failedVehicles);
+      } catch (error) {
+        console.error("Error fetching initial data:", error);
+      }
+    };
+
+    fetchData();
+  }, []);
+
   const handleBatchProcess = async () => {
     setIsProcessing(true);
-    setResults([]);
 
     try {
       await axios.post("http://localhost:3001/api/batch/run-job", {
@@ -50,13 +57,6 @@ const BatchProcessor: React.FC = () => {
       setFailedVehicles(response.data.failedVehicles);
     } catch (error) {
       console.error("Batch process error:", error);
-      setResults([
-        {
-          success: false,
-          error:
-            error instanceof Error ? error.message : "Failed to process batch",
-        },
-      ]);
     } finally {
       setIsProcessing(false);
     }
@@ -64,10 +64,9 @@ const BatchProcessor: React.FC = () => {
 
   return (
     <div className="batch-processor">
-      <h2>Priority Vehicles Batch Processor</h2>
-
       <Container>
         <FlexContainer>
+          <h2>Vehicles Batch Processor</h2>
           <InputContainer>
             <InputLabel>
               Record Count:
@@ -101,7 +100,7 @@ const BatchProcessor: React.FC = () => {
         <>
           <BatchDashboard batchResults={batchResults} />
           <TableContainer>
-            <h3>Batch Results</h3>
+            <h3>Vehicles Batch Results</h3>
             <Table>
               <thead>
                 <tr>
@@ -119,8 +118,8 @@ const BatchProcessor: React.FC = () => {
                 {batchResults.map((result: any, index: number) => (
                   <tr key={index}>
                     <Td>{result.BatchID}</Td>
-                    <Td>{result.StartTime}</Td>
-                    <Td>{result.EndTime}</Td>
+                    <Td>{formatDate(result.StartTime)}</Td>
+                    <Td>{formatDate(result.EndTime)}</Td>
                     <Td>{result.TotalRecords}</Td>
                     <Td>{result.SuccessCount}</Td>
                     <Td>{result.FailureCount}</Td>

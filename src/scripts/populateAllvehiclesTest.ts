@@ -6,7 +6,7 @@ async function generateVehicles(count: number) {
   for (let i = 0; i < count; i++) {
     const vehicle = {
       Data: JSON.stringify({
-        VEHICLENUM: `${5557344 + i}`,
+        VEHICLENUM: `${4333844 + i}`,
         VEHICLETYPECODE: Math.floor(Math.random() * 2) + 1,
         MNFCODE: ["005", "006", "007", "002", "014"][
           Math.floor(Math.random() * 5)
@@ -32,16 +32,14 @@ async function generateVehicles(count: number) {
 async function populateTable() {
   const pool = await poolPromise;
   if (!pool) {
-    throw new Error('Failed to connect to the database');
+    throw new Error("Failed to connect to the database");
   }
 
-  const vehicles = await generateVehicles(1000);
+  const vehicles = await generateVehicles(2000);
 
   try {
     for (const vehicle of vehicles) {
-      await pool.request()
-        .input('Data', vehicle.Data)
-        .query(`
+      await pool.request().input("Data", vehicle.Data).query(`
           INSERT INTO AllvehiclesTest (Data)
           VALUES (@Data)
         `);
@@ -49,7 +47,7 @@ async function populateTable() {
 
     console.log(`Inserted ${vehicles.length} records into AllvehiclesTest`);
   } catch (err) {
-    console.error('Error populating table:', err);
+    console.error("Error populating table:", err);
     // Ensure IDENTITY_INSERT is turned off in case of error
   } finally {
     await pool.close();

@@ -5,6 +5,7 @@ export const Container = styled.div`
   border: 1px solid #ccc;
   border-radius: 8px;
   margin-bottom: 20px;
+  width: 20%;
 `;
 
 export const InputContainer = styled.div`
