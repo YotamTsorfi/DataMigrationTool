@@ -3,12 +3,30 @@ import { priorityAuthMiddleware } from "../middleware/priorityAuth";
 import { poolPromise } from "../config/db";
 import { runJobWithInput, getJobTypes } from "../controllers/jobController";
 
+import { JobManager } from "../jobs/jobManager";
+
 const router: Router = express.Router();
 
 router.use(priorityAuthMiddleware);
 
 router.post("/run-job", runJobWithInput);
 router.get("/job-types", getJobTypes);
+
+router.post("/run-multiple-jobs", async (req: Request, res: Response) => {
+  const jobRequests = req.body; // Array of job requests
+
+  try {
+    const jobManager = new JobManager();
+    const results = await jobManager.startMultipleJobs(jobRequests);
+
+    res.status(200).json(results);
+  } catch (error) {
+    console.error("Error running multiple jobs:", error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+});
 
 router.get("/results", async (req: Request, res: Response): Promise<void> => {
   try {
@@ -51,5 +69,29 @@ router.get("/errors", async (req: Request, res: Response): Promise<void> => {
     });
   }
 });
+
+router.get(
+  "/jobs-history",
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const pool = await poolPromise;
+      if (!pool) {
+        throw new Error("Database connection pool is null");
+      }
+      const jobsHistory = await pool
+        .request()
+        .query(`SELECT * FROM PriorityJobsHistory`);
+      res.status(200).json({
+        success: true,
+        jobsHistory: jobsHistory.recordset,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+);
 
 export default router;

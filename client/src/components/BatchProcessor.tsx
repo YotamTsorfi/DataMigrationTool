@@ -1,9 +1,9 @@
-// client/src/components/BatchProcessor.tsx
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import moment from "moment-timezone";
 import {
-  Container,
+  MainContainer,
+  SectionContainer,
   InputContainer,
   InputLabel,
   Button,
@@ -11,8 +11,9 @@ import {
   Table,
   Th,
   Td,
-  FlexContainer,
   ReadOnlyInput,
+  ResultsContainer,
+  LargeSectionContainer,
 } from "./BatchProcessorStyles";
 import BatchDashboard from "./BatchDashboard";
 
@@ -28,6 +29,14 @@ interface JobType {
   ScreenName: string;
 }
 
+interface JobRequest {
+  recordCount: number;
+  startRow: number;
+  tableName: string;
+  priorityScreenName: string;
+  jobType: string;
+}
+
 const BatchProcessor: React.FC = () => {
   const [recordCount, setRecordCount] = useState(100);
   const [startRow, setStartRow] = useState(1);
@@ -39,6 +48,7 @@ const BatchProcessor: React.FC = () => {
   const [jobTypes, setJobTypes] = useState<JobType[]>([]);
   const [selectedJobType, setSelectedJobType] = useState("");
   const [errorLogs, setErrorLogs] = useState<any[]>([]);
+  const [jobsHistory, setJobsHistory] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -78,6 +88,21 @@ const BatchProcessor: React.FC = () => {
     fetchJobTypes();
   }, []);
 
+  useEffect(() => {
+    const fetchJobsHistory = async () => {
+      try {
+        const response = await axios.get(
+          "http://localhost:3001/job/jobs-history"
+        );
+        setJobsHistory(response.data.jobsHistory);
+      } catch (error) {
+        console.error("Error fetching jobs history:", error);
+      }
+    };
+
+    fetchJobsHistory();
+  }, []);
+
   const handleJobTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedJob = jobTypes.find(
       (job) => job.JobTypeName === e.target.value
@@ -109,6 +134,67 @@ const BatchProcessor: React.FC = () => {
       setBatchResults(response.data.batchResults);
       const errorResponse = await axios.get("http://localhost:3001/job/errors");
       setErrorLogs(errorResponse.data.errorLogs);
+      const jobsHistoryResponse = await axios.get(
+        "http://localhost:3001/job/jobs-history"
+      );
+      setJobsHistory(jobsHistoryResponse.data.jobsHistory);
+    } catch (error) {
+      console.error("Batch process error:", error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const [selectedJobTypes, setSelectedJobTypes] = useState<string[]>([]);
+  const [jobRequests, setJobRequests] = useState<JobRequest[]>([]);
+
+  const handleMultipleJobTypeChange = (
+    e: React.ChangeEvent<HTMLSelectElement>
+  ) => {
+    const selectedOptions = Array.from(
+      e.target.selectedOptions,
+      (option) => option.value
+    );
+    setSelectedJobTypes(selectedOptions);
+
+    const newJobRequests = selectedOptions.map((jobType) => {
+      const selectedJob = jobTypes.find((job) => job.JobTypeName === jobType);
+      return {
+        recordCount: 100,
+        startRow: 1,
+        tableName: selectedJob?.DBTableName || "",
+        priorityScreenName: selectedJob?.ScreenName || "",
+        jobType,
+      };
+    });
+
+    setJobRequests(newJobRequests);
+  };
+
+  const handleJobRequestChange = (index: number, field: string, value: any) => {
+    const newJobRequests = [...jobRequests];
+    newJobRequests[index] = { ...newJobRequests[index], [field]: value };
+    setJobRequests(newJobRequests);
+  };
+
+  const handleMultipleBatchProcess = async () => {
+    setIsProcessing(true);
+
+    try {
+      await axios.post(
+        "http://localhost:3001/job/run-multiple-jobs",
+        jobRequests
+      );
+      const response = await axios.get("http://localhost:3001/job/results", {
+        params: { tableName },
+      });
+      setBatchResults(response.data.batchResults);
+      const errorResponse = await axios.get("http://localhost:3001/job/errors");
+      setErrorLogs(errorResponse.data.errorLogs);
+      const jobsHistoryResponse = await axios.get(
+        "http://localhost:3001/job/jobs-history"
+      );
+      setJobsHistory(jobsHistoryResponse.data.jobsHistory);
     } catch (error) {
       console.error("Batch process error:", error);
     } finally {
@@ -117,9 +203,9 @@ const BatchProcessor: React.FC = () => {
   };
 
   return (
-    <div className="batch-processor">
-      <Container>
-        <FlexContainer>
+    <div>
+      <MainContainer>
+        <SectionContainer>
           <h2>Batch Processor</h2>
           <InputContainer>
             <InputLabel>
@@ -176,83 +262,213 @@ const BatchProcessor: React.FC = () => {
           >
             {isProcessing ? "Processing..." : "Process Batch"}
           </Button>
-        </FlexContainer>
-        <BatchDashboard batchResults={batchResults} />
-      </Container>
+          <BatchDashboard batchResults={batchResults} />
+        </SectionContainer>
 
-      {batchResults.length > 0 && (
-        <>
-          <TableContainer>
-            <h3>Batches Results</h3>
-            <Table>
-              <thead>
-                <tr>
-                  <Th>Job Name</Th>
-                  <Th>Batch ID</Th>
-                  <Th>Start Time</Th>
-                  <Th>End Time</Th>
-                  <Th>Table Name</Th>
-                  <Th>Total Records</Th>
-                  <Th>Success Count</Th>
-                  <Th>Last Processed Index</Th>
-                  <Th>Failure Count</Th>
-                  <Th>Status</Th>
-                  <Th>Error Message</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {batchResults.map((result: any, index: number) => (
-                  <tr key={index}>
-                    <Td>{result.JobName}</Td>
-                    <Td>{result.BatchID}</Td>
-                    <Td>{formatDate(result.StartTime)}</Td>
-                    <Td>{formatDate(result.EndTime)}</Td>
-                    <Td>{result.TableName}</Td>
-                    <Td>{result.TotalRecords}</Td>
-                    <Td>{result.SuccessCount}</Td>
-                    <Td>{result.LastProcessedIndex}</Td>
-                    <Td>{result.FailureCount}</Td>
-                    <Td>{result.Status}</Td>
-                    <Td>{result.ErrorMessage}</Td>
-                  </tr>
+        <SectionContainer>
+          <h2>Run Multiple Jobs</h2>
+          <InputContainer>
+            <InputLabel>
+              Job Types:
+              <select
+                multiple
+                value={selectedJobTypes}
+                onChange={handleMultipleJobTypeChange}
+              >
+                <option value="">Select Job Types</option>
+                {jobTypes.map((job: any) => (
+                  <option key={job.JobTypeID} value={job.JobTypeName}>
+                    {job.JobTypeName}
+                  </option>
                 ))}
-              </tbody>
-            </Table>
-          </TableContainer>
-        </>
-      )}
+              </select>
+            </InputLabel>
+          </InputContainer>
 
-      {errorLogs.length > 0 && (
-        <TableContainer>
-          <h3>Error Logs</h3>
-          <Table>
-            <thead>
-              <tr>
-                <Th>Error ID</Th>
-                <Th>Job Name</Th>
-                <Th>Batch Id</Th>
-                <Th>TableName</Th>
-                <Th>Error Message</Th>
-                <Th>RowId</Th>
-                <Th>Timestamp</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {errorLogs.map((log: any, index: number) => (
-                <tr key={index}>
-                  <Td>{log.ErrorID}</Td>
-                  <Td>{log.JobName}</Td>
-                  <Td>{log.BatchId}</Td>
-                  <Td>{log.TableName}</Td>
-                  <Td>{log.Error}</Td>
-                  <Td>{log.RowId}</Td>
-                  <Td>{formatDate(log.Timestamp)}</Td>
-                </tr>
-              ))}
-            </tbody>
-          </Table>
-        </TableContainer>
-      )}
+          {jobRequests.map((jobRequest, index) => (
+            <InputContainer key={index}>
+              <h3>{jobRequest.jobType}</h3>
+              <InputLabel>
+                Record Count:
+                <input
+                  type="number"
+                  value={jobRequest.recordCount}
+                  onChange={(e) =>
+                    handleJobRequestChange(
+                      index,
+                      "recordCount",
+                      Number(e.target.value)
+                    )
+                  }
+                />
+              </InputLabel>
+              <InputLabel>
+                Start Row:
+                <input
+                  type="number"
+                  value={jobRequest.startRow}
+                  onChange={(e) =>
+                    handleJobRequestChange(
+                      index,
+                      "startRow",
+                      Number(e.target.value)
+                    )
+                  }
+                />
+              </InputLabel>
+              <InputLabel>
+                DB Table Name:
+                <ReadOnlyInput
+                  type="text"
+                  value={jobRequest.tableName}
+                  readOnly
+                />
+              </InputLabel>
+              <InputLabel>
+                Priority Screen Name:
+                <ReadOnlyInput
+                  type="text"
+                  value={jobRequest.priorityScreenName}
+                  readOnly
+                />
+              </InputLabel>
+            </InputContainer>
+          ))}
+
+          <Button
+            onClick={handleMultipleBatchProcess}
+            disabled={isProcessing}
+            className={`process-button ${isProcessing ? "processing" : ""}`}
+          >
+            {isProcessing ? "Processing..." : "Process Multiple Jobs"}
+          </Button>
+
+          <h2>Selected Jobs</h2>
+          <ul>
+            {selectedJobTypes.map((jobType, index) => (
+              <li key={index}>{jobType}</li>
+            ))}
+          </ul>
+        </SectionContainer>
+      </MainContainer>
+
+      <ResultsContainer>
+        {jobsHistory.length > 0 && (
+          <LargeSectionContainer>
+            <h3>Jobs History</h3>
+            <TableContainer>
+              <Table>
+                <thead>
+                  <tr>
+                    <Th>Job ID</Th>
+                    <Th>Job Name</Th>
+                    <Th>Start Time</Th>
+                    <Th>End Time</Th>
+                    <Th>Status</Th>
+                    <Th>Total Records</Th>
+                    <Th>Success Batches</Th>
+                    <Th>Failure Batches</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {jobsHistory.map((history: any, index: number) => (
+                    <tr key={index}>
+                      <Td>{history.JobID}</Td>
+                      <Td>{history.JobName}</Td>
+                      <Td>{formatDate(history.StartTime)}</Td>
+                      <Td>{formatDate(history.EndTime)}</Td>
+                      <Td>{history.Status}</Td>
+                      <Td>{history.TotalRecords}</Td>
+                      <Td>{history.SuccessCount}</Td>
+                      <Td>{history.FailureCount}</Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            </TableContainer>
+          </LargeSectionContainer>
+        )}
+
+        {batchResults.length > 0 && (
+          <LargeSectionContainer>
+            <h3>Batches Results</h3>
+            <TableContainer>
+              <Table>
+                <thead>
+                  <tr>
+                    <Th>Job Name</Th>
+                    <Th>Batch ID</Th>
+                    <Th>Job ID</Th>
+                    <Th>Start Time</Th>
+                    <Th>End Time</Th>
+                    <Th>Table Name</Th>
+                    <Th>Total Records</Th>
+                    <Th>Success Count</Th>
+                    <Th>Last Processed Index</Th>
+                    <Th>Failure Count</Th>
+                    <Th>Status</Th>
+                    <Th>Error Message</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {batchResults.map((result: any, index: number) => (
+                    <tr key={index}>
+                      <Td>{result.JobName}</Td>
+                      <Td>{result.BatchID}</Td>
+                      <Td>{result.JobID}</Td>
+                      <Td>{formatDate(result.StartTime)}</Td>
+                      <Td>{formatDate(result.EndTime)}</Td>
+                      <Td>{result.TableName}</Td>
+                      <Td>{result.TotalRecords}</Td>
+                      <Td>{result.SuccessCount}</Td>
+                      <Td>{result.LastProcessedIndex}</Td>
+                      <Td>{result.FailureCount}</Td>
+                      <Td>{result.Status}</Td>
+                      <Td>{result.ErrorMessage}</Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            </TableContainer>
+          </LargeSectionContainer>
+        )}
+
+        {errorLogs.length > 0 && (
+          <LargeSectionContainer>
+            <h3>Error Logs</h3>
+            <TableContainer>
+              <Table>
+                <thead>
+                  <tr>
+                    <Th>Error ID</Th>
+                    <Th>Job Name</Th>
+                    <Th>Job ID</Th>
+                    <Th>Batch Id</Th>
+                    <Th>TableName</Th>
+                    <Th>Error Message</Th>
+                    <Th>RowId</Th>
+                    <Th>Timestamp</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {errorLogs.map((log: any, index: number) => (
+                    <tr key={index}>
+                      <Td>{log.ErrorID}</Td>
+                      <Td>{log.JobName}</Td>
+                      <Td>{log.JobID}</Td>
+                      <Td>{log.BatchId}</Td>
+                      <Td>{log.TableName}</Td>
+                      <Td>{log.Error}</Td>
+                      <Td>{log.RowId}</Td>
+                      <Td>{formatDate(log.Timestamp)}</Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            </TableContainer>
+          </LargeSectionContainer>
+        )}
+      </ResultsContainer>
     </div>
   );
 };

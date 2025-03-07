@@ -1,11 +1,17 @@
 import styled from "styled-components";
 
-export const Container = styled.div`
+export const MainContainer = styled.div`
+  display: flex;
+  justify-content: space-between;
+  padding: 20px;
+`;
+
+export const SectionContainer = styled.div`
   padding: 20px;
   border: 1px solid #ccc;
   border-radius: 8px;
   margin-bottom: 20px;
-  width: 20%;
+  width: 45%; /* Adjust the width as needed */
 `;
 
 export const InputContainer = styled.div`
@@ -19,8 +25,6 @@ export const InputLabel = styled.label`
   flex-direction: column;
   margin-right: 10px;
   width: 200px; /* Set a fixed width */
-  /* Alternatively, you can use max-width */
-  /* max-width: 100px; */
 `;
 
 export const Button = styled.button`
@@ -33,12 +37,6 @@ export const Button = styled.button`
   &:disabled {
     background-color: #ccc;
   }
-`;
-
-export const FlexContainer = styled.div`
-  display: flex;
-  flex-direction: column; /* Change flex direction to column */
-  align-items: center; /* Center children horizontally */
 `;
 
 export const TableContainer = styled.div`
@@ -64,8 +62,16 @@ export const Td = styled.td`
 `;
 
 export const ReadOnlyInput = styled.input`
-  background-color: #f0f0f0; /* Light gray background */
-  border: 1px solid #ccc; /* Light gray border */
-  color: #666; /* Gray text color */
-  cursor: not-allowed; /* Change cursor to indicate non-editable */
+  background-color: #f0f0f0;
+  border: 1px solid #ccc;
+  color: #666;
+  cursor: not-allowed;
+`;
+
+export const ResultsContainer = styled.div`
+  padding: 20px;
+`;
+
+export const LargeSectionContainer = styled(SectionContainer)`
+  width: 90%; /* Adjust the width as needed */
 `;

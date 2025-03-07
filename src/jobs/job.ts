@@ -36,7 +36,8 @@ const logErrorToTable = async (
   batchId: string,
   tableName: string,
   rowId: number,
-  error: string
+  error: string,
+  jobId: string
 ) => {
   await pool
     .request()
@@ -45,9 +46,10 @@ const logErrorToTable = async (
     .input("TableName", sql.NVarChar, tableName)
     .input("RowId", sql.Int, rowId)
     .input("Error", sql.NVarChar, error)
-    .input("Timestamp", sql.DateTime, new Date()).query(`
-      INSERT INTO PriorityErrorLogs (JobName, BatchId, TableName, RowId, Error, Timestamp)
-      VALUES (@JobName, @BatchId, @TableName, @RowId, @Error, @Timestamp)
+    .input("Timestamp", sql.DateTime, new Date())
+    .input("JobID", sql.UniqueIdentifier, jobId).query(`
+      INSERT INTO PriorityErrorLogs (JobName, BatchId, TableName, RowId, Error, Timestamp, JobID)
+      VALUES (@JobName, @BatchId, @TableName, @RowId, @Error, @Timestamp, @JobID)
     `);
 };
 
@@ -56,7 +58,8 @@ async function processBatch(
   batchId: string,
   jobType: string,
   tableName: string,
-  priorityScreenName: string
+  priorityScreenName: string,
+  jobId: string
 ) {
   const pool = await poolPromise;
   if (!pool) {
@@ -132,9 +135,10 @@ async function processBatch(
         .input("BatchId", sql.UniqueIdentifier, batchId)
         .input("JobName", sql.NVarChar, jobType)
         .input("Status", sql.NVarChar, status)
-        .input("ErrorMessage", sql.NVarChar, errorMessage).query(`
+        .input("ErrorMessage", sql.NVarChar, errorMessage)
+        .input("JobID", sql.UniqueIdentifier, jobId).query(`
           UPDATE ${tableName}
-          SET BatchId = @BatchId, JobName = @JobName, Status = @Status, Error = @ErrorMessage
+          SET BatchId = @BatchId, JobName = @JobName, Status = @Status, Error = @ErrorMessage, JobID = @JobID
           WHERE RowId = @RowId
         `);
 
@@ -148,7 +152,8 @@ async function processBatch(
           batchId,
           tableName,
           row.RowId,
-          errorMessage ?? ""
+          errorMessage ?? "",
+          jobId
         );
       }
       perfMonitor.setLastProcessedIndex(row.RowId);
@@ -160,6 +165,7 @@ async function processBatch(
       .request()
       .input("JobName", sql.NVarChar, jobType)
       .input("BatchID", sql.UniqueIdentifier, batchId)
+      .input("JobID", sql.UniqueIdentifier, jobId)
       .input(
         "StartTime",
         sql.DateTime,
@@ -181,8 +187,8 @@ async function processBatch(
       .input("Status", sql.NVarChar, result.success ? "Completed" : "Failed")
       .input("ErrorMessage", sql.NVarChar, result.success ? null : result.error)
       .input("TableName", sql.NVarChar, tableName).query(`
-        INSERT INTO PriorityBatchProcessing (JobName, BatchID, StartTime, EndTime, TotalRecords, SuccessCount, FailureCount, LastProcessedIndex, Status, ErrorMessage, TableName)
-        VALUES (@JobName, @BatchID, @StartTime, @EndTime, @TotalRecords, @SuccessCount, @FailureCount, @LastProcessedIndex, @Status, @ErrorMessage, @TableName)
+        INSERT INTO PriorityBatchProcessing (JobName, BatchID, StartTime, EndTime, TotalRecords, SuccessCount, FailureCount, LastProcessedIndex, Status, ErrorMessage, TableName, JobID)
+        VALUES (@JobName, @BatchID, @StartTime, @EndTime, @TotalRecords, @SuccessCount, @FailureCount, @LastProcessedIndex, @Status, @ErrorMessage, @TableName, @JobID)
       `);
 
     return result;
@@ -201,7 +207,8 @@ async function processBatches(
   startRow: number,
   tableName: string,
   priorityScreenName: string,
-  jobType: string
+  jobType: string,
+  jobId: string
 ) {
   const pool = await poolPromise;
   if (!pool) {
@@ -227,7 +234,14 @@ async function processBatches(
     const batchId = uuidv4();
     batchPromises.push(
       limit(() =>
-        processBatch(batch, batchId, jobType, tableName, priorityScreenName)
+        processBatch(
+          batch,
+          batchId,
+          jobType,
+          tableName,
+          priorityScreenName,
+          jobId
+        )
       )
     );
   }

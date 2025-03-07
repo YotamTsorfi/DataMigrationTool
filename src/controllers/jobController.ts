@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
-import { processBatches } from "../jobs/job";
 import { poolPromise } from "../config/db";
+import { JobManager } from "../jobs/jobManager"; // Import JobManager
 
 interface JobRequest {
   recordCount: number;
@@ -20,13 +20,23 @@ export const runJobWithInput = async (req: Request, res: Response) => {
   }: JobRequest = req.body;
 
   try {
-    const results = await processBatches(
+    const jobManager = new JobManager();
+    const jobId = await jobManager.createJob({
       recordCount,
       startRow,
       tableName,
       priorityScreenName,
-      jobType
-    );
+      jobType,
+    });
+
+    const results = await jobManager.startJob(jobId, {
+      recordCount,
+      startRow,
+      tableName,
+      priorityScreenName,
+      jobType,
+    });
+
     res.status(200).json(results);
   } catch (error) {
     console.error("Error running job:", error);
@@ -36,6 +46,7 @@ export const runJobWithInput = async (req: Request, res: Response) => {
   }
 };
 
+// -----------------------------------------------------------------
 export const getJobTypes = async (req: Request, res: Response) => {
   try {
     const pool = await poolPromise;
