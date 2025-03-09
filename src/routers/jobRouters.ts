@@ -35,7 +35,7 @@ router.get("/results", async (req: Request, res: Response): Promise<void> => {
       throw new Error("Database connection pool is null");
     }
     const batchResults = await pool.request().query(`
-            SELECT * FROM PriorityBatchProcessing ORDER BY StartTime
+            SELECT * FROM PriorityBatchProcessing ORDER BY StartTime DESC
         `);
     res.status(200).json({
       success: true,
@@ -56,7 +56,7 @@ router.get("/errors", async (req: Request, res: Response): Promise<void> => {
       throw new Error("Database connection pool is null");
     }
     const errorLogs = await pool.request().query(`
-            SELECT * FROM PriorityErrorLogs
+            SELECT * FROM PriorityErrorLogs ORDER BY TimeStamp DESC
         `);
     res.status(200).json({
       success: true,
@@ -80,7 +80,7 @@ router.get(
       }
       const jobsHistory = await pool
         .request()
-        .query(`SELECT * FROM PriorityJobsHistory`);
+        .query(`SELECT * FROM PriorityJobsHistory order by StartTime desc`);
       res.status(200).json({
         success: true,
         jobsHistory: jobsHistory.recordset,

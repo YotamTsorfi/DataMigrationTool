@@ -13,8 +13,13 @@ interface JobRequest {
 
 type JobStatus = "Queued" | "Running" | "Completed" | "Failed";
 
+const adjustTimeZone = (date: Date): Date => {
+  const offset = date.getTimezoneOffset() * 60000; // offset in milliseconds
+  return new Date(date.getTime() - offset);
+};
+
 class JobManager {
-    //   ----------------------------
+  //   ----------------------------
   async createJob(jobRequest: JobRequest): Promise<string> {
     const jobId = uuidv4();
     const pool = await poolPromise;
@@ -22,22 +27,22 @@ class JobManager {
       throw new Error("Failed to connect to the database");
     }
 
-    await pool.request()
+    await pool
+      .request()
       .input("JobID", sql.UniqueIdentifier, jobId)
       .input("JobName", sql.NVarChar, jobRequest.jobType)
       .input("TableName", sql.NVarChar, jobRequest.tableName)
       .input("ScreenName", sql.NVarChar, jobRequest.priorityScreenName)
-      .input("StartTime", sql.DateTime, new Date())
+      .input("StartTime", sql.DateTime, adjustTimeZone(new Date()))
       .input("TotalRecords", sql.Int, jobRequest.recordCount)
-      .input("Status", sql.NVarChar, "Queued")
-      .query(`
+      .input("Status", sql.NVarChar, "Queued").query(`
         INSERT INTO PriorityJobsHistory (JobID, JobName, TableName, ScreenName, StartTime, TotalRecords, Status)
         VALUES (@JobID, @JobName, @TableName, @ScreenName, @StartTime, @TotalRecords, @Status)
       `);
 
     return jobId;
   }
-//   ----------------------------
+  //   ----------------------------
   async updateJobStatus(
     jobId: string,
     status: JobStatus,
@@ -50,21 +55,21 @@ class JobManager {
       throw new Error("Failed to connect to the database");
     }
 
-    await pool.request()
+    await pool
+      .request()
       .input("JobID", sql.UniqueIdentifier, jobId)
       .input("Status", sql.NVarChar, status)
       .input("SuccessCount", sql.Int, totalSuccess ?? 0)
       .input("FailureCount", sql.Int, totalFailures ?? 0)
       .input("ErrorMessage", sql.NVarChar, errorMessage ?? null)
-      .input("EndTime", sql.DateTime, new Date())
-      .query(`
+      .input("EndTime", sql.DateTime, adjustTimeZone(new Date())).query(`
         UPDATE PriorityJobsHistory
         SET Status = @Status, SuccessCount = @SuccessCount, FailureCount = @FailureCount, ErrorMessage = @ErrorMessage, EndTime = @EndTime
         WHERE JobID = @JobID
       `);
   }
 
-//   ----------------------------
+  //   ----------------------------
   async startJob(jobId: string, jobRequest: JobRequest): Promise<any> {
     await this.updateJobStatus(jobId, "Running");
 
@@ -74,10 +79,13 @@ class JobManager {
       jobRequest.tableName,
       jobRequest.priorityScreenName,
       jobRequest.jobType,
-      jobId 
+      jobId
     );
 
-    const totalSuccess = results.reduce((acc, result) => acc + (result.success ? 1 : 0), 0);
+    const totalSuccess = results.reduce(
+      (acc, result) => acc + (result.success ? 1 : 0),
+      0
+    );
     const totalFailures = results.length - totalSuccess;
 
     await this.updateJobStatus(
