@@ -54,6 +54,7 @@ const logErrorToTable = async (
 };
 
 async function processBatch(
+  pool: sql.ConnectionPool,
   rows: any[],
   batchId: string,
   jobType: string,
@@ -61,10 +62,10 @@ async function processBatch(
   priorityScreenName: string,
   jobId: string
 ) {
-  const pool = await poolPromise;
-  if (!pool) {
-    throw new Error("Failed to connect to the database");
-  }
+  // const pool = await poolPromise;
+  // if (!pool) {
+  //   throw new Error("Failed to connect to the database");
+  // }
 
   const perfMonitor = new PerformanceMonitor();
   perfMonitor.startOperation();
@@ -235,6 +236,7 @@ async function processBatches(
     batchPromises.push(
       limit(() =>
         processBatch(
+          pool,
           batch,
           batchId,
           jobType,
