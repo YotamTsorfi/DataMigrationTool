@@ -2,7 +2,9 @@
 
 import express from 'express';
 import cors from 'cors';
-import { config } from './config/config';
+import { createServer } from "http";
+import { Server } from "socket.io";
+import { config } from "./config/config";
 import { writeToLogFile } from "./config/logger";
 import PerformanceMonitor from "./utils/performanceMonitor";
 import priorityRoutes from "./routers/priorityRoutes";
@@ -14,7 +16,28 @@ import configRouter from "./routers/configRouters";
 // Initialize Express app
 const app = express();
 const port = config.port;
-const http = require("http").createServer(app);
+const httpServer = createServer(app);
+
+// Initialize Socket.IO
+const io = new Server(httpServer, {
+  cors: {
+    origin: "http://localhost:3000",
+    methods: ["GET", "POST"],
+    credentials: true,
+  },
+});
+
+// Export io to be used in other files
+export { io };
+
+// Socket.IO connection handling
+io.on("connection", (socket) => {
+  console.log("Client connected:", socket.id);
+
+  socket.on("disconnect", () => {
+    console.log("Client disconnected:", socket.id);
+  });
+});
 
 // Middleware
 //app.use(cors());
@@ -35,9 +58,10 @@ app.use("/job", jobRoutes);
 app.use("/config", configRouter);
 
 // Start server
-http.listen(port, "0.0.0.0", () => {
+httpServer.listen(port, "0.0.0.0", () => {
   const startupTime = Date.now();
   console.log(`App is listening at http://0.0.0.0:${port}`);
+  console.log(`WebSocket server is running`);
   console.log(`Logs are at ./logs under root folder.`);
   writeToLogFile(
     "general.log",
@@ -56,7 +80,7 @@ process.on("SIGTERM", () => {
   // Write server metrics to log file
   PerformanceMonitor.logServerMetrics();
 
-  http.close(() => {
+  httpServer.close(() => {
     console.log("Server closed");
     process.exit(0);
   });

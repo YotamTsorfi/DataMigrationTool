@@ -2,6 +2,7 @@ import { poolPromise } from "../config/db";
 import { v4 as uuidv4 } from "uuid";
 import sql from "mssql";
 import { processBatches } from "../jobs/job";
+import ProgressTracker from "../utils/progressTracker";
 
 interface JobRequest {
   recordCount: number;
@@ -73,6 +74,9 @@ class JobManager {
   async startJob(jobId: string, jobRequest: JobRequest): Promise<any> {
     await this.updateJobStatus(jobId, "Running");
 
+    // Initialize progress tracking
+    ProgressTracker.initJob(jobId, jobRequest.recordCount);
+
     const results = await processBatches(
       jobRequest.recordCount,
       jobRequest.startRow,
@@ -87,6 +91,9 @@ class JobManager {
       0
     );
     const totalFailures = results.length - totalSuccess;
+
+    // Mark job as complete in progress tracker
+    ProgressTracker.completeJob(jobId, totalSuccess, totalFailures);
 
     await this.updateJobStatus(
       jobId,

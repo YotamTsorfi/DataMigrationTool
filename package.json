@@ -29,6 +29,7 @@
     "@types/express": "^5.0.0",
     "@types/jest": "^29.5.12",
     "@types/node": "^22.13.1",
+    "@types/socket.io": "^3.0.1",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
     "concurrently": "^9.1.2",
@@ -51,6 +52,7 @@
     "moment-timezone": "^0.5.47",
     "mssql": "^11.0.1",
     "p-limit": "^6.2.0",
+    "socket.io": "^4.8.1",
     "uuid": "^11.1.0"
   },
   "nodemonConfig": {

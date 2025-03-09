@@ -4,7 +4,6 @@ import { toast } from "react-toastify";
 import {
   SectionContainer,
   InputContainer,
-  InputLabel,
   Button,
 } from "./BatchProcessorStyles";
 
@@ -55,30 +54,54 @@ const ConfigPanel: React.FC = () => {
   };
 
   return (
-    <SectionContainer>
+    <SectionContainer
+      style={{
+        width: "90%",
+        maxWidth: "1200px",
+        margin: "0 auto",
+      }}
+    >
       <h2>System Configuration</h2>
       {loading ? (
         <p>Loading configurations...</p>
       ) : (
         <>
           {configs.map((config, index) => (
-            <InputContainer key={config.ConfigKey}>
-              <InputLabel>
-                {config.Description || config.ConfigKey}:
-                <div style={{ display: "flex", alignItems: "center" }}>
-                  <input
-                    type="text"
-                    value={config.ConfigValue}
-                    onChange={(e) => handleConfigChange(index, e.target.value)}
-                  />
-                  <Button
-                    onClick={() => saveConfig(config)}
-                    style={{ marginLeft: "10px" }}
-                  >
-                    Save
-                  </Button>
-                </div>
-              </InputLabel>
+            <InputContainer
+              key={config.ConfigKey}
+              style={{ overflow: "hidden" }}
+            >
+              <div>
+                <strong>{config.Description || config.ConfigKey}:</strong>
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  marginTop: "5px",
+                  marginBottom: "5px",
+                  width: "70%",
+                  maxWidth: "100%", // מגביל את הרוחב המקסימלי
+                }}
+              >
+                <input
+                  type="text"
+                  value={config.ConfigValue}
+                  onChange={(e) => handleConfigChange(index, e.target.value)}
+                  style={{
+                    flexGrow: 1,
+                    minWidth: 0, // חשוב למניעת גלישה בפלקסבוקס
+                    maxWidth: "calc(100% - 80px)", // השארת מקום לכפתור
+                  }}
+                />
+                <Button
+                  onClick={() => saveConfig(config)}
+                  style={{ flexShrink: 0 }} // מונע מהכפתור להתכווץ
+                >
+                  Save
+                </Button>
+              </div>
               <small>
                 Last updated: {new Date(config.LastUpdated).toLocaleString()}
               </small>

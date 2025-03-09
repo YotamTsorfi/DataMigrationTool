@@ -2,16 +2,17 @@ import express, { Request, Response, Router } from "express";
 import { priorityAuthMiddleware } from "../middleware/priorityAuth";
 import { poolPromise } from "../config/db";
 import { runJobWithInput, getJobTypes } from "../controllers/jobController";
-
 import { JobManager } from "../jobs/jobManager";
+import ProgressTracker from "../utils/progressTracker";
 
 const router: Router = express.Router();
 
 router.use(priorityAuthMiddleware);
 
 router.post("/run-job", runJobWithInput);
+//-----------------------------------
 router.get("/job-types", getJobTypes);
-
+//-----------------------------------
 router.post("/run-multiple-jobs", async (req: Request, res: Response) => {
   const jobRequests = req.body; // Array of job requests
 
@@ -27,7 +28,7 @@ router.post("/run-multiple-jobs", async (req: Request, res: Response) => {
     });
   }
 });
-
+//-----------------------------------
 router.get("/results", async (req: Request, res: Response): Promise<void> => {
   try {
     const pool = await poolPromise;
@@ -48,7 +49,7 @@ router.get("/results", async (req: Request, res: Response): Promise<void> => {
     });
   }
 });
-
+//-----------------------------------
 router.get("/errors", async (req: Request, res: Response): Promise<void> => {
   try {
     const pool = await poolPromise;
@@ -69,7 +70,7 @@ router.get("/errors", async (req: Request, res: Response): Promise<void> => {
     });
   }
 });
-
+//-----------------------------------
 router.get(
   "/jobs-history",
   async (req: Request, res: Response): Promise<void> => {
@@ -94,4 +95,38 @@ router.get(
   }
 );
 
+//-----------------------------------
+router.get(
+  "/progress/:jobId",
+  async (req: Request, res: Response): Promise<void> => {
+    const jobId = req.params.jobId;
+
+    const progress = ProgressTracker.getProgress(jobId);
+
+    if (!progress) {
+      res.status(404).json({
+        success: false,
+        message: "Job not found",
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      progress,
+    });
+  }
+);
+//-----------------------------------
+router.get(
+  "/active-jobs",
+  async (req: Request, res: Response): Promise<void> => {
+    const activeJobs = ProgressTracker.getAllActiveJobs();
+
+    res.status(200).json({
+      success: true,
+      activeJobs,
+    });
+  }
+);
 export default router;

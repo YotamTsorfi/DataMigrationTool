@@ -3,6 +3,7 @@
 import { poolPromise } from "../config/db";
 import { config } from "../config/config";
 import { configService } from "../config/configService";
+import ProgressTracker from "../utils/progressTracker";
 import axios from "axios";
 import PerformanceMonitor from "../utils/performanceMonitor";
 import sql from "mssql";
@@ -226,8 +227,13 @@ async function processBatches(
     throw new Error("Failed to connect to the database");
   }
 
+  // Initialize progress tracking for this job
+  ProgressTracker.initJob(jobId, recordCount);
+
   const results: BatchCreateRowsResult[] = [];
   let processedCount = 0;
+  let successCount = 0;
+  let failureCount = 0;
 
   // Process data in chunks to avoid memory issues
   const FETCH_SIZE = BATCH_SIZE * 5;
@@ -283,6 +289,20 @@ async function processBatches(
               )
             ).then((result: BatchCreateRowsResult) => {
               results.push(result);
+
+              // Update processing counts for progress tracking
+              processedCount += batchToProcess.length;
+              successCount += result.success ? result.rowsCount || 0 : 0;
+              failureCount += !result.success ? result.rowsCount || 0 : 0;
+
+              // Update progress
+              ProgressTracker.updateProgress(
+                jobId,
+                processedCount,
+                successCount,
+                failureCount
+              );
+
               // Add delay between batches
               return new Promise((r) => setTimeout(r, DELAY_BETWEEN_BATCHES));
             })
@@ -294,6 +314,8 @@ async function processBatches(
 
       request.on("error", (err: Error) => {
         console.error("Error in database stream:", err);
+        // Update progress with failure status
+        ProgressTracker.completeJob(jobId, successCount, failureCount + 1);
         reject(err);
       });
 
@@ -312,7 +334,13 @@ async function processBatches(
                 priorityScreenName,
                 jobId
               )
-            )
+            ).then((result: BatchCreateRowsResult) => {
+              results.push(result);
+
+              // Update counts
+              successCount += result.success ? result.rowsCount || 0 : 0;
+              failureCount += !result.success ? result.rowsCount || 0 : 0;
+            })
           );
           processedCount += currentBatch.length;
         }
@@ -320,8 +348,14 @@ async function processBatches(
         // Wait for all batch promises to resolve
         try {
           await Promise.all(batchPromises);
+
+          // Mark job as complete
+          ProgressTracker.completeJob(jobId, successCount, failureCount);
+
           resolve(results);
         } catch (error) {
+          // Update progress with failure status
+          ProgressTracker.completeJob(jobId, successCount, failureCount);
           reject(error);
         }
       });

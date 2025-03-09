@@ -19,7 +19,7 @@ import {
 } from "./BatchProcessorStyles";
 import BatchDashboard from "./BatchDashboard";
 import ConfigPanel from "./ConfigPanel";
-
+import JobProgressTracker from "./JobProgressTracker";
 //---------------------------------------------
 
 const formatDate = (dateString: string): string => {
@@ -368,6 +368,9 @@ const BatchProcessor: React.FC = () => {
               <li key={index}>{jobType}</li>
             ))}
           </ul>
+        </SectionContainer>
+        <SectionContainer>
+          <JobProgressTracker />
         </SectionContainer>
       </MainContainer>
 
