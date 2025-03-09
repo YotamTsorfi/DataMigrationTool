@@ -69,7 +69,6 @@ const logErrorToTable = async (
 };
 
 async function processBatch(
-  pool: sql.ConnectionPool,
   rows: any[],
   batchId: string,
   jobType: string,
@@ -77,6 +76,11 @@ async function processBatch(
   priorityScreenName: string,
   jobId: string
 ) {
+  const pool = await poolPromise;
+  if (!pool) {
+    throw new Error("Failed to connect to the database");
+  }
+
   const perfMonitor = new PerformanceMonitor();
   perfMonitor.startOperation();
 
@@ -230,140 +234,77 @@ async function processBatches(
   // Initialize progress tracking for this job
   ProgressTracker.initJob(jobId, recordCount);
 
-  const results: BatchCreateRowsResult[] = [];
-  let processedCount = 0;
-  let successCount = 0;
-  let failureCount = 0;
+  const limit = pLimit(CONCURRENT_BATCHES);
 
-  // Process data in chunks to avoid memory issues
-  const FETCH_SIZE = BATCH_SIZE * 5;
+  const rowsData = await pool.request().query(`
+    SELECT TOP (${recordCount}) RowId, Data
+    FROM ${tableName}
+    WHERE Status IS NULL AND RowId >= ${startRow}
+  `);
 
-  while (processedCount < recordCount) {
-    // Calculate how many records to fetch in this iteration
-    const fetchCount = Math.min(FETCH_SIZE, recordCount - processedCount);
+  const rows = rowsData.recordset.map((record: any) => ({
+    RowId: record.RowId,
+    ...JSON.parse(record.Data),
+  }));
 
-    // Use proper streaming pattern for mssql
-    return new Promise<BatchCreateRowsResult[]>((resolve, reject) => {
-      let currentBatch: any[] = [];
-      let batchPromises: Promise<any>[] = [];
-
-      const request = pool.request();
-      const query = `
-        SELECT TOP (${fetchCount}) RowId, Data
-        FROM ${tableName}
-        WHERE Status IS NULL 
-        AND RowId >= ${startRow + processedCount}
-        ORDER BY RowId
-      `;
-
-      request.stream = true;
-      request.query(query);
-
-      request.on("row", (row: { RowId: number; Data: string }) => {
-        // Parse the row data
-        const processedRow = {
-          RowId: row.RowId,
-          ...JSON.parse(row.Data),
-        };
-
-        // Add to current batch
-        currentBatch.push(processedRow);
-
-        // When batch is full, process it
-        if (currentBatch.length >= BATCH_SIZE) {
-          const batchId = uuidv4();
-          const batchToProcess = [...currentBatch];
-          currentBatch = [];
-
-          // Process the batch
-          batchPromises.push(
-            limit(() =>
-              processBatch(
-                pool,
-                batchToProcess,
-                batchId,
-                jobType,
-                tableName,
-                priorityScreenName,
-                jobId
-              )
-            ).then((result: BatchCreateRowsResult) => {
-              results.push(result);
-
-              // Update processing counts for progress tracking
-              processedCount += batchToProcess.length;
-              successCount += result.success ? result.rowsCount || 0 : 0;
-              failureCount += !result.success ? result.rowsCount || 0 : 0;
-
-              // Update progress
-              ProgressTracker.updateProgress(
-                jobId,
-                processedCount,
-                successCount,
-                failureCount
-              );
-
-              // Add delay between batches
-              return new Promise((r) => setTimeout(r, DELAY_BETWEEN_BATCHES));
-            })
-          );
-
-          processedCount += batchToProcess.length;
-        }
-      });
-
-      request.on("error", (err: Error) => {
-        console.error("Error in database stream:", err);
-        // Update progress with failure status
-        ProgressTracker.completeJob(jobId, successCount, failureCount + 1);
-        reject(err);
-      });
-
-      request.on("done", async () => {
-        // Process any remaining rows in the final batch
-        if (currentBatch.length > 0) {
-          const batchId = uuidv4();
-          batchPromises.push(
-            limit(() =>
-              processBatch(
-                pool,
-                currentBatch,
-                batchId,
-                jobType,
-                tableName,
-                priorityScreenName,
-                jobId
-              )
-            ).then((result: BatchCreateRowsResult) => {
-              results.push(result);
-
-              // Update counts
-              successCount += result.success ? result.rowsCount || 0 : 0;
-              failureCount += !result.success ? result.rowsCount || 0 : 0;
-            })
-          );
-          processedCount += currentBatch.length;
-        }
-
-        // Wait for all batch promises to resolve
-        try {
-          await Promise.all(batchPromises);
-
-          // Mark job as complete
-          ProgressTracker.completeJob(jobId, successCount, failureCount);
-
-          resolve(results);
-        } catch (error) {
-          // Update progress with failure status
-          ProgressTracker.completeJob(jobId, successCount, failureCount);
-          reject(error);
-        }
-      });
-    });
+  const batchPromises = [];
+  for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+    const batch = rows.slice(i, i + BATCH_SIZE);
+    const batchId = uuidv4();
+    batchPromises.push(
+      limit(() =>
+        processBatch(
+          batch,
+          batchId,
+          jobType,
+          tableName,
+          priorityScreenName,
+          jobId
+        )
+      )
+    );
   }
+
+  // Track overall progress
+  let totalProcessedRecords = 0;
+  let totalSuccessCount = 0;
+  let totalFailureCount = 0;
+  const results = [];
+
+  for (const batchPromise of batchPromises) {
+    const result = await batchPromise;
+    results.push(result);
+
+    // Update progress metrics after each batch completes
+    if (result.success) {
+      totalProcessedRecords += result.rowsCount || 0;
+      // Extract success and failure counts from the batch result
+      if (result.data && result.data.responses) {
+        const batchSuccessCount = result.data.responses.filter(
+          (r: any) => r.status >= 200 && r.status < 300
+        ).length;
+        const batchFailureCount = (result.rowsCount || 0) - batchSuccessCount;
+
+        totalSuccessCount += batchSuccessCount;
+        totalFailureCount += batchFailureCount;
+      }
+    }
+
+    // Update progress tracker
+    ProgressTracker.updateProgress(
+      jobId,
+      totalProcessedRecords,
+      totalSuccessCount,
+      totalFailureCount
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, DELAY_BETWEEN_BATCHES));
+  }
+
+  // Mark job as complete when all batches are done
+  ProgressTracker.completeJob(jobId, totalSuccessCount, totalFailureCount);
 
   return results;
 }
-
 
 export { processBatch, processBatches };

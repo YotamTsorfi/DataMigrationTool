@@ -12,7 +12,7 @@ class ConfigurationService {
   private config: SystemConfig = {
     CONCURRENT_BATCHES: 10, // Default value
     BATCH_SIZE: 100, // Default value
-    DELAY_BETWEEN_BATCHES: 6000, // Default value
+    DELAY_BETWEEN_BATCHES: 60000, // Default value
   };
   private lastLoaded: Date = new Date(0);
   private cacheExpiryMs: number = 60000; // Refresh config every minute
@@ -50,21 +50,26 @@ class ConfigurationService {
 
       if (result.recordset.length > 0) {
         const newConfig: SystemConfig = { ...this.config }; // Start with defaults
-        
-        result.recordset.forEach((row: { ConfigKey: string; ConfigValue: string }) => {
-          // Convert string values to appropriate types
-          let value: any = row.ConfigValue;
-          
-          // Try to convert to number if possible
-          if (!isNaN(Number(value))) {
-            value = Number(value);
-          } else if (value.toLowerCase() === 'true' || value.toLowerCase() === 'false') {
-            value = value.toLowerCase() === 'true';
+
+        result.recordset.forEach(
+          (row: { ConfigKey: string; ConfigValue: string }) => {
+            // Convert string values to appropriate types
+            let value: any = row.ConfigValue;
+
+            // Try to convert to number if possible
+            if (!isNaN(Number(value))) {
+              value = Number(value);
+            } else if (
+              value.toLowerCase() === "true" ||
+              value.toLowerCase() === "false"
+            ) {
+              value = value.toLowerCase() === "true";
+            }
+
+            newConfig[row.ConfigKey] = value;
           }
-          
-          newConfig[row.ConfigKey] = value;
-        });
-        
+        );
+
         this.config = newConfig;
       }
     } catch (error) {
@@ -77,18 +82,21 @@ class ConfigurationService {
       const pool = await poolPromise;
       if (!pool) return false;
 
-      await pool.request()
-        .input('ConfigKey', key)
-        .input('ConfigValue', String(value))
-        .input('LastUpdated', new Date())
-        .query(`
+      await pool
+        .request()
+        .input("ConfigKey", key)
+        .input("ConfigValue", String(value))
+        .input("LastUpdated", new Date()).query(`
           UPDATE PrioritySystemConfig 
           SET ConfigValue = @ConfigValue, LastUpdated = @LastUpdated
           WHERE ConfigKey = @ConfigKey
         `);
 
       // Update in-memory cache
-      this.config[key] = typeof value === 'string' && !isNaN(Number(value)) ? Number(value) : value;
+      this.config[key] =
+        typeof value === "string" && !isNaN(Number(value))
+          ? Number(value)
+          : value;
       return true;
     } catch (error) {
       console.error(`Failed to update config ${key}:`, error);
