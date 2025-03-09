@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import moment from "moment-timezone";
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 import {
   MainContainer,
   SectionContainer,
@@ -118,6 +120,11 @@ const BatchProcessor: React.FC = () => {
   };
 
   const handleBatchProcess = async () => {
+    if (!tableName || !priorityScreenName) {
+      toast.error("Table Name and Priority Screen Name are required.");
+      return;
+    }
+
     setIsProcessing(true);
 
     try {
@@ -178,6 +185,11 @@ const BatchProcessor: React.FC = () => {
   };
 
   const handleMultipleBatchProcess = async () => {
+    if (jobRequests.some((job) => !job.tableName || !job.priorityScreenName)) {
+      toast.error("All jobs must have Table Name and Priority Screen Name.");
+      return;
+    }
+
     setIsProcessing(true);
 
     try {
@@ -204,6 +216,7 @@ const BatchProcessor: React.FC = () => {
 
   return (
     <div>
+      <ToastContainer />
       <MainContainer>
         <SectionContainer>
           <h2>Batch Processor</h2>
