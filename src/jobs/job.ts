@@ -45,29 +45,112 @@ const adjustTimeZone = (date: Date): Date => {
   return new Date(date.getTime() - offset);
 };
 
-const logErrorToTable = async (
+// const logErrorToTable = async (
+//   pool: sql.ConnectionPool,
+//   jobType: string,
+//   batchId: string,
+//   tableName: string,
+//   rowId: number,
+//   error: string,
+//   jobId: string
+// ) => {
+//   await pool
+//     .request()
+//     .input("JobName", sql.NVarChar, jobType)
+//     .input("BatchId", sql.UniqueIdentifier, batchId)
+//     .input("TableName", sql.NVarChar, tableName)
+//     .input("RowId", sql.Int, rowId)
+//     .input("Error", sql.NVarChar, error)
+//     .input("Timestamp", sql.DateTime, new Date())
+//     .input("JobID", sql.UniqueIdentifier, jobId).query(`
+//       INSERT INTO PriorityErrorLogs (JobName, BatchId, TableName, RowId, Error, Timestamp, JobID)
+//       VALUES (@JobName, @BatchId, @TableName, @RowId, @Error, @Timestamp, @JobID)
+//     `);
+// };
+async function performBulkUpdate(
   pool: sql.ConnectionPool,
-  jobType: string,
-  batchId: string,
   tableName: string,
-  rowId: number,
-  error: string,
-  jobId: string
-) => {
-  await pool
-    .request()
-    .input("JobName", sql.NVarChar, jobType)
-    .input("BatchId", sql.UniqueIdentifier, batchId)
-    .input("TableName", sql.NVarChar, tableName)
-    .input("RowId", sql.Int, rowId)
-    .input("Error", sql.NVarChar, error)
-    .input("Timestamp", sql.DateTime, new Date())
-    .input("JobID", sql.UniqueIdentifier, jobId).query(`
-      INSERT INTO PriorityErrorLogs (JobName, BatchId, TableName, RowId, Error, Timestamp, JobID)
-      VALUES (@JobName, @BatchId, @TableName, @RowId, @Error, @Timestamp, @JobID)
-    `);
-};
+  updates: any[]
+) {
+  if (updates.length === 0) return;
+  
+  try {
+    // Create a table-valued parameter
+    const table = new sql.Table('dbo.BatchUpdateTableType');
+    
+    // Define table structure
+    table.columns.add('RowId', sql.Int, { nullable: false });
+    table.columns.add('BatchId', sql.UniqueIdentifier, { nullable: false });
+    table.columns.add('JobName', sql.NVarChar(255), { nullable: false });
+    table.columns.add('Status', sql.NVarChar(50), { nullable: false });
+    table.columns.add('ErrorMessage', sql.NVarChar(sql.MAX), { nullable: true });
+    table.columns.add('JobID', sql.UniqueIdentifier, { nullable: false });
+    
+    // Add all rows
+    updates.forEach(update => {
+      table.rows.add(
+        update.RowId,
+        update.BatchId,
+        update.JobName,
+        update.Status,
+        update.ErrorMessage,
+        update.JobID
+      );
+    });
+    
+    // Execute the stored procedure with the TVP
+    await pool.request()
+      .input('TableName', sql.NVarChar, tableName)
+      .input('Updates', table)
+      .execute('dbo.BulkUpdateRows');
+      
+  } catch (error) {
+    console.error('Error performing bulk update:', error);
+    throw error;
+  }
+}
 
+async function performBulkErrorInsert(
+  pool: sql.ConnectionPool,
+  errors: any[]
+) {
+  if (errors.length === 0) return;
+  
+  try {
+    // Create a table-valued parameter
+    const table = new sql.Table('dbo.ErrorLogTableType');
+    
+    // Define table structure
+    table.columns.add('JobName', sql.NVarChar(255), { nullable: false });
+    table.columns.add('BatchId', sql.UniqueIdentifier, { nullable: false });
+    table.columns.add('TableName', sql.NVarChar(255), { nullable: false });
+    table.columns.add('RowId', sql.Int, { nullable: false });
+    table.columns.add('Error', sql.NVarChar(sql.MAX), { nullable: true });
+    table.columns.add('JobID', sql.UniqueIdentifier, { nullable: false });
+    
+    // Add all error rows
+    errors.forEach(error => {
+      table.rows.add(
+        error.JobName,
+        error.BatchId,
+        error.TableName,
+        error.RowId,
+        error.Error,
+        error.JobID
+      );
+    });
+    
+    // Execute the stored procedure with the TVP
+    await pool.request()
+      .input('Errors', table)
+      .execute('dbo.BulkInsertErrorLogs');
+      
+  } catch (error) {
+    console.error('Error performing bulk error insert:', error);
+    throw error;
+  }
+}
+//--------------------------------------------
 async function processBatch(
   rows: any[],
   batchId: string,
@@ -101,11 +184,12 @@ async function processBatch(
       batchBody += `Content-Transfer-Encoding: binary\r\n\r\n`;
       batchBody += `POST ${priorityScreenName} HTTP/1.1\r\n`;
       batchBody += `Content-Type: application/json\r\n\r\n`;
-      batchBody += `${JSON.stringify(rowData)}\r\n`; // Remove extra newline here
+      batchBody += `${JSON.stringify(rowData)}\r\n`;
     });
 
-    batchBody += `--${boundary}--\r\n`; // Add newline here
+    batchBody += `--${boundary}--\r\n`;
 
+    // Make the API call to Priority Cloud (this part stays the same)
     const response = await axios.post(
       `${config.priorityDEVBaseUrl}/$batch`,
       batchBody,
@@ -130,11 +214,14 @@ async function processBatch(
       averageTimePerRecord: perfMonitor.metrics.averageTimePerRecord,
     };
 
+    // Prepare collections for bulk operations
+    const updateRows = [];
+    const errorRows = [];
+
+    // Process all response items without database calls
     for (const [index, row] of rows.entries()) {
       const responseItem = response.data.responses[index];
-
-      // perfMonitor.logResponse(index, responseItem);
-
+      
       const status =
         responseItem && responseItem.status >= 200 && responseItem.status < 300
           ? "Completed"
@@ -144,38 +231,48 @@ async function processBatch(
           ? JSON.stringify(responseItem.body?.FORM?.InterfaceErrors)
           : null;
 
-      await pool
-        .request()
-        .input("RowId", sql.Int, row.RowId)
-        .input("BatchId", sql.UniqueIdentifier, batchId)
-        .input("JobName", sql.NVarChar, jobType)
-        .input("Status", sql.NVarChar, status)
-        .input("ErrorMessage", sql.NVarChar, errorMessage)
-        .input("JobID", sql.UniqueIdentifier, jobId).query(`
-          UPDATE ${tableName}
-          SET BatchId = @BatchId, JobName = @JobName, Status = @Status, Error = @ErrorMessage, JobID = @JobID
-          WHERE RowId = @RowId
-        `);
+      // Add to update collection
+      updateRows.push({
+        RowId: row.RowId,
+        BatchId: batchId,
+        JobName: jobType,
+        Status: status,
+        ErrorMessage: errorMessage,
+        JobID: jobId
+      });
 
+      // Track metrics
       if (status === "Completed") {
         perfMonitor.incrementSuccessCount();
       } else {
         perfMonitor.incrementFailureCount();
-        await logErrorToTable(
-          pool,
-          jobType,
-          batchId,
-          tableName,
-          row.RowId,
-          errorMessage ?? "",
-          jobId
-        );
+        
+        // Add to error collection if failed
+        errorRows.push({
+          JobName: jobType,
+          BatchId: batchId,
+          TableName: tableName,
+          RowId: row.RowId,
+          Error: errorMessage || "",
+          JobID: jobId
+        });
       }
+      
       perfMonitor.setLastProcessedIndex(row.RowId);
+    }
+
+    // Perform bulk operations
+    if (updateRows.length > 0) {
+      await performBulkUpdate(pool, tableName, updateRows);
+    }
+
+    if (errorRows.length > 0) {
+      await performBulkErrorInsert(pool, errorRows);
     }
 
     perfMonitor.endOperation();
 
+    // Insert batch processing record (this can remain a single operation)
     await pool
       .request()
       .input("JobName", sql.NVarChar, jobType)
