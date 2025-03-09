@@ -76,11 +76,6 @@ async function processBatch(
   priorityScreenName: string,
   jobId: string
 ) {
-  // const pool = await poolPromise;
-  // if (!pool) {
-  //   throw new Error("Failed to connect to the database");
-  // }
-
   const perfMonitor = new PerformanceMonitor();
   perfMonitor.startOperation();
 
@@ -217,6 +212,7 @@ async function processBatch(
   }
 }
 
+//--------------------------------------------
 async function processBatches(
   recordCount: number,
   startRow: number,
@@ -230,45 +226,110 @@ async function processBatches(
     throw new Error("Failed to connect to the database");
   }
 
-  //const limit = pLimit(CONCURRENT_BATCHES);
+  const results: BatchCreateRowsResult[] = [];
+  let processedCount = 0;
 
-  const rowsData = await pool.request().query(`
-    SELECT TOP (${recordCount}) RowId, Data
-    FROM ${tableName}
-    WHERE Status IS NULL AND RowId >= ${startRow}
-  `);
+  // Process data in chunks to avoid memory issues
+  const FETCH_SIZE = BATCH_SIZE * 5;
 
-  const rows = rowsData.recordset.map((record: any) => ({
-    RowId: record.RowId,
-    ...JSON.parse(record.Data),
-  }));
+  while (processedCount < recordCount) {
+    // Calculate how many records to fetch in this iteration
+    const fetchCount = Math.min(FETCH_SIZE, recordCount - processedCount);
 
-  const batchPromises = [];
-  for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-    const batch = rows.slice(i, i + BATCH_SIZE);
-    const batchId = uuidv4();
-    batchPromises.push(
-      limit(() =>
-        processBatch(
-          pool,
-          batch,
-          batchId,
-          jobType,
-          tableName,
-          priorityScreenName,
-          jobId
-        )
-      )
-    );
-  }
+    // Use proper streaming pattern for mssql
+    return new Promise<BatchCreateRowsResult[]>((resolve, reject) => {
+      let currentBatch: any[] = [];
+      let batchPromises: Promise<any>[] = [];
 
-  const results = [];
-  for (const batchPromise of batchPromises) {
-    results.push(await batchPromise);
-    await new Promise((resolve) => setTimeout(resolve, DELAY_BETWEEN_BATCHES));
+      const request = pool.request();
+      const query = `
+        SELECT TOP (${fetchCount}) RowId, Data
+        FROM ${tableName}
+        WHERE Status IS NULL 
+        AND RowId >= ${startRow + processedCount}
+        ORDER BY RowId
+      `;
+
+      request.stream = true;
+      request.query(query);
+
+      request.on("row", (row: { RowId: number; Data: string }) => {
+        // Parse the row data
+        const processedRow = {
+          RowId: row.RowId,
+          ...JSON.parse(row.Data),
+        };
+
+        // Add to current batch
+        currentBatch.push(processedRow);
+
+        // When batch is full, process it
+        if (currentBatch.length >= BATCH_SIZE) {
+          const batchId = uuidv4();
+          const batchToProcess = [...currentBatch];
+          currentBatch = [];
+
+          // Process the batch
+          batchPromises.push(
+            limit(() =>
+              processBatch(
+                pool,
+                batchToProcess,
+                batchId,
+                jobType,
+                tableName,
+                priorityScreenName,
+                jobId
+              )
+            ).then((result: BatchCreateRowsResult) => {
+              results.push(result);
+              // Add delay between batches
+              return new Promise((r) => setTimeout(r, DELAY_BETWEEN_BATCHES));
+            })
+          );
+
+          processedCount += batchToProcess.length;
+        }
+      });
+
+      request.on("error", (err: Error) => {
+        console.error("Error in database stream:", err);
+        reject(err);
+      });
+
+      request.on("done", async () => {
+        // Process any remaining rows in the final batch
+        if (currentBatch.length > 0) {
+          const batchId = uuidv4();
+          batchPromises.push(
+            limit(() =>
+              processBatch(
+                pool,
+                currentBatch,
+                batchId,
+                jobType,
+                tableName,
+                priorityScreenName,
+                jobId
+              )
+            )
+          );
+          processedCount += currentBatch.length;
+        }
+
+        // Wait for all batch promises to resolve
+        try {
+          await Promise.all(batchPromises);
+          resolve(results);
+        } catch (error) {
+          reject(error);
+        }
+      });
+    });
   }
 
   return results;
 }
+
 
 export { processBatch, processBatches };
