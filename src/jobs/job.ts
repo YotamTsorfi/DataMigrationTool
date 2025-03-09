@@ -1,8 +1,9 @@
 // job.ts
 
 import { poolPromise } from "../config/db";
-import axios from "axios";
 import { config } from "../config/config";
+import { configService } from "../config/configService";
+import axios from "axios";
 import PerformanceMonitor from "../utils/performanceMonitor";
 import sql from "mssql";
 import pLimit from "p-limit";
@@ -21,9 +22,22 @@ interface BatchCreateRowsResult {
   details?: string;
 }
 
-const BATCH_SIZE = 100; // Number of records to send in each batch
-const CONCURRENT_BATCHES = 10; // Number of batches to send concurrently
-const DELAY_BETWEEN_BATCHES = 6000; // Delay between each batch in milliseconds
+let BATCH_SIZE: number;
+let CONCURRENT_BATCHES: number;
+let DELAY_BETWEEN_BATCHES: number;
+let limit: any;
+
+(async () => {
+  const config_service = await configService.getConfig();
+  BATCH_SIZE = config_service.BATCH_SIZE;
+  CONCURRENT_BATCHES = config_service.CONCURRENT_BATCHES;
+  DELAY_BETWEEN_BATCHES = config_service.DELAY_BETWEEN_BATCHES;
+  limit = pLimit(CONCURRENT_BATCHES);
+})();
+
+// const BATCH_SIZE = 100; // Number of records to send in each batch
+// const CONCURRENT_BATCHES = 10; // Number of batches to send concurrently
+// const DELAY_BETWEEN_BATCHES = 6000; // Delay between each batch in milliseconds
 
 const adjustTimeZone = (date: Date): Date => {
   const offset = date.getTimezoneOffset() * 60000; // offset in milliseconds
@@ -216,7 +230,7 @@ async function processBatches(
     throw new Error("Failed to connect to the database");
   }
 
-  const limit = pLimit(CONCURRENT_BATCHES);
+  //const limit = pLimit(CONCURRENT_BATCHES);
 
   const rowsData = await pool.request().query(`
     SELECT TOP (${recordCount}) RowId, Data

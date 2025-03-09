@@ -18,6 +18,9 @@ import {
   LargeSectionContainer,
 } from "./BatchProcessorStyles";
 import BatchDashboard from "./BatchDashboard";
+import ConfigPanel from "./ConfigPanel";
+
+//---------------------------------------------
 
 const formatDate = (dateString: string): string => {
   const date = moment.utc(dateString);
@@ -218,6 +221,9 @@ const BatchProcessor: React.FC = () => {
     <div>
       <ToastContainer />
       <MainContainer>
+        <SectionContainer>
+          <ConfigPanel />
+        </SectionContainer>
         <SectionContainer>
           <h2>Batch Processor</h2>
           <InputContainer>

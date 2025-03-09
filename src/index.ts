@@ -8,6 +8,7 @@ import PerformanceMonitor from "./utils/performanceMonitor";
 import priorityRoutes from "./routers/priorityRoutes";
 import userRouter from "./routers/userRouter";
 import jobRoutes from "./routers/jobRouters";
+import configRouter from "./routers/configRouters";
 // -----------------------------------------------------------------
 
 // Initialize Express app
@@ -31,6 +32,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use("/priority", priorityRoutes);
 app.use("/api", userRouter);
 app.use("/job", jobRoutes);
+app.use("/config", configRouter);
 
 // Start server
 http.listen(port, "0.0.0.0", () => {
