@@ -1,9 +1,10 @@
 import express, { Request, Response, Router } from "express";
 import { priorityAuthMiddleware } from "../middleware/priorityAuth";
-import { poolPromise } from "../config/db";
 import { runJobWithInput, getJobTypes } from "../controllers/jobController";
 import { JobManager } from "../jobs/jobManager";
 import ProgressTracker from "../utils/progressTracker";
+import { poolPromise } from "../config/db";
+import { DatabaseService } from "../services/databaseService";
 
 const router: Router = express.Router();
 
@@ -75,16 +76,12 @@ router.get(
   "/jobs-history",
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const pool = await poolPromise;
-      if (!pool) {
-        throw new Error("Database connection pool is null");
-      }
-      const jobsHistory = await pool
-        .request()
-        .query(`SELECT * FROM PriorityJobsHistory order by StartTime desc`);
+      const jobsHistory = await DatabaseService.executeQuery(
+        `SELECT * FROM PriorityJobsHistory ORDER BY StartTime DESC`
+      );
       res.status(200).json({
         success: true,
-        jobsHistory: jobsHistory.recordset,
+        jobsHistory,
       });
     } catch (error) {
       res.status(500).json({

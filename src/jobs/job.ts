@@ -23,71 +23,34 @@ interface BatchCreateRowsResult {
   details?: string;
 }
 
-let BATCH_SIZE: number;
-let CONCURRENT_BATCHES: number;
-let DELAY_BETWEEN_BATCHES: number;
-let limit: any;
-
-(async () => {
-  const config_service = await configService.getConfig();
-  BATCH_SIZE = config_service.BATCH_SIZE;
-  CONCURRENT_BATCHES = config_service.CONCURRENT_BATCHES;
-  DELAY_BETWEEN_BATCHES = config_service.DELAY_BETWEEN_BATCHES;
-  limit = pLimit(CONCURRENT_BATCHES);
-})();
-
-// const BATCH_SIZE = 100; // Number of records to send in each batch
-// const CONCURRENT_BATCHES = 10; // Number of batches to send concurrently
-// const DELAY_BETWEEN_BATCHES = 6000; // Delay between each batch in milliseconds
-
 const adjustTimeZone = (date: Date): Date => {
   const offset = date.getTimezoneOffset() * 60000; // offset in milliseconds
   return new Date(date.getTime() - offset);
 };
 
-// const logErrorToTable = async (
-//   pool: sql.ConnectionPool,
-//   jobType: string,
-//   batchId: string,
-//   tableName: string,
-//   rowId: number,
-//   error: string,
-//   jobId: string
-// ) => {
-//   await pool
-//     .request()
-//     .input("JobName", sql.NVarChar, jobType)
-//     .input("BatchId", sql.UniqueIdentifier, batchId)
-//     .input("TableName", sql.NVarChar, tableName)
-//     .input("RowId", sql.Int, rowId)
-//     .input("Error", sql.NVarChar, error)
-//     .input("Timestamp", sql.DateTime, new Date())
-//     .input("JobID", sql.UniqueIdentifier, jobId).query(`
-//       INSERT INTO PriorityErrorLogs (JobName, BatchId, TableName, RowId, Error, Timestamp, JobID)
-//       VALUES (@JobName, @BatchId, @TableName, @RowId, @Error, @Timestamp, @JobID)
-//     `);
-// };
 async function performBulkUpdate(
   pool: sql.ConnectionPool,
   tableName: string,
   updates: any[]
 ) {
   if (updates.length === 0) return;
-  
+
   try {
     // Create a table-valued parameter
-    const table = new sql.Table('dbo.BatchUpdateTableType');
-    
+    const table = new sql.Table("dbo.BatchUpdateTableType");
+
     // Define table structure
-    table.columns.add('RowId', sql.Int, { nullable: false });
-    table.columns.add('BatchId', sql.UniqueIdentifier, { nullable: false });
-    table.columns.add('JobName', sql.NVarChar(255), { nullable: false });
-    table.columns.add('Status', sql.NVarChar(50), { nullable: false });
-    table.columns.add('ErrorMessage', sql.NVarChar(sql.MAX), { nullable: true });
-    table.columns.add('JobID', sql.UniqueIdentifier, { nullable: false });
-    
+    table.columns.add("RowId", sql.Int, { nullable: false });
+    table.columns.add("BatchId", sql.UniqueIdentifier, { nullable: false });
+    table.columns.add("JobName", sql.NVarChar(255), { nullable: false });
+    table.columns.add("Status", sql.NVarChar(50), { nullable: false });
+    table.columns.add("ErrorMessage", sql.NVarChar(sql.MAX), {
+      nullable: true,
+    });
+    table.columns.add("JobID", sql.UniqueIdentifier, { nullable: false });
+
     // Add all rows
-    updates.forEach(update => {
+    updates.forEach((update) => {
       table.rows.add(
         update.RowId,
         update.BatchId,
@@ -97,39 +60,36 @@ async function performBulkUpdate(
         update.JobID
       );
     });
-    
+
     // Execute the stored procedure with the TVP
-    await pool.request()
-      .input('TableName', sql.NVarChar, tableName)
-      .input('Updates', table)
-      .execute('dbo.BulkUpdateRows');
-      
+    await pool
+      .request()
+      .input("TableName", sql.NVarChar, tableName)
+      .input("Updates", table)
+      .execute("dbo.BulkUpdateRows");
   } catch (error) {
-    console.error('Error performing bulk update:', error);
+    console.error("Error performing bulk update:", error);
     throw error;
   }
 }
 
-async function performBulkErrorInsert(
-  pool: sql.ConnectionPool,
-  errors: any[]
-) {
+async function performBulkErrorInsert(pool: sql.ConnectionPool, errors: any[]) {
   if (errors.length === 0) return;
-  
+
   try {
     // Create a table-valued parameter
-    const table = new sql.Table('dbo.ErrorLogTableType');
-    
+    const table = new sql.Table("dbo.ErrorLogTableType");
+
     // Define table structure
-    table.columns.add('JobName', sql.NVarChar(255), { nullable: false });
-    table.columns.add('BatchId', sql.UniqueIdentifier, { nullable: false });
-    table.columns.add('TableName', sql.NVarChar(255), { nullable: false });
-    table.columns.add('RowId', sql.Int, { nullable: false });
-    table.columns.add('Error', sql.NVarChar(sql.MAX), { nullable: true });
-    table.columns.add('JobID', sql.UniqueIdentifier, { nullable: false });
-    
+    table.columns.add("JobName", sql.NVarChar(255), { nullable: false });
+    table.columns.add("BatchId", sql.UniqueIdentifier, { nullable: false });
+    table.columns.add("TableName", sql.NVarChar(255), { nullable: false });
+    table.columns.add("RowId", sql.Int, { nullable: false });
+    table.columns.add("Error", sql.NVarChar(sql.MAX), { nullable: true });
+    table.columns.add("JobID", sql.UniqueIdentifier, { nullable: false });
+
     // Add all error rows
-    errors.forEach(error => {
+    errors.forEach((error) => {
       table.rows.add(
         error.JobName,
         error.BatchId,
@@ -139,19 +99,20 @@ async function performBulkErrorInsert(
         error.JobID
       );
     });
-    
+
     // Execute the stored procedure with the TVP
-    await pool.request()
-      .input('Errors', table)
-      .execute('dbo.BulkInsertErrorLogs');
-      
+    await pool
+      .request()
+      .input("Errors", table)
+      .execute("dbo.BulkInsertErrorLogs");
   } catch (error) {
-    console.error('Error performing bulk error insert:', error);
+    console.error("Error performing bulk error insert:", error);
     throw error;
   }
 }
 //--------------------------------------------
 async function processBatch(
+  pool: sql.ConnectionPool,
   rows: any[],
   batchId: string,
   jobType: string,
@@ -159,11 +120,6 @@ async function processBatch(
   priorityScreenName: string,
   jobId: string
 ) {
-  const pool = await poolPromise;
-  if (!pool) {
-    throw new Error("Failed to connect to the database");
-  }
-
   const perfMonitor = new PerformanceMonitor();
   perfMonitor.startOperation();
 
@@ -221,7 +177,7 @@ async function processBatch(
     // Process all response items without database calls
     for (const [index, row] of rows.entries()) {
       const responseItem = response.data.responses[index];
-      
+
       const status =
         responseItem && responseItem.status >= 200 && responseItem.status < 300
           ? "Completed"
@@ -238,7 +194,7 @@ async function processBatch(
         JobName: jobType,
         Status: status,
         ErrorMessage: errorMessage,
-        JobID: jobId
+        JobID: jobId,
       });
 
       // Track metrics
@@ -246,7 +202,7 @@ async function processBatch(
         perfMonitor.incrementSuccessCount();
       } else {
         perfMonitor.incrementFailureCount();
-        
+
         // Add to error collection if failed
         errorRows.push({
           JobName: jobType,
@@ -254,10 +210,10 @@ async function processBatch(
           TableName: tableName,
           RowId: row.RowId,
           Error: errorMessage || "",
-          JobID: jobId
+          JobID: jobId,
         });
       }
-      
+
       perfMonitor.setLastProcessedIndex(row.RowId);
     }
 
@@ -323,6 +279,14 @@ async function processBatches(
   jobType: string,
   jobId: string
 ) {
+  const config = await configService.getConfig();
+  const BATCH_SIZE = config.BATCH_SIZE;
+  const CONCURRENT_BATCHES = config.CONCURRENT_BATCHES;
+  const DELAY_BETWEEN_BATCHES = config.DELAY_BETWEEN_BATCHES;
+  const MIN_DELAY = config.MIN_DELAY || 100; // Minimum delay in milliseconds (default: 100ms)
+  const MAX_DELAY = config.MAX_DELAY || 5000; // Maximum delay in milliseconds (default: 5000ms)
+  const limit = pLimit(CONCURRENT_BATCHES);
+
   const pool = await poolPromise;
   if (!pool) {
     throw new Error("Failed to connect to the database");
@@ -331,71 +295,97 @@ async function processBatches(
   // Initialize progress tracking for this job
   ProgressTracker.initJob(jobId, recordCount);
 
-  const limit = pLimit(CONCURRENT_BATCHES);
-
-  const rowsData = await pool.request().query(`
-    SELECT TOP (${recordCount}) RowId, Data
-    FROM ${tableName}
-    WHERE Status IS NULL AND RowId >= ${startRow}
-  `);
-
-  const rows = rowsData.recordset.map((record: any) => ({
-    RowId: record.RowId,
-    ...JSON.parse(record.Data),
-  }));
-
-  const batchPromises = [];
-  for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-    const batch = rows.slice(i, i + BATCH_SIZE);
-    const batchId = uuidv4();
-    batchPromises.push(
-      limit(() =>
-        processBatch(
-          batch,
-          batchId,
-          jobType,
-          tableName,
-          priorityScreenName,
-          jobId
-        )
-      )
-    );
-  }
-
   // Track overall progress
   let totalProcessedRecords = 0;
   let totalSuccessCount = 0;
   let totalFailureCount = 0;
   const results = [];
 
-  for (const batchPromise of batchPromises) {
-    const result = await batchPromise;
-    results.push(result);
+  // Process in chunks of 1000 records
+  const CHUNK_SIZE = 1000;
+  let processedCount = 0;
+  let lastRowId = startRow - 1;
 
-    // Update progress metrics after each batch completes
-    if (result.success) {
-      totalProcessedRecords += result.rowsCount || 0;
-      // Extract success and failure counts from the batch result
-      if (result.data && result.data.responses) {
-        const batchSuccessCount = result.data.responses.filter(
-          (r: any) => r.status >= 200 && r.status < 300
-        ).length;
-        const batchFailureCount = (result.rowsCount || 0) - batchSuccessCount;
+  while (processedCount < recordCount) {
+    const chunkSize = Math.min(CHUNK_SIZE, recordCount - processedCount);
+    const query = `
+      SELECT TOP (${chunkSize}) RowId, Data
+      FROM ${tableName}
+      WHERE Status IS NULL AND RowId > ${lastRowId}
+      ORDER BY RowId ASC
+    `;
 
-        totalSuccessCount += batchSuccessCount;
-        totalFailureCount += batchFailureCount;
-      }
+    const rowsData = await pool.request().query(query);
+    if (rowsData.recordset.length === 0) break;
+
+    // Process this chunk
+    const rows = rowsData.recordset.map((record: any) => ({
+      RowId: record.RowId,
+      ...JSON.parse(record.Data),
+    }));
+
+    const batchPromises = [];
+    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+      const batch = rows.slice(i, i + BATCH_SIZE);
+      const batchId = uuidv4();
+      batchPromises.push(
+        limit(() =>
+          processBatch(
+            pool,
+            batch,
+            batchId,
+            jobType,
+            tableName,
+            priorityScreenName,
+            jobId
+          )
+        )
+      );
     }
 
-    // Update progress tracker
-    ProgressTracker.updateProgress(
-      jobId,
-      totalProcessedRecords,
-      totalSuccessCount,
-      totalFailureCount
-    );
+    let currentDelay = DELAY_BETWEEN_BATCHES;
+    for (const batchPromise of batchPromises) {
+      const startTime = Date.now();
+      const result = await batchPromise;
+      const processingTime = Date.now() - startTime;
 
-    await new Promise((resolve) => setTimeout(resolve, DELAY_BETWEEN_BATCHES));
+      results.push(result);
+
+      // Update progress metrics after each batch completes
+      if (result.success) {
+        totalProcessedRecords += result.rowsCount || 0;
+        // Extract success and failure counts from the batch result
+        if (result.data && result.data.responses) {
+          const batchSuccessCount = result.data.responses.filter(
+            (r: any) => r.status >= 200 && r.status < 300
+          ).length;
+          const batchFailureCount = (result.rowsCount || 0) - batchSuccessCount;
+
+          totalSuccessCount += batchSuccessCount;
+          totalFailureCount += batchFailureCount;
+        }
+      }
+
+      // Update progress tracker
+      ProgressTracker.updateProgress(
+        jobId,
+        totalProcessedRecords,
+        totalSuccessCount,
+        totalFailureCount
+      );
+
+      // Adjust delay based on processing time
+      if (processingTime > currentDelay) {
+        currentDelay = Math.min(currentDelay * 1.5, MAX_DELAY); // Slow down
+      } else if (processingTime < currentDelay / 2) {
+        currentDelay = Math.max(currentDelay * 0.8, MIN_DELAY); // Speed up
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, currentDelay));
+    }
+
+    lastRowId = rowsData.recordset[rowsData.recordset.length - 1].RowId;
+    processedCount += rowsData.recordset.length;
   }
 
   // Mark job as complete when all batches are done

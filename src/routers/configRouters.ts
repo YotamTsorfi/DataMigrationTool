@@ -1,26 +1,22 @@
 import express from "express";
 import { poolPromise } from "../config/db";
 import { configService } from "../config/configService";
+import { DatabaseService } from "../services/databaseService";
 
 // Create router object with explicit type
 const router: express.Router = express.Router();
 
 // Use function declarations instead of arrow functions
-router.get("/", function(req, res) {
-  (async function() {
+router.get("/", function (req, res) {
+  (async function () {
     try {
-      const pool = await poolPromise;
-      if (!pool) {
-        throw new Error("Database connection failed");
-      }
-
-      const result = await pool.request().query(`
+      const configs = await DatabaseService.executeQuery(`
         SELECT ConfigKey, ConfigValue, Description, LastUpdated 
         FROM PrioritySystemConfig
         ORDER BY ConfigKey
       `);
 
-      res.status(200).json(result.recordset);
+      res.status(200).json(configs);
     } catch (error) {
       console.error("Error fetching configuration:", error);
       res.status(500).json({
