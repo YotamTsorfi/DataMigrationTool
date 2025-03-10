@@ -1,4 +1,5 @@
-import { poolPromise } from "./db";
+// import { poolPromise } from "./db";
+import { DatabaseService } from "../services/databaseService";
 
 interface SystemConfig {
   CONCURRENT_BATCHES: number;
@@ -38,37 +39,29 @@ class ConfigurationService {
 
   private async loadConfigFromDb(): Promise<void> {
     try {
-      const pool = await poolPromise;
-      if (!pool) {
-        console.error("Failed to connect to database for config loading");
-        return;
-      }
-
-      const result = await pool.request().query(`
+      const result = (await DatabaseService.executeQuery(`
         SELECT ConfigKey, ConfigValue FROM PrioritySystemConfig
-      `);
+      `)) as { ConfigKey: string; ConfigValue: string }[];
 
-      if (result.recordset.length > 0) {
+      if (result.length > 0) {
         const newConfig: SystemConfig = { ...this.config }; // Start with defaults
 
-        result.recordset.forEach(
-          (row: { ConfigKey: string; ConfigValue: string }) => {
-            // Convert string values to appropriate types
-            let value: any = row.ConfigValue;
+        result.forEach((row) => {
+          // Convert string values to appropriate types
+          let value: any = row.ConfigValue;
 
-            // Try to convert to number if possible
-            if (!isNaN(Number(value))) {
-              value = Number(value);
-            } else if (
-              value.toLowerCase() === "true" ||
-              value.toLowerCase() === "false"
-            ) {
-              value = value.toLowerCase() === "true";
-            }
-
-            newConfig[row.ConfigKey] = value;
+          // Try to convert to number if possible
+          if (!isNaN(Number(value))) {
+            value = Number(value);
+          } else if (
+            value.toLowerCase() === "true" ||
+            value.toLowerCase() === "false"
+          ) {
+            value = value.toLowerCase() === "true";
           }
-        );
+
+          newConfig[row.ConfigKey] = value;
+        });
 
         this.config = newConfig;
       }
@@ -79,18 +72,18 @@ class ConfigurationService {
 
   public async updateConfig(key: string, value: any): Promise<boolean> {
     try {
-      const pool = await poolPromise;
-      if (!pool) return false;
-
-      await pool
-        .request()
-        .input("ConfigKey", key)
-        .input("ConfigValue", String(value))
-        .input("LastUpdated", new Date()).query(`
-          UPDATE PrioritySystemConfig 
-          SET ConfigValue = @ConfigValue, LastUpdated = @LastUpdated
-          WHERE ConfigKey = @ConfigKey
-        `);
+      await DatabaseService.executeQuery(
+        `
+        UPDATE PrioritySystemConfig 
+        SET ConfigValue = @ConfigValue, LastUpdated = @LastUpdated
+        WHERE ConfigKey = @ConfigKey
+      `,
+        {
+          ConfigKey: key,
+          ConfigValue: String(value),
+          LastUpdated: new Date(),
+        }
+      );
 
       // Update in-memory cache
       this.config[key] =

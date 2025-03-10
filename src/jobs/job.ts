@@ -1,14 +1,28 @@
 // job.ts
 
-import { poolPromise } from "../config/db";
+import { DatabaseService } from "../services/databaseService";
 import { config } from "../config/config";
 import { configService } from "../config/configService";
 import ProgressTracker from "../utils/progressTracker";
 import axios from "axios";
 import PerformanceMonitor from "../utils/performanceMonitor";
-import sql from "mssql";
 import pLimit from "p-limit";
 import { v4 as uuidv4 } from "uuid";
+import http from "http";
+import https from "https";
+
+// Create reusable HTTP/HTTPS agents with keep-alive enabled
+const httpAgent = new http.Agent({
+  keepAlive: true,
+  maxSockets: 50,
+  keepAliveMsecs: 30000, // Keep connections alive for 30 seconds
+});
+
+const httpsAgent = new https.Agent({
+  keepAlive: true,
+  maxSockets: 50,
+  keepAliveMsecs: 30000,
+});
 
 interface BatchCreateRowsResult {
   success: boolean;
@@ -28,83 +42,50 @@ const adjustTimeZone = (date: Date): Date => {
   return new Date(date.getTime() - offset);
 };
 
-async function performBulkUpdate(
-  pool: sql.ConnectionPool,
-  tableName: string,
-  updates: any[]
-) {
+//--------------------------------------------
+async function performBulkUpdateWithService(tableName: string, updates: any[]) {
   if (updates.length === 0) return;
 
   try {
-    // Create a table-valued parameter
-    const table = new sql.Table("dbo.BatchUpdateTableType");
-
-    // Define table structure
-    table.columns.add("RowId", sql.Int, { nullable: false });
-    table.columns.add("BatchId", sql.UniqueIdentifier, { nullable: false });
-    table.columns.add("JobName", sql.NVarChar(255), { nullable: false });
-    table.columns.add("Status", sql.NVarChar(50), { nullable: false });
-    table.columns.add("ErrorMessage", sql.NVarChar(sql.MAX), {
-      nullable: true,
+    // Execute the stored procedure with parameters
+    await DatabaseService.executeStoredProcedure("dbo.BulkUpdateRows", {
+      TableName: tableName,
+      Updates: {
+        tvpType: "dbo.BatchUpdateTableType",
+        tvpValue: updates.map((update) => ({
+          RowId: update.RowId,
+          BatchId: update.BatchId,
+          JobName: update.JobName,
+          Status: update.Status,
+          ErrorMessage: update.ErrorMessage,
+          JobID: update.JobID,
+        })),
+      },
     });
-    table.columns.add("JobID", sql.UniqueIdentifier, { nullable: false });
-
-    // Add all rows
-    updates.forEach((update) => {
-      table.rows.add(
-        update.RowId,
-        update.BatchId,
-        update.JobName,
-        update.Status,
-        update.ErrorMessage,
-        update.JobID
-      );
-    });
-
-    // Execute the stored procedure with the TVP
-    await pool
-      .request()
-      .input("TableName", sql.NVarChar, tableName)
-      .input("Updates", table)
-      .execute("dbo.BulkUpdateRows");
   } catch (error) {
     console.error("Error performing bulk update:", error);
     throw error;
   }
 }
 
-async function performBulkErrorInsert(pool: sql.ConnectionPool, errors: any[]) {
+async function performBulkErrorInsertWithService(errors: any[]) {
   if (errors.length === 0) return;
 
   try {
-    // Create a table-valued parameter
-    const table = new sql.Table("dbo.ErrorLogTableType");
-
-    // Define table structure
-    table.columns.add("JobName", sql.NVarChar(255), { nullable: false });
-    table.columns.add("BatchId", sql.UniqueIdentifier, { nullable: false });
-    table.columns.add("TableName", sql.NVarChar(255), { nullable: false });
-    table.columns.add("RowId", sql.Int, { nullable: false });
-    table.columns.add("Error", sql.NVarChar(sql.MAX), { nullable: true });
-    table.columns.add("JobID", sql.UniqueIdentifier, { nullable: false });
-
-    // Add all error rows
-    errors.forEach((error) => {
-      table.rows.add(
-        error.JobName,
-        error.BatchId,
-        error.TableName,
-        error.RowId,
-        error.Error,
-        error.JobID
-      );
+    // Execute the stored procedure with parameters
+    await DatabaseService.executeStoredProcedure("dbo.BulkInsertErrorLogs", {
+      Errors: {
+        tvpType: "dbo.ErrorLogTableType",
+        tvpValue: errors.map((error) => ({
+          JobName: error.JobName,
+          BatchId: error.BatchId,
+          TableName: error.TableName,
+          RowId: error.RowId,
+          Error: error.Error,
+          JobID: error.JobID,
+        })),
+      },
     });
-
-    // Execute the stored procedure with the TVP
-    await pool
-      .request()
-      .input("Errors", table)
-      .execute("dbo.BulkInsertErrorLogs");
   } catch (error) {
     console.error("Error performing bulk error insert:", error);
     throw error;
@@ -112,7 +93,6 @@ async function performBulkErrorInsert(pool: sql.ConnectionPool, errors: any[]) {
 }
 //--------------------------------------------
 async function processBatch(
-  pool: sql.ConnectionPool,
   rows: any[],
   batchId: string,
   jobType: string,
@@ -145,6 +125,20 @@ async function processBatch(
 
     batchBody += `--${boundary}--\r\n`;
 
+    //Loggin the batch body
+    // Log the request details before sending
+    // console.log("===== BATCH REQUEST DETAILS =====");
+    // console.log("URL:", `${config.priorityDEVBaseUrl}/$batch`);
+    // console.log("Headers:", {
+    //   "Content-Type": `multipart/mixed;boundary=${boundary}`,
+    //   Authorization: "Basic ********", // Masked for security
+    //   Connection: "keep-alive",
+    // });
+    // console.log("Batch Body:");
+    // console.log(batchBody);
+    // console.log("Total Body Length:", batchBody.length);
+    // console.log("================================");
+
     // Make the API call to Priority Cloud (this part stays the same)
     const response = await axios.post(
       `${config.priorityDEVBaseUrl}/$batch`,
@@ -153,7 +147,11 @@ async function processBatch(
         headers: {
           "Content-Type": `multipart/mixed;boundary=${boundary}`,
           Authorization: `Basic ${Buffer.from(`${config.priorityPAT}:${config.priorityPassword}`).toString("base64")}`,
+          Connection: "keep-alive",
         },
+        // Add keep-alive agent configuration
+        httpAgent: httpAgent,
+        httpsAgent: httpsAgent,
       }
     );
 
@@ -219,45 +217,36 @@ async function processBatch(
 
     // Perform bulk operations
     if (updateRows.length > 0) {
-      await performBulkUpdate(pool, tableName, updateRows);
+      await performBulkUpdateWithService(tableName, updateRows);
     }
 
     if (errorRows.length > 0) {
-      await performBulkErrorInsert(pool, errorRows);
+      await performBulkErrorInsertWithService(errorRows);
     }
 
     perfMonitor.endOperation();
 
     // Insert batch processing record (this can remain a single operation)
-    await pool
-      .request()
-      .input("JobName", sql.NVarChar, jobType)
-      .input("BatchID", sql.UniqueIdentifier, batchId)
-      .input("JobID", sql.UniqueIdentifier, jobId)
-      .input(
-        "StartTime",
-        sql.DateTime,
-        adjustTimeZone(new Date(perfMonitor.metrics.startTime))
-      )
-      .input(
-        "EndTime",
-        sql.DateTime,
-        adjustTimeZone(new Date(perfMonitor.metrics.endTime))
-      )
-      .input("TotalRecords", sql.Int, rows.length)
-      .input("SuccessCount", sql.Int, perfMonitor.metrics.successCount)
-      .input("FailureCount", sql.Int, perfMonitor.metrics.failureCount)
-      .input(
-        "LastProcessedIndex",
-        sql.Int,
-        perfMonitor.metrics.lastProcessedIndex
-      )
-      .input("Status", sql.NVarChar, result.success ? "Completed" : "Failed")
-      .input("ErrorMessage", sql.NVarChar, result.success ? null : result.error)
-      .input("TableName", sql.NVarChar, tableName).query(`
-        INSERT INTO PriorityBatchProcessing (JobName, BatchID, StartTime, EndTime, TotalRecords, SuccessCount, FailureCount, LastProcessedIndex, Status, ErrorMessage, TableName, JobID)
-        VALUES (@JobName, @BatchID, @StartTime, @EndTime, @TotalRecords, @SuccessCount, @FailureCount, @LastProcessedIndex, @Status, @ErrorMessage, @TableName, @JobID)
-      `);
+    await DatabaseService.executeQuery(
+      `
+      INSERT INTO PriorityBatchProcessing (JobName, BatchID, StartTime, EndTime, TotalRecords, SuccessCount, FailureCount, LastProcessedIndex, Status, ErrorMessage, TableName, JobID)
+      VALUES (@JobName, @BatchID, @StartTime, @EndTime, @TotalRecords, @SuccessCount, @FailureCount, @LastProcessedIndex, @Status, @ErrorMessage, @TableName, @JobID)
+    `,
+      {
+        JobName: jobType,
+        BatchID: batchId,
+        JobID: jobId,
+        StartTime: adjustTimeZone(new Date(perfMonitor.metrics.startTime)),
+        EndTime: adjustTimeZone(new Date(perfMonitor.metrics.endTime)),
+        TotalRecords: rows.length,
+        SuccessCount: perfMonitor.metrics.successCount,
+        FailureCount: perfMonitor.metrics.failureCount,
+        LastProcessedIndex: perfMonitor.metrics.lastProcessedIndex,
+        Status: result.success ? "Completed" : "Failed",
+        ErrorMessage: result.success ? null : result.error,
+        TableName: tableName,
+      }
+    );
 
     return result;
   } catch (error) {
@@ -287,10 +276,10 @@ async function processBatches(
   const MAX_DELAY = config.MAX_DELAY || 5000; // Maximum delay in milliseconds (default: 5000ms)
   const limit = pLimit(CONCURRENT_BATCHES);
 
-  const pool = await poolPromise;
-  if (!pool) {
-    throw new Error("Failed to connect to the database");
-  }
+  // const pool = await poolPromise;
+  // if (!pool) {
+  //   throw new Error("Failed to connect to the database");
+  // }
 
   // Initialize progress tracking for this job
   ProgressTracker.initJob(jobId, recordCount);
@@ -315,11 +304,11 @@ async function processBatches(
       ORDER BY RowId ASC
     `;
 
-    const rowsData = await pool.request().query(query);
-    if (rowsData.recordset.length === 0) break;
+    const rowsData = await DatabaseService.executeQuery(query);
+    if (rowsData.length === 0) break;
 
     // Process this chunk
-    const rows = rowsData.recordset.map((record: any) => ({
+    const rows = rowsData.map((record: any) => ({
       RowId: record.RowId,
       ...JSON.parse(record.Data),
     }));
@@ -331,7 +320,6 @@ async function processBatches(
       batchPromises.push(
         limit(() =>
           processBatch(
-            pool,
             batch,
             batchId,
             jobType,
@@ -384,8 +372,8 @@ async function processBatches(
       await new Promise((resolve) => setTimeout(resolve, currentDelay));
     }
 
-    lastRowId = rowsData.recordset[rowsData.recordset.length - 1].RowId;
-    processedCount += rowsData.recordset.length;
+    lastRowId = (rowsData[rowsData.length - 1] as { RowId: number }).RowId;
+    processedCount += rowsData.length;
   }
 
   // Mark job as complete when all batches are done

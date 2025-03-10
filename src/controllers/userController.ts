@@ -1,17 +1,12 @@
 //userController.ts
 
 import { Request, Response } from 'express';
-import { poolPromise } from "../config/db";
+import { DatabaseService } from "../services/databaseService";
 
 export const getUsers = async (req: Request, res: Response) => {
   try {
-    const pool = await poolPromise;
-    if (pool) {
-      const result = await pool.request().query("SELECT * FROM Users");
-      res.json(result.recordset);
-    } else {
-      res.status(500).send("Database connection failed.");
-    }
+    const users = await DatabaseService.executeQuery("SELECT * FROM Users");
+    res.json(users);
   } catch (err) {
     if (err instanceof Error) {
       res.status(500).send(err.message);

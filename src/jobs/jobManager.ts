@@ -1,4 +1,4 @@
-import { poolPromise } from "../config/db";
+import { DatabaseService } from "../services/databaseService";
 import { v4 as uuidv4 } from "uuid";
 import sql from "mssql";
 import { processBatches } from "../jobs/job";
@@ -23,23 +23,22 @@ class JobManager {
   //   ----------------------------
   async createJob(jobRequest: JobRequest): Promise<string> {
     const jobId = uuidv4();
-    const pool = await poolPromise;
-    if (!pool) {
-      throw new Error("Failed to connect to the database");
-    }
 
-    await pool
-      .request()
-      .input("JobID", sql.UniqueIdentifier, jobId)
-      .input("JobName", sql.NVarChar, jobRequest.jobType)
-      .input("TableName", sql.NVarChar, jobRequest.tableName)
-      .input("ScreenName", sql.NVarChar, jobRequest.priorityScreenName)
-      .input("StartTime", sql.DateTime, adjustTimeZone(new Date()))
-      .input("TotalRecords", sql.Int, jobRequest.recordCount)
-      .input("Status", sql.NVarChar, "Queued").query(`
-        INSERT INTO PriorityJobsHistory (JobID, JobName, TableName, ScreenName, StartTime, TotalRecords, Status)
-        VALUES (@JobID, @JobName, @TableName, @ScreenName, @StartTime, @TotalRecords, @Status)
-      `);
+    await DatabaseService.executeQuery(
+      `
+      INSERT INTO PriorityJobsHistory (JobID, JobName, TableName, ScreenName, StartTime, TotalRecords, Status)
+      VALUES (@JobID, @JobName, @TableName, @ScreenName, @StartTime, @TotalRecords, @Status)
+    `,
+      {
+        JobID: jobId,
+        JobName: jobRequest.jobType,
+        TableName: jobRequest.tableName,
+        ScreenName: jobRequest.priorityScreenName,
+        StartTime: adjustTimeZone(new Date()),
+        TotalRecords: jobRequest.recordCount,
+        Status: "Queued",
+      }
+    );
 
     return jobId;
   }
@@ -51,23 +50,21 @@ class JobManager {
     totalFailures?: number,
     errorMessage?: string
   ): Promise<void> {
-    const pool = await poolPromise;
-    if (!pool) {
-      throw new Error("Failed to connect to the database");
-    }
-
-    await pool
-      .request()
-      .input("JobID", sql.UniqueIdentifier, jobId)
-      .input("Status", sql.NVarChar, status)
-      .input("SuccessCount", sql.Int, totalSuccess ?? 0)
-      .input("FailureCount", sql.Int, totalFailures ?? 0)
-      .input("ErrorMessage", sql.NVarChar, errorMessage ?? null)
-      .input("EndTime", sql.DateTime, adjustTimeZone(new Date())).query(`
-        UPDATE PriorityJobsHistory
-        SET Status = @Status, SuccessCount = @SuccessCount, FailureCount = @FailureCount, ErrorMessage = @ErrorMessage, EndTime = @EndTime
-        WHERE JobID = @JobID
-      `);
+    await DatabaseService.executeQuery(
+      `
+      UPDATE PriorityJobsHistory
+      SET Status = @Status, SuccessCount = @SuccessCount, FailureCount = @FailureCount, ErrorMessage = @ErrorMessage, EndTime = @EndTime
+      WHERE JobID = @JobID
+    `,
+      {
+        JobID: jobId,
+        Status: status,
+        SuccessCount: totalSuccess ?? 0,
+        FailureCount: totalFailures ?? 0,
+        ErrorMessage: errorMessage ?? null,
+        EndTime: adjustTimeZone(new Date()),
+      }
+    );
   }
 
   //   ----------------------------
