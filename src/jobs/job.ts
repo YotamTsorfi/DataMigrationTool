@@ -43,51 +43,47 @@ const adjustTimeZone = (date: Date): Date => {
 };
 
 //--------------------------------------------
-async function performBulkUpdateWithService(tableName: string, updates: any[]) {
+async function performBulkUpdateWithService(
+  tableName: string,
+  updates: any[],
+  batchSize = 1000,
+  maxRetries = 3
+) {
   if (updates.length === 0) return;
 
   try {
-    // Execute the stored procedure with parameters
-    await DatabaseService.executeStoredProcedure("dbo.BulkUpdateRows", {
-      TableName: tableName,
-      Updates: {
-        tvpType: "dbo.BatchUpdateTableType",
-        tvpValue: updates.map((update) => ({
-          RowId: update.RowId,
-          BatchId: update.BatchId,
-          JobName: update.JobName,
-          Status: update.Status,
-          ErrorMessage: update.ErrorMessage,
-          JobID: update.JobID,
-        })),
-      },
-    });
+    await DatabaseService.executeBulkOperation(
+      "dbo.BulkUpdateRows",
+      { TableName: tableName },
+      "Updates",
+      "dbo.BatchUpdateTableType",
+      updates,
+      batchSize
+    );
   } catch (error) {
-    console.error("Error performing bulk update:", error);
+    console.error(`Error performing bulk update:`, error);
     throw error;
   }
 }
 
-async function performBulkErrorInsertWithService(errors: any[]) {
+async function performBulkErrorInsertWithService(
+  errors: any[],
+  batchSize = 1000,
+  maxRetries = 3
+) {
   if (errors.length === 0) return;
 
   try {
-    // Execute the stored procedure with parameters
-    await DatabaseService.executeStoredProcedure("dbo.BulkInsertErrorLogs", {
-      Errors: {
-        tvpType: "dbo.ErrorLogTableType",
-        tvpValue: errors.map((error) => ({
-          JobName: error.JobName,
-          BatchId: error.BatchId,
-          TableName: error.TableName,
-          RowId: error.RowId,
-          Error: error.Error,
-          JobID: error.JobID,
-        })),
-      },
-    });
+    await DatabaseService.executeBulkOperation(
+      "dbo.BulkInsertErrorLogs",
+      {}, // אין פרמטרים נוספים
+      "Errors",
+      "dbo.ErrorLogTableType",
+      errors,
+      batchSize
+    );
   } catch (error) {
-    console.error("Error performing bulk error insert:", error);
+    console.error(`Error performing bulk error insert:`, error);
     throw error;
   }
 }

@@ -37,6 +37,49 @@ export class DatabaseService {
     return result.recordset;
   }
 
+  static async executeBulkOperation<T>(
+    procedureName: string,
+    params: Record<string, any>,
+    tvpParam: string,
+    tvpType: string,
+    data: any[],
+    batchSize = 1000,
+    maxRetries = 3
+  ): Promise<void> {
+    if (data.length === 0) return;
+
+    // Process in optimal chunks
+    for (let i = 0; i < data.length; i += batchSize) {
+      const batch = data.slice(i, i + batchSize);
+      const batchParams = { ...params };
+      batchParams[tvpParam] = {
+        tvpType: tvpType,
+        tvpValue: batch,
+      };
+
+      let retries = 0;
+      let success = false;
+
+      while (!success && retries < maxRetries) {
+        try {
+          await this.executeStoredProcedure(procedureName, batchParams);
+          success = true;
+        } catch (error) {
+          retries++;
+          console.error(
+            `Error in batch ${i}-${i + batch.length}, retry ${retries}:`,
+            error
+          );
+          if (retries >= maxRetries) throw error;
+          // Exponential backoff
+          await new Promise((resolve) =>
+            setTimeout(resolve, 100 * Math.pow(2, retries))
+          );
+        }
+      }
+    }
+  }
+
   static async executeTransaction(
     operations: (transaction: sql.Transaction) => Promise<void>
   ): Promise<void> {
@@ -75,7 +118,7 @@ export class DatabaseService {
 
               columns.forEach((colName) => {
                 const sampleValue = firstRow[colName];
-                
+
                 // Properly handle SQL types with appropriate types
                 if (typeof sampleValue === "number") {
                   table.columns.add(colName, sql.Int, { nullable: true });
@@ -85,19 +128,28 @@ export class DatabaseService {
                   table.columns.add(colName, sql.DateTime, { nullable: true });
                 } else if (sampleValue === null || sampleValue === undefined) {
                   // Default to NVarChar(MAX) for null values
-                  table.columns.add(colName, sql.NVarChar(sql.MAX), { nullable: true });
+                  table.columns.add(colName, sql.NVarChar(sql.MAX), {
+                    nullable: true,
+                  });
                 } else if (typeof sampleValue === "string") {
                   // Check if it's a GUID
-                  const guidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+                  const guidRegex =
+                    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
                   if (guidRegex.test(sampleValue)) {
-                    table.columns.add(colName, sql.UniqueIdentifier, { nullable: true });
+                    table.columns.add(colName, sql.UniqueIdentifier, {
+                      nullable: true,
+                    });
                   } else {
                     // Use NVarChar with MAX length for strings
-                    table.columns.add(colName, sql.NVarChar(sql.MAX), { nullable: true });
+                    table.columns.add(colName, sql.NVarChar(sql.MAX), {
+                      nullable: true,
+                    });
                   }
                 } else {
                   // Default for other types
-                  table.columns.add(colName, sql.NVarChar(sql.MAX), { nullable: true });
+                  table.columns.add(colName, sql.NVarChar(sql.MAX), {
+                    nullable: true,
+                  });
                 }
               });
 
