@@ -1,28 +1,28 @@
-// job.ts
+// job.ts - Main orchestration file
 
-import { DatabaseService } from "../services/databaseService";
 import { config } from "../config/config";
 import { configService } from "../config/configService";
 import ProgressTracker from "../utils/progressTracker";
-import axios from "axios";
 import PerformanceMonitor from "../utils/performanceMonitor";
 import pLimit from "p-limit";
 import { v4 as uuidv4 } from "uuid";
-import http from "http";
-import https from "https";
-
-// Create reusable HTTP/HTTPS agents with keep-alive enabled
-const httpAgent = new http.Agent({
-  keepAlive: true,
-  maxSockets: 50,
-  keepAliveMsecs: 30000, // Keep connections alive for 30 seconds
-});
-
-const httpsAgent = new https.Agent({
-  keepAlive: true,
-  maxSockets: 50,
-  keepAliveMsecs: 30000,
-});
+import {
+  fetchDataChunk,
+  performBulkUpdateWithService,
+  performBulkErrorInsertWithService,
+  recordBatchProcessing,
+} from "../services/dataService";
+import {
+  buildBatchRequestBody,
+  createBatchHeaders,
+  generateBoundary,
+} from "../services/requestBuilder";
+import {
+  sendBatchRequest,
+  processApiResponse,
+  measureRequestPerformance,
+  measureResponsePerformance,
+} from "../services/requestSender";
 
 interface BatchCreateRowsResult {
   success: boolean;
@@ -42,52 +42,9 @@ const adjustTimeZone = (date: Date): Date => {
   return new Date(date.getTime() - offset);
 };
 
-//--------------------------------------------
-async function performBulkUpdateWithService(
-  tableName: string,
-  updates: any[],
-  batchSize = 1000,
-  maxRetries = 3
-) {
-  if (updates.length === 0) return;
-
-  try {
-    await DatabaseService.executeBulkOperation(
-      "dbo.BulkUpdateRows",
-      { TableName: tableName },
-      "Updates",
-      "dbo.BatchUpdateTableType",
-      updates,
-      batchSize
-    );
-  } catch (error) {
-    console.error(`Error performing bulk update:`, error);
-    throw error;
-  }
-}
-
-async function performBulkErrorInsertWithService(
-  errors: any[],
-  batchSize = 1000,
-  maxRetries = 3
-) {
-  if (errors.length === 0) return;
-
-  try {
-    await DatabaseService.executeBulkOperation(
-      "dbo.BulkInsertErrorLogs",
-      {}, // אין פרמטרים נוספים
-      "Errors",
-      "dbo.ErrorLogTableType",
-      errors,
-      batchSize
-    );
-  } catch (error) {
-    console.error(`Error performing bulk error insert:`, error);
-    throw error;
-  }
-}
-//--------------------------------------------
+/**
+ * Process a batch of rows by sending them to Priority API
+ */
 async function processBatch(
   rows: any[],
   batchId: string,
@@ -95,7 +52,7 @@ async function processBatch(
   tableName: string,
   priorityScreenName: string,
   jobId: string
-) {
+): Promise<BatchCreateRowsResult> {
   const perfMonitor = new PerformanceMonitor();
   perfMonitor.startOperation();
 
@@ -104,112 +61,70 @@ async function processBatch(
       throw new Error("Invalid rows data");
     }
 
-    perfMonitor.logRequestMetrics(rows);
+    // console.log(
+    //   `[DEBUG] Processing batch of ${rows.length} records with batchId: ${batchId}`
+    // );
+    // console.log(`[DEBUG] Using priorityScreenName: ${priorityScreenName}`);
 
-    const boundary = `batch_${Date.now()}`;
-    let batchBody = "";
+    // Add metadata to rows for processing
+    const enrichedRows = rows.map((row) => ({
+      ...row,
+      __batchId: batchId,
+      __jobType: jobType,
+      __tableName: tableName,
+      __jobId: jobId,
+      __priorityScreenName: priorityScreenName,
+    }));
 
-    rows.forEach((row: any, index: number) => {
-      const { RowId, ...rowData } = row; // Remove RowId from row object
-      batchBody += `--${boundary}\r\n`;
-      batchBody += `Content-Type: application/http\r\n`;
-      batchBody += `Content-Transfer-Encoding: binary\r\n\r\n`;
-      batchBody += `POST ${priorityScreenName} HTTP/1.1\r\n`;
-      batchBody += `Content-Type: application/json\r\n\r\n`;
-      batchBody += `${JSON.stringify(rowData)}\r\n`;
-    });
+    // DEBUG: Log the first enriched row
+    // console.log(
+    //   "[DEBUG] First row data sample:",
+    //   JSON.stringify(enrichedRows[0]).substring(0, 200)
+    // );
 
-    batchBody += `--${boundary}--\r\n`;
+    // Measure request performance
+    measureRequestPerformance(enrichedRows, perfMonitor);
 
-    //Loggin the batch body
-    // Log the request details before sending
-    // console.log("===== BATCH REQUEST DETAILS =====");
-    // console.log("URL:", `${config.priorityDEVBaseUrl}/$batch`);
-    // console.log("Headers:", {
-    //   "Content-Type": `multipart/mixed;boundary=${boundary}`,
-    //   Authorization: "Basic ********", // Masked for security
-    //   Connection: "keep-alive",
-    // });
-    // console.log("Batch Body:");
-    // console.log(batchBody);
-    // console.log("Total Body Length:", batchBody.length);
-    // console.log("================================");
+    // Build request body
+    const boundary = generateBoundary();
+    const batchBody = buildBatchRequestBody(enrichedRows, boundary);
 
-    // Make the API call to Priority Cloud (this part stays the same)
-    const response = await axios.post(
-      `${config.priorityDEVBaseUrl}/$batch`,
-      batchBody,
-      {
-        headers: {
-          "Content-Type": `multipart/mixed;boundary=${boundary}`,
-          Authorization: `Basic ${Buffer.from(`${config.priorityPAT}:${config.priorityPassword}`).toString("base64")}`,
-          Connection: "keep-alive",
-        },
-        // Add keep-alive agent configuration
-        httpAgent: httpAgent,
-        httpsAgent: httpsAgent,
-      }
+    // Create headers with authentication
+    const headers = createBatchHeaders(
+      boundary,
+      `Basic ${Buffer.from(`${config.priorityPAT}:${config.priorityPassword}`).toString("base64")}`
     );
 
-    perfMonitor.logResponseMetrics(response.data, response.status);
+    // DEBUG: Log headers (without auth token)
+    // console.log("[DEBUG] Request headers:", {
+    //   ...headers,
+    //   Authorization: "*** REDACTED ***",
+    // });
 
-    const result: BatchCreateRowsResult = {
-      success: true,
-      message: "Batch created successfully",
-      rowsCount: rows.length,
-      data: response.data,
-      requestSize: perfMonitor.metrics.requestSize,
-      responseSize: perfMonitor.metrics.responseSize,
-      duration: perfMonitor.metrics.duration,
-      averageTimePerRecord: perfMonitor.metrics.averageTimePerRecord,
-    };
+    // Send the request
+    const response = await sendBatchRequest(batchBody, headers);
 
-    // Prepare collections for bulk operations
-    const updateRows = [];
-    const errorRows = [];
+    // Measure response performance
+    measureResponsePerformance(response, perfMonitor);
 
-    // Process all response items without database calls
-    for (const [index, row] of rows.entries()) {
-      const responseItem = response.data.responses[index];
+    // Process API response
+    const {
+      updateRows,
+      errorRows,
+      successCount,
+      failureCount,
+      lastProcessedIndex,
+    } = processApiResponse(response, enrichedRows);
 
-      const status =
-        responseItem && responseItem.status >= 200 && responseItem.status < 300
-          ? "Completed"
-          : "Failed";
-      const errorMessage =
-        status === "Failed"
-          ? JSON.stringify(responseItem.body?.FORM?.InterfaceErrors)
-          : null;
+    // Log summary of processed response
+    // console.log("[DEBUG] Response processing summary:");
+    // console.log(`- Success: ${successCount}, Failures: ${failureCount}`);
+    // console.log(`- Updates: ${updateRows.length}, Errors: ${errorRows.length}`);
 
-      // Add to update collection
-      updateRows.push({
-        RowId: row.RowId,
-        BatchId: batchId,
-        JobName: jobType,
-        Status: status,
-        ErrorMessage: errorMessage,
-        JobID: jobId,
-      });
-
-      // Track metrics
-      if (status === "Completed") {
-        perfMonitor.incrementSuccessCount();
-      } else {
-        perfMonitor.incrementFailureCount();
-
-        // Add to error collection if failed
-        errorRows.push({
-          JobName: jobType,
-          BatchId: batchId,
-          TableName: tableName,
-          RowId: row.RowId,
-          Error: errorMessage || "",
-          JobID: jobId,
-        });
-      }
-
-      perfMonitor.setLastProcessedIndex(row.RowId);
-    }
+    // Update performance metrics
+    perfMonitor.metrics.successCount = successCount;
+    perfMonitor.metrics.failureCount = failureCount;
+    perfMonitor.metrics.lastProcessedIndex = lastProcessedIndex;
 
     // Perform bulk operations
     if (updateRows.length > 0) {
@@ -222,29 +137,32 @@ async function processBatch(
 
     perfMonitor.endOperation();
 
-    // Insert batch processing record (this can remain a single operation)
-    await DatabaseService.executeQuery(
-      `
-      INSERT INTO PriorityBatchProcessing (JobName, BatchID, StartTime, EndTime, TotalRecords, SuccessCount, FailureCount, LastProcessedIndex, Status, ErrorMessage, TableName, JobID)
-      VALUES (@JobName, @BatchID, @StartTime, @EndTime, @TotalRecords, @SuccessCount, @FailureCount, @LastProcessedIndex, @Status, @ErrorMessage, @TableName, @JobID)
-    `,
-      {
-        JobName: jobType,
-        BatchID: batchId,
-        JobID: jobId,
-        StartTime: adjustTimeZone(new Date(perfMonitor.metrics.startTime)),
-        EndTime: adjustTimeZone(new Date(perfMonitor.metrics.endTime)),
-        TotalRecords: rows.length,
-        SuccessCount: perfMonitor.metrics.successCount,
-        FailureCount: perfMonitor.metrics.failureCount,
-        LastProcessedIndex: perfMonitor.metrics.lastProcessedIndex,
-        Status: result.success ? "Completed" : "Failed",
-        ErrorMessage: result.success ? null : result.error,
-        TableName: tableName,
-      }
+    // Record batch processing results
+    await recordBatchProcessing(
+      jobType,
+      batchId,
+      jobId,
+      adjustTimeZone(new Date(perfMonitor.metrics.startTime)),
+      adjustTimeZone(new Date(perfMonitor.metrics.endTime)),
+      rows.length,
+      perfMonitor.metrics.successCount,
+      perfMonitor.metrics.failureCount,
+      perfMonitor.metrics.lastProcessedIndex,
+      successCount === rows.length ? "Completed" : "Failed",
+      null,
+      tableName
     );
 
-    return result;
+    return {
+      success: true,
+      message: "Batch created successfully",
+      rowsCount: rows.length,
+      data: response.data,
+      requestSize: perfMonitor.metrics.requestSize,
+      responseSize: perfMonitor.metrics.responseSize,
+      duration: perfMonitor.metrics.duration,
+      averageTimePerRecord: perfMonitor.metrics.averageTimePerRecord,
+    };
   } catch (error) {
     perfMonitor.logError(error);
     console.error("Error in processBatch:", error);
@@ -255,7 +173,9 @@ async function processBatch(
   }
 }
 
-//--------------------------------------------
+/**
+ * Process multiple batches of records
+ */
 async function processBatches(
   recordCount: number,
   startRow: number,
@@ -263,19 +183,14 @@ async function processBatches(
   priorityScreenName: string,
   jobType: string,
   jobId: string
-) {
+): Promise<any[]> {
   const config = await configService.getConfig();
   const BATCH_SIZE = config.BATCH_SIZE;
   const CONCURRENT_BATCHES = config.CONCURRENT_BATCHES;
   const DELAY_BETWEEN_BATCHES = config.DELAY_BETWEEN_BATCHES;
-  const MIN_DELAY = config.MIN_DELAY || 100; // Minimum delay in milliseconds (default: 100ms)
-  const MAX_DELAY = config.MAX_DELAY || 5000; // Maximum delay in milliseconds (default: 5000ms)
+  const MIN_DELAY = config.MIN_DELAY || 100; // Minimum delay in milliseconds
+  const MAX_DELAY = config.MAX_DELAY || 5000; // Maximum delay in milliseconds
   const limit = pLimit(CONCURRENT_BATCHES);
-
-  // const pool = await poolPromise;
-  // if (!pool) {
-  //   throw new Error("Failed to connect to the database");
-  // }
 
   // Initialize progress tracking for this job
   ProgressTracker.initJob(jobId, recordCount);
@@ -286,28 +201,18 @@ async function processBatches(
   let totalFailureCount = 0;
   const results = [];
 
-  // Process in chunks of 1000 records
+  // Process in chunks
   const CHUNK_SIZE = 1000;
   let processedCount = 0;
   let lastRowId = startRow - 1;
 
   while (processedCount < recordCount) {
     const chunkSize = Math.min(CHUNK_SIZE, recordCount - processedCount);
-    const query = `
-      SELECT TOP (${chunkSize}) RowId, Data
-      FROM ${tableName}
-      WHERE Status IS NULL AND RowId > ${lastRowId}
-      ORDER BY RowId ASC
-    `;
 
-    const rowsData = await DatabaseService.executeQuery(query);
-    if (rowsData.length === 0) break;
+    // Fetch data chunk from database
+    const rows = await fetchDataChunk(tableName, lastRowId, chunkSize);
 
-    // Process this chunk
-    const rows = rowsData.map((record: any) => ({
-      RowId: record.RowId,
-      ...JSON.parse(record.Data),
-    }));
+    if (rows.length === 0) break;
 
     const batchPromises = [];
     for (let i = 0; i < rows.length; i += BATCH_SIZE) {
@@ -368,8 +273,8 @@ async function processBatches(
       await new Promise((resolve) => setTimeout(resolve, currentDelay));
     }
 
-    lastRowId = (rowsData[rowsData.length - 1] as { RowId: number }).RowId;
-    processedCount += rowsData.length;
+    lastRowId = (rows[rows.length - 1] as { RowId: number }).RowId;
+    processedCount += rows.length;
   }
 
   // Mark job as complete when all batches are done

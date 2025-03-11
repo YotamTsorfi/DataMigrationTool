@@ -1,6 +1,5 @@
 import { DatabaseService } from "../services/databaseService";
 import { v4 as uuidv4 } from "uuid";
-import sql from "mssql";
 import { processBatches } from "../jobs/job";
 import ProgressTracker from "../utils/progressTracker";
 
