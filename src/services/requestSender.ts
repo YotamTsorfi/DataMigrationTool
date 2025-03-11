@@ -24,46 +24,66 @@ export async function sendBatchRequest(
   batchBody: string,
   headers: Record<string, string>
 ): Promise<any> {
+  const perfMonitor = new PerformanceMonitor();
+  perfMonitor.startRequest();
+
   try {
     console.log("Sending batch request to Priority API...");
-    
-    const response = await axios.post(`${config.priorityDEVBaseUrl}/$batch`, batchBody, {
-      headers,
-      httpAgent: httpAgent,
-      httpsAgent: httpsAgent,
-    });
+
+    const response = await axios.post(
+      `${config.priorityDEVBaseUrl}/$batch`,
+      batchBody,
+      {
+        headers,
+        httpAgent: httpAgent,
+        httpsAgent: httpsAgent,
+      }
+    );
+
+    perfMonitor.endRequest();
 
     console.log(`Batch request completed with status ${response.status}`);
-    
+
     // Debug: Log detailed response information
     // console.log("===== RESPONSE DETAILS =====");
     // console.log("Status:", response.status);
     // console.log("Content Type:", response.headers['content-type']);
-    
+
     // Check if the response has a 'responses' array
     if (response.data && response.data.responses) {
-    //   console.log("Response contains", response.data.responses.length, "items");
-    //   console.log("First response item:", JSON.stringify(response.data.responses[0]).substring(0, 200));
-      
+      //   console.log("Response contains", response.data.responses.length, "items");
+      //   console.log("First response item:", JSON.stringify(response.data.responses[0]).substring(0, 200));
+
       // Count success vs failures
-      const successCount = response.data.responses.filter((r: any) => r.status >= 200 && r.status < 300).length;
+      const successCount = response.data.responses.filter(
+        (r: any) => r.status >= 200 && r.status < 300
+      ).length;
       const failureCount = response.data.responses.length - successCount;
       console.log(`Success: ${successCount}, Failures: ${failureCount}`);
-      
+
       // If there are failures, show the first failure
       if (failureCount > 0) {
-        const firstFailure = response.data.responses.find((r: any) => r.status >= 300);
+        const firstFailure = response.data.responses.find(
+          (r: any) => r.status >= 300
+        );
         if (firstFailure) {
-          console.log("Sample failure:", JSON.stringify(firstFailure).substring(0, 300));
+          console.log(
+            "Sample failure:",
+            JSON.stringify(firstFailure).substring(0, 300)
+          );
         }
       }
     } else {
-      console.log("Response data structure:", JSON.stringify(response.data).substring(0, 300));
+      console.log(
+        "Response data structure:",
+        JSON.stringify(response.data).substring(0, 300)
+      );
     }
     console.log("=============================");
 
     return response;
   } catch (error) {
+    perfMonitor.logError(error);
     console.error("Error sending batch request:", error);
     throw error;
   }

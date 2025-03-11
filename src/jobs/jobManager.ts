@@ -68,10 +68,22 @@ class JobManager {
 
   //   ----------------------------
   async startJob(jobId: string, jobRequest: JobRequest): Promise<any> {
+    const jobStartTime = Date.now();
+    console.log(`Job ${jobId} starting at: ${new Date().toISOString()}`);
+
     await this.updateJobStatus(jobId, "Running");
+
+    console.log(
+      `Job ${jobId} status updated to Running at: ${new Date().toISOString()}`
+    );
 
     // Initialize progress tracking
     ProgressTracker.initJob(jobId, jobRequest.recordCount);
+
+    const batchStartTime = Date.now();
+    console.log(
+      `Job ${jobId} starting batch processing at: ${new Date().toISOString()}`
+    );
 
     const results = await processBatches(
       jobRequest.recordCount,
@@ -80,6 +92,14 @@ class JobManager {
       jobRequest.priorityScreenName,
       jobRequest.jobType,
       jobId
+    );
+
+    const batchEndTime = Date.now();
+    const batchDurationSec = ((batchEndTime - batchStartTime) / 1000).toFixed(
+      2
+    );
+    console.log(
+      `Job ${jobId} completed batch processing in ${batchDurationSec} seconds at: ${new Date().toISOString()}`
     );
 
     const totalSuccess = results.reduce(
@@ -91,6 +111,13 @@ class JobManager {
     // Mark job as complete in progress tracker
     ProgressTracker.completeJob(jobId, totalSuccess, totalFailures);
 
+    const jobEndTime = Date.now();
+    const jobDurationSec = ((jobEndTime - jobStartTime) / 1000).toFixed(2);
+
+    console.log(
+      `Job ${jobId} completed in ${jobDurationSec} seconds. Overall results: Success: ${totalSuccess}, Failures: ${totalFailures}`
+    );
+
     await this.updateJobStatus(
       jobId,
       totalFailures === 0 ? "Completed" : "Failed",
@@ -98,7 +125,7 @@ class JobManager {
       totalFailures,
       totalFailures > 0 ? "Some batches failed" : undefined
     );
-
+  
     return results;
   }
 

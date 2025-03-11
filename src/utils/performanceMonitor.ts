@@ -1,6 +1,4 @@
-// src/utils/performanceMonitor.ts
-
-import { performance } from 'perf_hooks';
+import { performance } from "perf_hooks";
 import { writeToLogFile } from "../config/logger";
 import moment from "moment-timezone";
 
@@ -18,11 +16,22 @@ interface PerformanceMetrics {
   successCount: number;
   failureCount: number;
   lastProcessedIndex: number;
+  dbFetchTime?: number;
+  dbUpdateTime?: number;
+  batchBuildTime?: number;
+  requestTime?: number;
 }
 
 class PerformanceMonitor {
   public metrics: PerformanceMetrics;
   private requestData: any;
+  private dbFetchStartTime: number = 0;
+  private dbUpdateStartTime: number = 0;
+  private batchBuildStartTime: number = 0;
+  private requestStartTime: number = 0;
+
+  private externalDbFetchTime: number | undefined;
+  private externalDbUpdateTime: number | undefined;
 
   constructor() {
     this.metrics = {
@@ -38,6 +47,8 @@ class PerformanceMonitor {
       lastProcessedIndex: 0,
     };
     this.requestData = null;
+    this.externalDbFetchTime = undefined;
+    this.externalDbUpdateTime = undefined;
   }
 
   private formatDate(date: Date): string {
@@ -52,10 +63,63 @@ class PerformanceMonitor {
     return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
   }
 
+  private formatTime(ms: number | undefined): string {
+    if (ms === undefined) return "0ms";
+    return `${ms.toFixed(2)}ms`;
+  }
+
   startOperation() {
     this.metrics.startTime = Date.now();
     console.log(`Operation started at: ${this.formatDate(new Date())}`);
     return performance.now();
+  }
+
+  startDbFetch() {
+    this.dbFetchStartTime = performance.now();
+    console.log(`DB fetch started at: ${this.formatDate(new Date())}`);
+  }
+
+  endDbFetch() {
+    if (this.dbFetchStartTime === 0) return;
+    this.metrics.dbFetchTime = performance.now() - this.dbFetchStartTime;
+    console.log(
+      `DB fetch completed in: ${this.formatTime(this.metrics.dbFetchTime)}`
+    );
+    this.dbFetchStartTime = 0; // Reset timer
+  }
+
+  // Add method to set DB fetch time from external measurements
+  setDbFetchTime(timeMs: number) {
+    this.externalDbFetchTime = timeMs;
+    console.log(`External DB fetch time set: ${this.formatTime(timeMs)}`);
+  }
+
+  startBatchBuild() {
+    this.batchBuildStartTime = performance.now();
+    console.log(`Batch build started at: ${this.formatDate(new Date())}`);
+  }
+
+  endBatchBuild() {
+    if (this.batchBuildStartTime === 0) return;
+    this.metrics.batchBuildTime = performance.now() - this.batchBuildStartTime;
+    console.log(
+      `Batch build completed in: ${this.formatTime(this.metrics.batchBuildTime)}`
+    );
+    this.batchBuildStartTime = 0; // Reset timer
+  }
+
+  startRequest() {
+    this.requestStartTime = performance.now();
+    console.log(`API request started at: ${this.formatDate(new Date())}`);
+  }
+
+  endRequest() {
+    if (this.requestStartTime === 0) return;
+    this.metrics.requestTime = performance.now() - this.requestStartTime;
+    console.log(
+      `API request completed in: ${this.formatTime(this.metrics.requestTime)}`
+    );
+    this.requestStartTime = 0; // Reset timer
   }
 
   logRequestMetrics(requestData: any) {
@@ -116,15 +180,51 @@ class PerformanceMonitor {
     });
   }
 
+  startDbUpdate() {
+    this.dbUpdateStartTime = performance.now();
+    console.log(`DB update started at: ${this.formatDate(new Date())}`);
+  }
+
+  endDbUpdate() {
+    if (this.dbUpdateStartTime === 0) return;
+    this.metrics.dbUpdateTime = performance.now() - this.dbUpdateStartTime;
+    console.log(
+      `DB update completed in: ${this.formatTime(this.metrics.dbUpdateTime)}`
+    );
+    this.dbUpdateStartTime = 0; // Reset timer
+  }
+
+  // Add method to set DB update time from external measurements
+  setDbUpdateTime(timeMs: number) {
+    this.externalDbUpdateTime = timeMs;
+    console.log(`External DB update time set: ${this.formatTime(timeMs)}`);
+  }
+
   endOperation() {
     this.metrics.endTime = Date.now();
     this.metrics.duration = this.metrics.endTime - this.metrics.startTime;
+
+    // Use external DB fetch time if it was set
+    if (
+      this.externalDbFetchTime !== undefined &&
+      this.metrics.dbFetchTime === undefined
+    ) {
+      this.metrics.dbFetchTime = this.externalDbFetchTime;
+    }
+
+    // Use external DB update time if it was set
+    if (
+      this.externalDbUpdateTime !== undefined &&
+      this.metrics.dbUpdateTime === undefined
+    ) {
+      this.metrics.dbUpdateTime = this.externalDbUpdateTime;
+    }
 
     const performanceLog = {
       timestamp: this.formatDate(new Date()),
       operation: "batchProcessing",
       metrics: {
-        totalDuration: `${this.metrics.duration}ms`,
+        totalDuration: this.formatTime(this.metrics.duration),
         requestSize: this.formatSize(this.metrics.requestSize),
         responseSize: this.formatSize(this.metrics.responseSize),
         recordCount: this.metrics.recordCount,
@@ -133,13 +233,35 @@ class PerformanceMonitor {
         errorType: this.metrics.errorType,
         averageTimePerRecord:
           this.metrics.recordCount > 0
-            ? `${(this.metrics.duration / this.metrics.recordCount).toFixed(2)}ms`
+            ? this.formatTime(this.metrics.duration / this.metrics.recordCount)
             : "N/A",
+        dbFetchTime: this.formatTime(this.metrics.dbFetchTime),
+        dbUpdateTime: this.formatTime(this.metrics.dbUpdateTime), // Add DB update time to logs
+        batchBuildTime: this.formatTime(this.metrics.batchBuildTime),
+        requestTime: this.formatTime(this.metrics.requestTime),
       },
     };
 
     console.log("Performance Summary:", performanceLog);
     writeToLogFile("performance.log", JSON.stringify(performanceLog));
+  }
+
+  getFormattedMetrics() {
+    return {
+      totalDuration: this.formatTime(this.metrics.duration),
+      dbFetchTime: this.formatTime(
+        this.metrics.dbFetchTime || this.externalDbFetchTime
+      ),
+      dbUpdateTime: this.formatTime(
+        this.metrics.dbUpdateTime || this.externalDbUpdateTime
+      ), // Add DB update time
+      batchBuildTime: this.formatTime(this.metrics.batchBuildTime),
+      requestTime: this.formatTime(this.metrics.requestTime),
+      averageTimePerRecord:
+        this.metrics.recordCount > 0
+          ? this.formatTime(this.metrics.duration / this.metrics.recordCount)
+          : "N/A",
+    };
   }
 
   incrementSuccessCount() {

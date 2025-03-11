@@ -1,9 +1,17 @@
 import { DatabaseService } from "./databaseService";
+import PerformanceMonitor from "../utils/performanceMonitor";
 
 /**
  * Fetches a chunk of data from the database that needs processing
  */
-export async function fetchDataChunk(tableName: string, lastRowId: number, chunkSize: number): Promise<any[]> {
+export async function fetchDataChunk(
+  tableName: string,
+  lastRowId: number,
+  chunkSize: number
+): Promise<any[]> {
+  const perfMonitor = new PerformanceMonitor();
+  perfMonitor.startDbFetch();
+
   const query = `
     SELECT TOP (${chunkSize}) RowId, Data
     FROM ${tableName}
@@ -12,12 +20,26 @@ export async function fetchDataChunk(tableName: string, lastRowId: number, chunk
   `;
 
   try {
+    console.log(
+      `Fetching data chunk: lastRowId=${lastRowId}, chunkSize=${chunkSize}, table=${tableName}`
+    );
+    const startTime = Date.now();
+
     const rowsData = await DatabaseService.executeQuery(query);
+
+    const fetchTime = Date.now() - startTime;
+    console.log(
+      `Database query completed in ${fetchTime}ms, returned ${rowsData.length} rows`
+    );
+
+    perfMonitor.endDbFetch();
+
     return rowsData.map((record: any) => ({
       RowId: record.RowId,
       ...JSON.parse(record.Data),
     }));
   } catch (error) {
+    perfMonitor.logError(error);
     console.error("Error fetching data chunk:", error);
     throw error;
   }
@@ -29,10 +51,17 @@ export async function fetchDataChunk(tableName: string, lastRowId: number, chunk
 export async function performBulkUpdateWithService(
   tableName: string,
   updates: any[],
+  perfMonitor?: PerformanceMonitor,
   batchSize = 1000,
   maxRetries = 3
-): Promise<void> {
-  if (updates.length === 0) return;
+): Promise<number> {
+  // Return the time taken for the operation
+  if (updates.length === 0) return 0;
+
+  const localPerfMonitor = perfMonitor || new PerformanceMonitor();
+  if (!perfMonitor) localPerfMonitor.startOperation();
+
+  localPerfMonitor.startDbUpdate();
 
   try {
     await DatabaseService.executeBulkOperation(
@@ -43,9 +72,20 @@ export async function performBulkUpdateWithService(
       updates,
       batchSize
     );
+
+    localPerfMonitor.endDbUpdate();
+    const updateTime = localPerfMonitor.metrics.dbUpdateTime || 0;
+
+    console.log(
+      `Bulk update completed in ${updateTime.toFixed(2)}ms for ${updates.length} rows`
+    );
+
+    return updateTime;
   } catch (error) {
     console.error(`Error performing bulk update:`, error);
     throw error;
+  } finally {
+    if (!perfMonitor) localPerfMonitor.endOperation();
   }
 }
 
@@ -54,10 +94,17 @@ export async function performBulkUpdateWithService(
  */
 export async function performBulkErrorInsertWithService(
   errors: any[],
+  perfMonitor?: PerformanceMonitor,
   batchSize = 1000,
   maxRetries = 3
-): Promise<void> {
-  if (errors.length === 0) return;
+): Promise<number> {
+  // Return the time taken
+  if (errors.length === 0) return 0;
+
+  const localPerfMonitor = perfMonitor || new PerformanceMonitor();
+  if (!perfMonitor) localPerfMonitor.startOperation();
+
+  localPerfMonitor.startDbUpdate();
 
   try {
     await DatabaseService.executeBulkOperation(
@@ -68,9 +115,20 @@ export async function performBulkErrorInsertWithService(
       errors,
       batchSize
     );
+
+    localPerfMonitor.endDbUpdate();
+    const insertTime = localPerfMonitor.metrics.dbUpdateTime || 0;
+
+    console.log(
+      `Bulk error insert completed in ${insertTime.toFixed(2)}ms for ${errors.length} error records`
+    );
+
+    return insertTime;
   } catch (error) {
     console.error(`Error performing bulk error insert:`, error);
     throw error;
+  } finally {
+    if (!perfMonitor) localPerfMonitor.endOperation();
   }
 }
 
@@ -91,6 +149,8 @@ export async function recordBatchProcessing(
   errorMessage: string | null,
   tableName: string
 ): Promise<void> {
+  const recordStartTime = Date.now();
+
   await DatabaseService.executeQuery(
     `
     INSERT INTO PriorityBatchProcessing (JobName, BatchID, StartTime, EndTime, TotalRecords, SuccessCount, FailureCount, LastProcessedIndex, Status, ErrorMessage, TableName, JobID)
@@ -111,4 +171,7 @@ export async function recordBatchProcessing(
       TableName: tableName,
     }
   );
+
+  const recordTime = Date.now() - recordStartTime;
+  console.log(`Batch processing record saved in ${recordTime}ms`);
 }

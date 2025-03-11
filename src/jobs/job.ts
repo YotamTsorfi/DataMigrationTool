@@ -35,6 +35,13 @@ interface BatchCreateRowsResult {
   averageTimePerRecord?: string;
   error?: string;
   details?: string;
+  performanceMetrics?: {
+    dbFetchTime?: string;
+    dbUpdateTime?: string;
+    batchBuildTime?: string;
+    requestTime?: string;
+    totalDuration?: string;
+  };
 }
 
 const adjustTimeZone = (date: Date): Date => {
@@ -51,21 +58,23 @@ async function processBatch(
   jobType: string,
   tableName: string,
   priorityScreenName: string,
-  jobId: string
+  jobId: string,
+  dbFetchTime?: number
 ): Promise<BatchCreateRowsResult> {
   const perfMonitor = new PerformanceMonitor();
   perfMonitor.startOperation();
+
+  if (dbFetchTime !== undefined) {
+    perfMonitor.setDbFetchTime(dbFetchTime);
+  }
 
   try {
     if (!Array.isArray(rows) || rows.length === 0) {
       throw new Error("Invalid rows data");
     }
 
-    // console.log(
-    //   `[DEBUG] Processing batch of ${rows.length} records with batchId: ${batchId}`
-    // );
-    // console.log(`[DEBUG] Using priorityScreenName: ${priorityScreenName}`);
-
+    // Measure batch build time
+    perfMonitor.startBatchBuild();
     // Add metadata to rows for processing
     const enrichedRows = rows.map((row) => ({
       ...row,
@@ -75,12 +84,6 @@ async function processBatch(
       __jobId: jobId,
       __priorityScreenName: priorityScreenName,
     }));
-
-    // DEBUG: Log the first enriched row
-    // console.log(
-    //   "[DEBUG] First row data sample:",
-    //   JSON.stringify(enrichedRows[0]).substring(0, 200)
-    // );
 
     // Measure request performance
     measureRequestPerformance(enrichedRows, perfMonitor);
@@ -94,15 +97,13 @@ async function processBatch(
       boundary,
       `Basic ${Buffer.from(`${config.priorityPAT}:${config.priorityPassword}`).toString("base64")}`
     );
+    perfMonitor.endBatchBuild();
 
-    // DEBUG: Log headers (without auth token)
-    // console.log("[DEBUG] Request headers:", {
-    //   ...headers,
-    //   Authorization: "*** REDACTED ***",
-    // });
-
+    // Measure request time
+    perfMonitor.startRequest();
     // Send the request
     const response = await sendBatchRequest(batchBody, headers);
+    perfMonitor.endRequest();
 
     // Measure response performance
     measureResponsePerformance(response, perfMonitor);
@@ -116,26 +117,41 @@ async function processBatch(
       lastProcessedIndex,
     } = processApiResponse(response, enrichedRows);
 
-    // Log summary of processed response
-    // console.log("[DEBUG] Response processing summary:");
-    // console.log(`- Success: ${successCount}, Failures: ${failureCount}`);
-    // console.log(`- Updates: ${updateRows.length}, Errors: ${errorRows.length}`);
-
     // Update performance metrics
     perfMonitor.metrics.successCount = successCount;
     perfMonitor.metrics.failureCount = failureCount;
     perfMonitor.metrics.lastProcessedIndex = lastProcessedIndex;
 
-    // Perform bulk operations
+    // Track all DB update operations
+    let totalDbUpdateTime = 0;
+
+    // Perform bulk operations with the performance monitor
     if (updateRows.length > 0) {
-      await performBulkUpdateWithService(tableName, updateRows);
+      const updateTime = await performBulkUpdateWithService(
+        tableName,
+        updateRows,
+        perfMonitor
+      );
+      totalDbUpdateTime += updateTime;
     }
 
     if (errorRows.length > 0) {
-      await performBulkErrorInsertWithService(errorRows);
+      const errorInsertTime = await performBulkErrorInsertWithService(
+        errorRows,
+        perfMonitor
+      );
+      totalDbUpdateTime += errorInsertTime;
+    }
+
+    // If we tracked update time separately, make sure it's recorded in case perfMonitor didn't track it
+    if (totalDbUpdateTime > 0 && !perfMonitor.metrics.dbUpdateTime) {
+      perfMonitor.setDbUpdateTime(totalDbUpdateTime);
     }
 
     perfMonitor.endOperation();
+
+    // Get formatted metrics for the result
+    const formattedMetrics = perfMonitor.getFormattedMetrics();
 
     // Record batch processing results
     await recordBatchProcessing(
@@ -161,7 +177,14 @@ async function processBatch(
       requestSize: perfMonitor.metrics.requestSize,
       responseSize: perfMonitor.metrics.responseSize,
       duration: perfMonitor.metrics.duration,
-      averageTimePerRecord: perfMonitor.metrics.averageTimePerRecord,
+      averageTimePerRecord: formattedMetrics.averageTimePerRecord,
+      performanceMetrics: {
+        dbFetchTime: formattedMetrics.dbFetchTime,
+        dbUpdateTime: formattedMetrics.dbUpdateTime,
+        batchBuildTime: formattedMetrics.batchBuildTime,
+        requestTime: formattedMetrics.requestTime,
+        totalDuration: formattedMetrics.totalDuration,
+      },
     };
   } catch (error) {
     perfMonitor.logError(error);
@@ -209,8 +232,17 @@ async function processBatches(
   while (processedCount < recordCount) {
     const chunkSize = Math.min(CHUNK_SIZE, recordCount - processedCount);
 
+    // Measure DB fetch time - Now properly measured for the chunk
+    const perfMonitor = new PerformanceMonitor();
+    perfMonitor.startDbFetch();
+
     // Fetch data chunk from database
     const rows = await fetchDataChunk(tableName, lastRowId, chunkSize);
+    perfMonitor.endDbFetch();
+
+    console.log(
+      `Fetched ${rows.length} rows from database in ${perfMonitor.metrics.dbFetchTime?.toFixed(2)}ms`
+    );
 
     if (rows.length === 0) break;
 
@@ -226,7 +258,8 @@ async function processBatches(
             jobType,
             tableName,
             priorityScreenName,
-            jobId
+            jobId,
+            perfMonitor.metrics.dbFetchTime
           )
         )
       );
@@ -239,6 +272,17 @@ async function processBatches(
       const processingTime = Date.now() - startTime;
 
       results.push(result);
+
+      // Log detailed performance metrics for each batch
+      if (result.performanceMetrics) {
+        console.log(`Batch Performance Metrics:`, {
+          dbFetchTime: result.performanceMetrics.dbFetchTime,
+          dbUpdateTime: result.performanceMetrics.dbUpdateTime,
+          batchBuildTime: result.performanceMetrics.batchBuildTime,
+          requestTime: result.performanceMetrics.requestTime,
+          totalDuration: result.performanceMetrics.totalDuration,
+        });
+      }
 
       // Update progress metrics after each batch completes
       if (result.success) {
