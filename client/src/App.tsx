@@ -1,6 +1,7 @@
 // client/src/App.tsx
 
 import BatchProcessor from "./components/BatchProcessor";
+import BatchDashboard from "./components/BatchDashboard";
 import "./App.css";
 
 function App() {
@@ -11,6 +12,7 @@ function App() {
       </header>
       <main>
         <BatchProcessor />
+        <BatchDashboard />
       </main>
     </div>
   );

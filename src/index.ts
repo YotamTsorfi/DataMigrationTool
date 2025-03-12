@@ -11,6 +11,7 @@ import priorityRoutes from "./routers/priorityRoutes";
 import userRouter from "./routers/userRouter";
 import jobRoutes from "./routers/jobRouters";
 import configRouter from "./routers/configRouters";
+import dashboardRouter from "./routers/dashboardRouter";
 // -----------------------------------------------------------------
 
 // Initialize Express app
@@ -56,6 +57,7 @@ app.use("/priority", priorityRoutes);
 app.use("/api", userRouter);
 app.use("/job", jobRoutes);
 app.use("/config", configRouter);
+app.use("/dashboard", dashboardRouter);
 
 // Start server
 httpServer.listen(port, "0.0.0.0", () => {

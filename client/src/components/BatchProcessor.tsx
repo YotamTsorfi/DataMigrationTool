@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import moment from "moment-timezone";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import {
@@ -9,23 +8,12 @@ import {
   InputContainer,
   InputLabel,
   Button,
-  TableContainer,
-  Table,
-  Th,
-  Td,
   ReadOnlyInput,
-  ResultsContainer,
-  LargeSectionContainer,
 } from "./BatchProcessorStyles";
 // import BatchDashboard from "./BatchDashboard";
 import ConfigPanel from "./ConfigPanel";
 import JobProgressTracker from "./JobProgressTracker";
 //---------------------------------------------
-
-const formatDate = (dateString: string): string => {
-  const date = moment.utc(dateString);
-  return date.format("DD/MM/YYYY HH:mm:ss");
-};
 
 interface JobType {
   JobTypeID: number;
@@ -50,8 +38,8 @@ const BatchProcessor: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [jobTypes, setJobTypes] = useState<JobType[]>([]);
   const [selectedJobType, setSelectedJobType] = useState("");
-  const [jobsHistory, setJobsHistory] = useState<any[]>([]);
   //---------------------------------------------
+
   useEffect(() => {
     const fetchJobTypes = async () => {
       try {
@@ -62,19 +50,7 @@ const BatchProcessor: React.FC = () => {
       }
     };
 
-    const fetchJobsHistory = async () => {
-      try {
-        const response = await axios.get(
-          "http://localhost:3001/job/jobs-history"
-        );
-        setJobsHistory(response.data.jobsHistory);
-      } catch (error) {
-        console.error("Error fetching jobs history:", error);
-      }
-    };
-
     fetchJobTypes();
-    fetchJobsHistory();
   }, []);
 
   //---------------------------------------------
@@ -108,11 +84,6 @@ const BatchProcessor: React.FC = () => {
         priorityScreenName,
         jobType: selectedJobType,
       });
-
-      const jobsHistoryResponse = await axios.get(
-        "http://localhost:3001/job/jobs-history"
-      );
-      setJobsHistory(jobsHistoryResponse.data.jobsHistory);
     } catch (error) {
       console.error("Batch process error:", error);
     } finally {
@@ -165,10 +136,6 @@ const BatchProcessor: React.FC = () => {
         "http://localhost:3001/job/run-multiple-jobs",
         jobRequests
       );
-      const jobsHistoryResponse = await axios.get(
-        "http://localhost:3001/job/jobs-history"
-      );
-      setJobsHistory(jobsHistoryResponse.data.jobsHistory);
     } catch (error) {
       console.error("Batch process error:", error);
     } finally {
@@ -331,44 +298,6 @@ const BatchProcessor: React.FC = () => {
           <JobProgressTracker />
         </SectionContainer>
       </MainContainer>
-
-      <ResultsContainer>
-        {jobsHistory.length > 0 && (
-          <LargeSectionContainer>
-            <h3>Jobs History</h3>
-            <TableContainer>
-              <Table>
-                <thead>
-                  <tr>
-                    <Th>Job ID</Th>
-                    <Th>Job Name</Th>
-                    <Th>Start Time</Th>
-                    <Th>End Time</Th>
-                    <Th>Status</Th>
-                    <Th>Total Records</Th>
-                    <Th>Success Batches</Th>
-                    <Th>Failure Batches</Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {jobsHistory.map((history: any, index: number) => (
-                    <tr key={index}>
-                      <Td>{history.JobID}</Td>
-                      <Td>{history.JobName}</Td>
-                      <Td>{formatDate(history.StartTime)}</Td>
-                      <Td>{formatDate(history.EndTime)}</Td>
-                      <Td>{history.Status}</Td>
-                      <Td>{history.TotalRecords}</Td>
-                      <Td>{history.SuccessCount}</Td>
-                      <Td>{history.FailureCount}</Td>
-                    </tr>
-                  ))}
-                </tbody>
-              </Table>
-            </TableContainer>
-          </LargeSectionContainer>
-        )}
-      </ResultsContainer>
     </div>
   );
 };
