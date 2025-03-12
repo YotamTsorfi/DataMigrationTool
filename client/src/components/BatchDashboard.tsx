@@ -168,7 +168,7 @@ const BatchDashboard: React.FC = () => {
     fetchSummaryData();
 
     // Set up polling interval (30 seconds)
-    const intervalId = setInterval(fetchSummaryData, 30000);
+    const intervalId = setInterval(fetchSummaryData, 180000); //180000 ms = 3 minutes
     return () => clearInterval(intervalId);
   }, [dateRange, statusFilter, jobFilter, tableFilter]);
 
