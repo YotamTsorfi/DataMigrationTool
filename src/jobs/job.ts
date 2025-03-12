@@ -49,6 +49,7 @@ const adjustTimeZone = (date: Date): Date => {
   return new Date(date.getTime() - offset);
 };
 
+//--------------------------------------------------------------------------------
 /**
  * Process a batch of rows by sending them to Priority API
  */
@@ -115,6 +116,7 @@ async function processBatch(
       successCount,
       failureCount,
       lastProcessedIndex,
+      sentToPriority
     } = processApiResponse(response, enrichedRows);
 
     // Update performance metrics
@@ -124,23 +126,52 @@ async function processBatch(
 
     // Track all DB update operations
     let totalDbUpdateTime = 0;
+    let batchStatus = successCount === rows.length ? "Completed" : "Failed";
 
     // Perform bulk operations with the performance monitor
     if (updateRows.length > 0) {
-      const updateTime = await performBulkUpdateWithService(
-        tableName,
-        updateRows,
-        perfMonitor
-      );
-      totalDbUpdateTime += updateTime;
+      try {
+        const updateTime = await performBulkUpdateWithService(
+          tableName,
+          updateRows,
+          perfMonitor,
+          undefined,
+          3, // מספר ניסיונות
+          sentToPriority // העבר את הדגל שמציין שהנתונים נשלחו לפריוריטי
+        );
+        totalDbUpdateTime += updateTime;
+      } catch (dbError) {
+        console.error("Error during database update:", dbError);
+        
+        // אם יש שגיאת דאטהבייס אחרי שהנתונים נשלחו לפריוריטי
+        const isDeadlock = 
+          (dbError as any)?.number === 1205 || 
+          (dbError as any)?.originalError?.info?.number === 1205 ||
+          (dbError instanceof Error && dbError.message.includes("deadlock"));
+          
+        if (isDeadlock && sentToPriority) {
+          console.log(`Batch ${batchId} was sent to Priority but failed DB update due to deadlock - marking as 'CompletedButNotSynced'`);
+          
+          // עדכון סטטוס הבאצ'
+          batchStatus = "CompletedButNotSynced";
+        } else {
+          throw dbError;
+        }
+      }
     }
 
+
     if (errorRows.length > 0) {
-      const errorInsertTime = await performBulkErrorInsertWithService(
-        errorRows,
-        perfMonitor
-      );
-      totalDbUpdateTime += errorInsertTime;
+      try {
+        const errorInsertTime = await performBulkErrorInsertWithService(
+          errorRows,
+          perfMonitor
+        );
+        totalDbUpdateTime += errorInsertTime;
+      } catch (errorInsertError) {
+        console.error("Failed to insert error logs:", errorInsertError);
+        // אל תפסיק את התהליך, פשוט המשך
+      }
     }
 
     // If we tracked update time separately, make sure it's recorded in case perfMonitor didn't track it
@@ -154,6 +185,7 @@ async function processBatch(
     const formattedMetrics = perfMonitor.getFormattedMetrics();
 
     // Record batch processing results
+    // Record batch processing results with the appropriate status
     await recordBatchProcessing(
       jobType,
       batchId,
@@ -164,10 +196,11 @@ async function processBatch(
       perfMonitor.metrics.successCount,
       perfMonitor.metrics.failureCount,
       perfMonitor.metrics.lastProcessedIndex,
-      successCount === rows.length ? "Completed" : "Failed",
-      null,
+      batchStatus, // השתמש בסטטוס המתאים - Completed, Failed או CompletedButNotSynced
+      batchStatus === "CompletedButNotSynced" ? "DB update failed due to deadlock after Priority success" : null,
       tableName
     );
+
 
     return {
       success: true,
@@ -195,7 +228,7 @@ async function processBatch(
     };
   }
 }
-
+//--------------------------------------------------------------------------------
 /**
  * Process multiple batches of records
  */
@@ -212,7 +245,7 @@ async function processBatches(
   const CONCURRENT_BATCHES = config.CONCURRENT_BATCHES;
   const DELAY_BETWEEN_BATCHES = config.DELAY_BETWEEN_BATCHES;
   const MIN_DELAY = config.MIN_DELAY || 100; // Minimum delay in milliseconds
-  const MAX_DELAY = config.MAX_DELAY || 5000; // Maximum delay in milliseconds
+  const MAX_DELAY = config.MAX_DELAY || 500; // Maximum delay in milliseconds
   const limit = pLimit(CONCURRENT_BATCHES);
 
   // Initialize progress tracking for this job
@@ -240,9 +273,9 @@ async function processBatches(
     const rows = await fetchDataChunk(tableName, lastRowId, chunkSize);
     perfMonitor.endDbFetch();
 
-    console.log(
-      `Fetched ${rows.length} rows from database in ${perfMonitor.metrics.dbFetchTime?.toFixed(2)}ms`
-    );
+    // console.log(
+    //   `Fetched ${rows.length} rows from database in ${perfMonitor.metrics.dbFetchTime?.toFixed(2)}ms`
+    // );
 
     if (rows.length === 0) break;
 
@@ -274,15 +307,15 @@ async function processBatches(
       results.push(result);
 
       // Log detailed performance metrics for each batch
-      if (result.performanceMetrics) {
-        console.log(`Batch Performance Metrics:`, {
-          dbFetchTime: result.performanceMetrics.dbFetchTime,
-          dbUpdateTime: result.performanceMetrics.dbUpdateTime,
-          batchBuildTime: result.performanceMetrics.batchBuildTime,
-          requestTime: result.performanceMetrics.requestTime,
-          totalDuration: result.performanceMetrics.totalDuration,
-        });
-      }
+      // if (result.performanceMetrics) {
+      //   console.log(`Batch Performance Metrics:`, {
+      //     dbFetchTime: result.performanceMetrics.dbFetchTime,
+      //     dbUpdateTime: result.performanceMetrics.dbUpdateTime,
+      //     batchBuildTime: result.performanceMetrics.batchBuildTime,
+      //     requestTime: result.performanceMetrics.requestTime,
+      //     totalDuration: result.performanceMetrics.totalDuration,
+      //   });
+      // }
 
       // Update progress metrics after each batch completes
       if (result.success) {

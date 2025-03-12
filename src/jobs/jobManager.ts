@@ -73,17 +73,17 @@ class JobManager {
 
     await this.updateJobStatus(jobId, "Running");
 
-    console.log(
-      `Job ${jobId} status updated to Running at: ${new Date().toISOString()}`
-    );
+    // console.log(
+    //   `Job ${jobId} status updated to Running at: ${new Date().toISOString()}`
+    // );
 
     // Initialize progress tracking
     ProgressTracker.initJob(jobId, jobRequest.recordCount);
 
     const batchStartTime = Date.now();
-    console.log(
-      `Job ${jobId} starting batch processing at: ${new Date().toISOString()}`
-    );
+    // console.log(
+    //   `Job ${jobId} starting batch processing at: ${new Date().toISOString()}`
+    // );
 
     const results = await processBatches(
       jobRequest.recordCount,
@@ -125,7 +125,7 @@ class JobManager {
       totalFailures,
       totalFailures > 0 ? "Some batches failed" : undefined
     );
-  
+
     return results;
   }
 

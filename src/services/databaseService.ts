@@ -1,4 +1,5 @@
 import { poolPromise } from "../config/db";
+import { configService } from "../config/configService";
 import sql from "mssql";
 
 declare module "mssql" {
@@ -34,6 +35,7 @@ export class DatabaseService {
   // מטמון סכמות טבלאות
   private static tableSchemaCache: Map<string, sql.Table> = new Map();
 
+  //---------------------------------------------
   private static async getPool(): Promise<sql.ConnectionPool> {
     const pool = await poolPromise;
     if (!pool) {
@@ -41,7 +43,7 @@ export class DatabaseService {
     }
     return pool;
   }
-
+  //--------------------------------------------------------------------------------
   static async executeQuery<T>(query: string, inputs?: any): Promise<T[]> {
     const pool = await this.getPool();
     let request = pool.request();
@@ -56,6 +58,7 @@ export class DatabaseService {
     return result.recordset;
   }
 
+  //--------------------------------------------------------------------------------
   // מתודה לקבלת או יצירת סכמת טבלה
   private static getOrCreateTableSchema(
     tvpType: string,
@@ -107,7 +110,7 @@ export class DatabaseService {
 
     return table;
   }
-
+  //--------------------------------------------------------------------------------
   // טיפול בסוגי נתונים שונים
   private static addColumnWithAppropriateType(
     table: sql.Table,
@@ -135,7 +138,7 @@ export class DatabaseService {
       table.columns.add(colName, sql.NVarChar(sql.MAX), { nullable: true });
     }
   }
-
+  //--------------------------------------------------------------------------------
   // טיפול בטיפוסי מספרים
   private static handleNumericType(
     table: sql.Table,
@@ -166,21 +169,28 @@ export class DatabaseService {
       }
     }
   }
-
+  //--------------------------------------------------------------------------------
   static async executeBulkOperation<T>(
     procedureName: string,
     params: Record<string, any>,
     tvpParam: string,
     tvpType: string,
     data: any[],
-    batchSize = 1000,
-    maxRetries = 3
+    batchSize?: number,
+    maxRetries?: number
   ): Promise<void> {
     if (data.length === 0) return;
 
+    // Get configuration values
+    const config = await configService.getConfig();
+
+    // Use provided values or fallback to config
+    const effectiveBatchSize = batchSize || config.DB_BATCH_SIZE;
+    const effectiveMaxRetries = maxRetries || config.MAX_RETRIES;
+
     // Process in optimal chunks
-    for (let i = 0; i < data.length; i += batchSize) {
-      const batch = data.slice(i, i + batchSize);
+    for (let i = 0; i < data.length; i += effectiveBatchSize) {
+      const batch = data.slice(i, i + effectiveBatchSize);
       const batchParams = { ...params };
       batchParams[tvpParam] = {
         tvpType: tvpType,
@@ -190,26 +200,66 @@ export class DatabaseService {
       let retries = 0;
       let success = false;
 
-      while (!success && retries < maxRetries) {
+      while (!success && retries < effectiveMaxRetries) {
         try {
           await this.executeStoredProcedure(procedureName, batchParams);
+          // console.log(`Batch ${i}-${i + batch.length} processed successfully.`);
           success = true;
-        } catch (error) {
+        } catch (error: any) {
+          // Specific deadlock detection
+          const isDeadlock =
+            error?.number === 1205 ||
+            error?.originalError?.info?.number === 1205 ||
+            (error instanceof Error && error.message.includes("deadlock"));
+
+          // Check for transaction abort errors too
+          const isTransactionAbort =
+            (error instanceof Error &&
+              error.message.includes("Transaction has been aborted")) ||
+            (error as any)?.code === "EABORT";
+
           retries++;
-          console.error(
-            `Error in batch ${i}-${i + batch.length}, retry ${retries}:`,
-            error
+
+          if (isDeadlock || isTransactionAbort) {
+            console.log(
+              `❗ ${isDeadlock ? "Database deadlock" : "Transaction abort"} detected in batch ${i}-${i + batch.length}. Retry attempt ${retries}/${effectiveMaxRetries}...`
+            );
+          } else {
+            // Truncate very long error messages
+            const errorMsg =
+              error instanceof Error
+                ? error.message.length > 200
+                  ? error.message.substring(0, 200) + "..."
+                  : error.message
+                : "Unknown error";
+
+            console.error(
+              `❌ Error in batch ${i}-${i + batch.length}, retry ${retries}/${effectiveMaxRetries}: ${errorMsg}`
+            );
+          }
+
+          if (retries >= effectiveMaxRetries) {
+            console.error(
+              `⛔ Maximum retries (${effectiveMaxRetries}) reached for batch ${i}-${i + batch.length}. Giving up.`
+            );
+            throw error;
+          }
+
+          // Randomized exponential backoff for retries
+          const baseDelay = 100 * Math.pow(2, retries);
+          const jitter = Math.floor(Math.random() * 100);
+          const totalDelay = baseDelay + jitter;
+
+          console.log(
+            `⏱️ Waiting ${Math.round((totalDelay / 1000) * 10) / 10} seconds before retry...`
           );
-          if (retries >= maxRetries) throw error;
-          // Exponential backoff
-          await new Promise((resolve) =>
-            setTimeout(resolve, 100 * Math.pow(2, retries))
-          );
+          await new Promise((resolve) => setTimeout(resolve, totalDelay));
         }
       }
     }
   }
 
+  //--------------------------------------------------------------------------------
   static async executeTransaction(
     operations: (transaction: sql.Transaction) => Promise<void>
   ): Promise<void> {
@@ -225,49 +275,99 @@ export class DatabaseService {
       throw error;
     }
   }
-
+  //--------------------------------------------------------------------------------
   static async executeStoredProcedure<T>(
     procedureName: string,
-    params?: Record<string, any>
+    params?: Record<string, any>,
+    isolationLevel: sql.IIsolationLevel = sql.ISOLATION_LEVEL.READ_COMMITTED
   ): Promise<T[]> {
     const pool = await this.getPool();
-    let request = pool.request();
+    let transaction = new sql.Transaction(pool);
+    let transactionStarted = false;
 
-    if (params) {
-      Object.entries(params).forEach(([key, value]) => {
-        if (key !== "procedure") {
-          // Check if this is a TVP parameter using the type guard
-          if (isTVP(value)) {
-            if (value.tvpValue.length > 0) {
-              // השתמש במטמון לקבלת מבנה טבלה
-              const firstRow = value.tvpValue[0];
-              const table = this.getOrCreateTableSchema(
-                value.tvpType,
-                firstRow
-              );
-              const columns = Object.keys(firstRow);
+    try {
+      await transaction.begin(isolationLevel);
+      transactionStarted = true;
 
-              // הוסף רק את השורות לטבלה (המבנה כבר קיים)
-              value.tvpValue.forEach((row: any) => {
-                const rowValues = columns.map((col) => row[col]);
-                table.rows.add(...rowValues);
-              });
+      let request = new sql.Request(transaction);
 
-              request.input(key, table);
+      // Add parameters
+      if (params) {
+        Object.entries(params).forEach(([key, value]) => {
+          if (key !== "procedure") {
+            if (isTVP(value)) {
+              // TVP handling...
+              if (value.tvpValue.length > 0) {
+                const firstRow = value.tvpValue[0];
+                const table = this.getOrCreateTableSchema(
+                  value.tvpType,
+                  firstRow
+                );
+                const columns = Object.keys(firstRow);
+
+                value.tvpValue.forEach((row: any) => {
+                  const rowValues = columns.map((col) => row[col]);
+                  table.rows.add(...rowValues);
+                });
+
+                request.input(key, table);
+              } else {
+                const table = new sql.Table(value.tvpType);
+                request.input(key, table);
+              }
             } else {
-              // טיפול במקרה של TVP ריק
-              const table = new sql.Table(value.tvpType);
-              request.input(key, table);
+              // Regular parameter
+              request.input(key, value);
             }
-          } else {
-            // Regular parameter
-            request.input(key, value);
           }
-        }
-      });
-    }
+        });
+      }
 
-    const result = await request.execute(procedureName);
-    return result.recordset || [];
+      const result = await request.execute(procedureName);
+      await transaction.commit();
+      transactionStarted = false;
+      return result.recordset || [];
+    } catch (error) {
+      try {
+        // Only attempt to roll back if the transaction was started
+        if (transactionStarted) {
+          // Silent rollback - we'll handle the original error,
+          // not the rollback errors which can be expected in deadlock situations
+          await transaction.rollback().catch(() => {
+            // Intentionally empty - we're suppressing rollback errors
+          });
+        }
+      } catch (rollbackError) {
+        // Suppressed - no logging needed, just catch it
+      }
+
+      // Identify specific database errors
+      const isDeadlock =
+        error instanceof Error &&
+        (error.message.includes("deadlock") ||
+          (error as any)?.number === 1205 ||
+          (error as any)?.originalError?.info?.number === 1205);
+
+      if (isDeadlock) {
+        // For deadlocks, we don't need to log since they're normal and will be retried
+        // Just rethrow for the retry logic
+        throw error;
+      } else {
+        // Log other transaction errors with more details
+        console.error(`Transaction error in procedure: ${procedureName}`, {
+          error:
+            error instanceof Error
+              ? {
+                  message: error.message,
+                  code: (error as any).code,
+                  name: error.name,
+                }
+              : "Unknown error type",
+        });
+        throw error;
+      }
+    }
   }
+
+  //--------------------------------------------------------------------------------
 }

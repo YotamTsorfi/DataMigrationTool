@@ -28,7 +28,7 @@ export async function sendBatchRequest(
   perfMonitor.startRequest();
 
   try {
-    console.log("Sending batch request to Priority API...");
+    // console.log("Sending batch request to Priority API...");
 
     const response = await axios.post(
       `${config.priorityDEVBaseUrl}/$batch`,
@@ -42,7 +42,7 @@ export async function sendBatchRequest(
 
     perfMonitor.endRequest();
 
-    console.log(`Batch request completed with status ${response.status}`);
+    // console.log(`Batch request completed with status ${response.status}`);
 
     // Debug: Log detailed response information
     // console.log("===== RESPONSE DETAILS =====");
@@ -59,7 +59,7 @@ export async function sendBatchRequest(
         (r: any) => r.status >= 200 && r.status < 300
       ).length;
       const failureCount = response.data.responses.length - successCount;
-      console.log(`Success: ${successCount}, Failures: ${failureCount}`);
+      // console.log(`Success: ${successCount}, Failures: ${failureCount}`);
 
       // If there are failures, show the first failure
       if (failureCount > 0) {
@@ -74,12 +74,12 @@ export async function sendBatchRequest(
         }
       }
     } else {
-      console.log(
-        "Response data structure:",
-        JSON.stringify(response.data).substring(0, 300)
-      );
+      // console.log(
+      //   "Response data structure:",
+      //   JSON.stringify(response.data).substring(0, 300)
+      // );
     }
-    console.log("=============================");
+    // console.log("=============================");
 
     return response;
   } catch (error) {
@@ -95,27 +95,43 @@ export async function sendBatchRequest(
 export function processApiResponse(
   response: any,
   rows: any[]
-): { updateRows: any[]; errorRows: any[]; successCount: number; failureCount: number; lastProcessedIndex: number } {
+): {
+  updateRows: any[];
+  errorRows: any[];
+  successCount: number;
+  failureCount: number;
+  lastProcessedIndex: number;
+  sentToPriority: boolean;
+} {
   const updateRows: any[] = [];
   const errorRows: any[] = [];
   let successCount = 0;
   let failureCount = 0;
   let lastProcessedIndex = 0;
 
-//   console.log("===== PROCESSING API RESPONSE =====");
-//   console.log("Processing", rows.length, "rows against response");
-  
+  // check if the response has a 'responses' array
+  const sentToPriority = !!(
+    response &&
+    response.data &&
+    response.data.responses
+  );
+
+  //   console.log("===== PROCESSING API RESPONSE =====");
+  //   console.log("Processing", rows.length, "rows against response");
+
   // Process all response items
   rows.forEach((row, index) => {
-    const responseItem = response.data.responses ? response.data.responses[index] : null;
-    
+    const responseItem = response.data.responses
+      ? response.data.responses[index]
+      : null;
+
     // Debug: Log individual record processing
     // console.log(`Processing row ${index} (RowId: ${row.RowId}):`);
-    
+
     if (!responseItem) {
       console.error(`No response item found for index ${index}`);
       failureCount++;
-      
+
       // Add to update collection as failed
       updateRows.push({
         RowId: row.RowId,
@@ -125,7 +141,7 @@ export function processApiResponse(
         ErrorMessage: "No response item found",
         JobID: row.__jobId,
       });
-      
+
       // Add to error collection
       errorRows.push({
         JobName: row.__jobType,
@@ -135,7 +151,7 @@ export function processApiResponse(
         Error: "No response item found",
         JobID: row.__jobId,
       });
-      
+
       lastProcessedIndex = row.RowId;
       return;
     }
@@ -144,14 +160,14 @@ export function processApiResponse(
       responseItem && responseItem.status >= 200 && responseItem.status < 300
         ? "Completed"
         : "Failed";
-    
+
     // console.log(`  Status: ${status}, Response status: ${responseItem.status}`);
-        
+
     const errorMessage =
       status === "Failed"
         ? JSON.stringify(responseItem?.body?.FORM?.InterfaceErrors)
         : null;
-    
+
     if (errorMessage) {
       console.log(`  Error message: ${errorMessage}`);
     }
@@ -186,10 +202,17 @@ export function processApiResponse(
     lastProcessedIndex = row.RowId;
   });
 
-  console.log(`Processing complete. Success: ${successCount}, Failures: ${failureCount}`);
-  console.log("===================================");
+  // console.log(`Processing complete. Success: ${successCount}, Failures: ${failureCount}`);
+  // console.log("===================================");
 
-  return { updateRows, errorRows, successCount, failureCount, lastProcessedIndex };
+  return {
+    updateRows,
+    errorRows,
+    successCount,
+    failureCount,
+    lastProcessedIndex,
+    sentToPriority,
+  };
 }
 
 /**

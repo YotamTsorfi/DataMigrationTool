@@ -70,55 +70,55 @@ class PerformanceMonitor {
 
   startOperation() {
     this.metrics.startTime = Date.now();
-    console.log(`Operation started at: ${this.formatDate(new Date())}`);
+    // console.log(`Operation started at: ${this.formatDate(new Date())}`);
     return performance.now();
   }
 
   startDbFetch() {
     this.dbFetchStartTime = performance.now();
-    console.log(`DB fetch started at: ${this.formatDate(new Date())}`);
+    // console.log(`DB fetch started at: ${this.formatDate(new Date())}`);
   }
 
   endDbFetch() {
     if (this.dbFetchStartTime === 0) return;
     this.metrics.dbFetchTime = performance.now() - this.dbFetchStartTime;
-    console.log(
-      `DB fetch completed in: ${this.formatTime(this.metrics.dbFetchTime)}`
-    );
+    // console.log(
+    //   `DB fetch completed in: ${this.formatTime(this.metrics.dbFetchTime)}`
+    // );
     this.dbFetchStartTime = 0; // Reset timer
   }
 
   // Add method to set DB fetch time from external measurements
   setDbFetchTime(timeMs: number) {
     this.externalDbFetchTime = timeMs;
-    console.log(`External DB fetch time set: ${this.formatTime(timeMs)}`);
+    // console.log(`External DB fetch time set: ${this.formatTime(timeMs)}`);
   }
 
   startBatchBuild() {
     this.batchBuildStartTime = performance.now();
-    console.log(`Batch build started at: ${this.formatDate(new Date())}`);
+    // console.log(`Batch build started at: ${this.formatDate(new Date())}`);
   }
 
   endBatchBuild() {
     if (this.batchBuildStartTime === 0) return;
     this.metrics.batchBuildTime = performance.now() - this.batchBuildStartTime;
-    console.log(
-      `Batch build completed in: ${this.formatTime(this.metrics.batchBuildTime)}`
-    );
+    // console.log(
+    //   `Batch build completed in: ${this.formatTime(this.metrics.batchBuildTime)}`
+    // );
     this.batchBuildStartTime = 0; // Reset timer
   }
 
   startRequest() {
     this.requestStartTime = performance.now();
-    console.log(`API request started at: ${this.formatDate(new Date())}`);
+    // console.log(`API request started at: ${this.formatDate(new Date())}`);
   }
 
   endRequest() {
     if (this.requestStartTime === 0) return;
     this.metrics.requestTime = performance.now() - this.requestStartTime;
-    console.log(
-      `API request completed in: ${this.formatTime(this.metrics.requestTime)}`
-    );
+    // console.log(
+    //   `API request completed in: ${this.formatTime(this.metrics.requestTime)}`
+    // );
     this.requestStartTime = 0; // Reset timer
   }
 
@@ -131,11 +131,11 @@ class PerformanceMonitor {
         ? requestData.length
         : 0;
 
-      console.log("Request Metrics:", {
-        recordCount: this.metrics.recordCount,
-        size: this.formatSize(this.metrics.requestSize),
-        timestamp: this.formatDate(new Date()),
-      });
+      // console.log("Request Metrics:", {
+      //   recordCount: this.metrics.recordCount,
+      //   size: this.formatSize(this.metrics.requestSize),
+      //   timestamp: this.formatDate(new Date()),
+      // });
     } catch (error) {
       console.error("Error measuring request size:", error);
       this.metrics.requestSize = 0;
@@ -150,12 +150,12 @@ class PerformanceMonitor {
       this.metrics.statusCode = statusCode;
       this.metrics.success = statusCode >= 200 && statusCode < 300;
 
-      console.log("Response Metrics:", {
-        size: this.formatSize(this.metrics.responseSize),
-        status: statusCode,
-        success: this.metrics.success,
-        timestamp: this.formatDate(new Date()),
-      });
+      // console.log("Response Metrics:", {
+      //   size: this.formatSize(this.metrics.responseSize),
+      //   status: statusCode,
+      //   success: this.metrics.success,
+      //   timestamp: this.formatDate(new Date()),
+      // });
     } catch (error) {
       console.error("Error measuring response:", error);
       this.metrics.responseSize = 0;
@@ -182,22 +182,22 @@ class PerformanceMonitor {
 
   startDbUpdate() {
     this.dbUpdateStartTime = performance.now();
-    console.log(`DB update started at: ${this.formatDate(new Date())}`);
+    // console.log(`DB update started at: ${this.formatDate(new Date())}`);
   }
 
   endDbUpdate() {
     if (this.dbUpdateStartTime === 0) return;
     this.metrics.dbUpdateTime = performance.now() - this.dbUpdateStartTime;
-    console.log(
-      `DB update completed in: ${this.formatTime(this.metrics.dbUpdateTime)}`
-    );
+    // console.log(
+    //   `DB update completed in: ${this.formatTime(this.metrics.dbUpdateTime)}`
+    // );
     this.dbUpdateStartTime = 0; // Reset timer
   }
 
   // Add method to set DB update time from external measurements
   setDbUpdateTime(timeMs: number) {
     this.externalDbUpdateTime = timeMs;
-    console.log(`External DB update time set: ${this.formatTime(timeMs)}`);
+    // console.log(`External DB update time set: ${this.formatTime(timeMs)}`);
   }
 
   endOperation() {
@@ -242,8 +242,8 @@ class PerformanceMonitor {
       },
     };
 
-    console.log("Performance Summary:", performanceLog);
-    writeToLogFile("performance.log", JSON.stringify(performanceLog));
+    // console.log("Performance Summary:", performanceLog);
+    // writeToLogFile("performance.log", JSON.stringify(performanceLog));
   }
 
   getFormattedMetrics() {
@@ -310,7 +310,7 @@ class PerformanceMonitor {
       },
     };
 
-    writeToLogFile("performance.log", JSON.stringify(metrics));
+    // writeToLogFile("performance.log", JSON.stringify(metrics));
   }
 }
 

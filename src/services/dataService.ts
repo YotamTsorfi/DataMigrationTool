@@ -1,6 +1,6 @@
 import { DatabaseService } from "./databaseService";
 import PerformanceMonitor from "../utils/performanceMonitor";
-
+//--------------------------------------------------------------------------------
 /**
  * Fetches a chunk of data from the database that needs processing
  */
@@ -20,17 +20,17 @@ export async function fetchDataChunk(
   `;
 
   try {
-    console.log(
-      `Fetching data chunk: lastRowId=${lastRowId}, chunkSize=${chunkSize}, table=${tableName}`
-    );
+    // console.log(
+    //   `Fetching data chunk: lastRowId=${lastRowId}, chunkSize=${chunkSize}, table=${tableName}`
+    // );
     const startTime = Date.now();
 
     const rowsData = await DatabaseService.executeQuery(query);
 
     const fetchTime = Date.now() - startTime;
-    console.log(
-      `Database query completed in ${fetchTime}ms, returned ${rowsData.length} rows`
-    );
+    // console.log(
+    //   `Database query completed in ${fetchTime}ms, returned ${rowsData.length} rows`
+    // );
 
     perfMonitor.endDbFetch();
 
@@ -44,7 +44,7 @@ export async function fetchDataChunk(
     throw error;
   }
 }
-
+//--------------------------------------------------------------------------------
 /**
  * Performs bulk update of processed rows
  */
@@ -53,7 +53,8 @@ export async function performBulkUpdateWithService(
   updates: any[],
   perfMonitor?: PerformanceMonitor,
   batchSize = 1000,
-  maxRetries = 3
+  maxRetries = 3,
+  sentToPriority = false
 ): Promise<number> {
   // Return the time taken for the operation
   if (updates.length === 0) return 0;
@@ -76,19 +77,49 @@ export async function performBulkUpdateWithService(
     localPerfMonitor.endDbUpdate();
     const updateTime = localPerfMonitor.metrics.dbUpdateTime || 0;
 
-    console.log(
-      `Bulk update completed in ${updateTime.toFixed(2)}ms for ${updates.length} rows`
-    );
+    // console.log(
+    //   `Bulk update completed in ${updateTime.toFixed(2)}ms for ${updates.length} rows`
+    // );
 
     return updateTime;
-  } catch (error) {
+  } catch (error: any) {
     console.error(`Error performing bulk update:`, error);
+   
+    // check if the error is a deadlock
+    const isDeadlock = 
+      error?.number === 1205 ||
+      error?.originalError?.info?.number === 1205 ||
+      (error instanceof Error && error.message.includes("deadlock"));
+      
+      if (isDeadlock && sentToPriority) {
+        console.log("Deadlock detected after successful Priority update. Marking records as CompletedButNotSynced...");
+        
+        // עדכן את הסטטוס בטבלת המקור באמצעות שאילתות SQL ישירות
+        for (const update of updates) {
+          try {
+            // עדכון טבלת המקור
+            await DatabaseService.executeQuery(`
+              UPDATE ${update.TableName}
+              SET Status = 'CompletedButNotSynced'
+              WHERE RowId = @RowId
+            `, {
+              RowId: update.RowId
+            });
+          } catch (innerError) {
+            console.error(`Failed to update source record ${update.RowId} status:`, innerError);
+          }
+        }
+        
+        // אין צורך לזרוק שגיאה - החזר את הזמן שלקח עד כה
+        return localPerfMonitor.metrics.dbUpdateTime || 0;
+      }
+
     throw error;
   } finally {
     if (!perfMonitor) localPerfMonitor.endOperation();
   }
 }
-
+//--------------------------------------------------------------------------------
 /**
  * Performs bulk insertion of error logs
  */
@@ -131,7 +162,7 @@ export async function performBulkErrorInsertWithService(
     if (!perfMonitor) localPerfMonitor.endOperation();
   }
 }
-
+//--------------------------------------------------------------------------------
 /**
  * Records batch processing results in the database
  */
@@ -145,33 +176,71 @@ export async function recordBatchProcessing(
   successCount: number,
   failureCount: number,
   lastProcessedIndex: number,
-  status: string,
+  status: string, // כולל אפשרות CompletedButNotSynced
   errorMessage: string | null,
   tableName: string
 ): Promise<void> {
   const recordStartTime = Date.now();
 
-  await DatabaseService.executeQuery(
-    `
-    INSERT INTO PriorityBatchProcessing (JobName, BatchID, StartTime, EndTime, TotalRecords, SuccessCount, FailureCount, LastProcessedIndex, Status, ErrorMessage, TableName, JobID)
-    VALUES (@JobName, @BatchID, @StartTime, @EndTime, @TotalRecords, @SuccessCount, @FailureCount, @LastProcessedIndex, @Status, @ErrorMessage, @TableName, @JobID)
-  `,
-    {
-      JobName: jobType,
-      BatchID: batchId,
-      JobID: jobId,
-      StartTime: startTime,
-      EndTime: endTime,
-      TotalRecords: totalRecords,
-      SuccessCount: successCount,
-      FailureCount: failureCount,
-      LastProcessedIndex: lastProcessedIndex,
-      Status: status,
-      ErrorMessage: errorMessage,
-      TableName: tableName,
+  try {
+    await DatabaseService.executeQuery(
+      `
+      INSERT INTO PriorityBatchProcessing (JobName, BatchID, StartTime, EndTime, TotalRecords, SuccessCount, FailureCount, LastProcessedIndex, Status, ErrorMessage, TableName, JobID)
+      VALUES (@JobName, @BatchID, @StartTime, @EndTime, @TotalRecords, @SuccessCount, @FailureCount, @LastProcessedIndex, @Status, @ErrorMessage, @TableName, @JobID)
+    `,
+      {
+        JobName: jobType,
+        BatchID: batchId,
+        JobID: jobId,
+        StartTime: startTime,
+        EndTime: endTime,
+        TotalRecords: totalRecords,
+        SuccessCount: successCount,
+        FailureCount: failureCount,
+        LastProcessedIndex: lastProcessedIndex,
+        Status: status,
+        ErrorMessage: errorMessage,
+        TableName: tableName,
+      }
+    );
+  } catch (error: any) {
+    console.error(`Error recording batch processing:`, error);
+    
+    // אם הבעיה היא deadlock, נסה לעדכן את סטטוס הבאצ' בנפרד
+    const isDeadlock = 
+      error?.number === 1205 ||
+      error?.originalError?.info?.number === 1205 ||
+      (error instanceof Error && error.message.includes("deadlock"));
+      
+    if (isDeadlock && status === "Completed") {
+      // נסה לרשום את הבאצ' עם סטטוס 'CompletedButNotSynced'
+      try {
+        await DatabaseService.executeQuery(
+          `
+          INSERT INTO PriorityBatchProcessing (JobName, BatchID, StartTime, EndTime, TotalRecords, SuccessCount, FailureCount, LastProcessedIndex, Status, ErrorMessage, TableName, JobID)
+          VALUES (@JobName, @BatchID, @StartTime, @EndTime, @TotalRecords, @SuccessCount, @FailureCount, @LastProcessedIndex, @Status, @ErrorMessage, @TableName, @JobID)
+        `,
+          {
+            JobName: jobType,
+            BatchID: batchId,
+            JobID: jobId,
+            StartTime: startTime,
+            EndTime: endTime,
+            TotalRecords: totalRecords,
+            SuccessCount: successCount,
+            FailureCount: failureCount,
+            LastProcessedIndex: lastProcessedIndex,
+            Status: "CompletedButNotSynced",
+            ErrorMessage: "DB update failed due to deadlock after Priority success",
+            TableName: tableName,
+          }
+        );
+      } catch (retryError) {
+        console.error(`Failed to record batch with CompletedButNotSynced status:`, retryError);
+      }
     }
-  );
+  }
 
   const recordTime = Date.now() - recordStartTime;
-  console.log(`Batch processing record saved in ${recordTime}ms`);
+  // console.log(`Batch processing record saved in ${recordTime}ms`);
 }

@@ -5,6 +5,8 @@ interface SystemConfig {
   CONCURRENT_BATCHES: number;
   BATCH_SIZE: number;
   DELAY_BETWEEN_BATCHES: number;
+  DB_BATCH_SIZE: number;
+  MAX_RETRIES: number;
   [key: string]: any;
 }
 
@@ -13,7 +15,9 @@ class ConfigurationService {
   private config: SystemConfig = {
     CONCURRENT_BATCHES: 10, // Default value
     BATCH_SIZE: 100, // Default value
-    DELAY_BETWEEN_BATCHES: 60000, // Default value
+    DELAY_BETWEEN_BATCHES: 500, // Default value
+    DB_BATCH_SIZE: 1000, // Default database batch size
+    MAX_RETRIES: 3, // Default retries for deadlocks
   };
   private lastLoaded: Date = new Date(0);
   private cacheExpiryMs: number = 60000; // Refresh config every minute
