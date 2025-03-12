@@ -128,7 +128,8 @@ const BatchDashboard: React.FC = () => {
   // Pagination state
   const [batchPage, setBatchPage] = useState(1);
   const [errorPage, setErrorPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  //  const [pageSize, setPageSize] = useState(20);
+  const pageSize = 20;
   const [totalBatches, setTotalBatches] = useState(0);
   const [totalErrors, setTotalErrors] = useState(0);
 
