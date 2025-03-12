@@ -58,6 +58,7 @@ interface BatchRecord {
   Status: string;
   TableName: string;
   JobID: string;
+  LastProcessedIndex: number;
 }
 
 interface ErrorRecord {
@@ -82,7 +83,6 @@ interface JobHistoryRecord {
   FailureCount: number;
   TableName: string;
   ScreenName: string;
-  LastProcessedIndex: number;
 }
 
 // Helper function to format dates
@@ -481,7 +481,6 @@ const BatchDashboard: React.FC = () => {
                 <th>End Time</th>
                 <th>Status</th>
                 <th>Total Records</th>
-                <th>Last Index</th>
                 <th>Success</th>
                 <th>Failure</th>
               </tr>
@@ -497,7 +496,6 @@ const BatchDashboard: React.FC = () => {
                   <td>
                     <StatusBadge $status={job.Status}>{job.Status}</StatusBadge>
                   </td>
-                  <td>{job.LastProcessedIndex || 0}</td>
                   <td>
                     {job.TotalRecords != null
                       ? job.TotalRecords.toLocaleString()
@@ -532,6 +530,7 @@ const BatchDashboard: React.FC = () => {
                 <th>End Time</th>
                 <th>Status</th>
                 <th>Records</th>
+                <th>Last Index</th>
                 <th>Success</th>
                 <th>Failure</th>
                 <th>Table</th>
@@ -550,6 +549,11 @@ const BatchDashboard: React.FC = () => {
                     </StatusBadge>
                   </td>
                   <td>{batch.TotalRecords != null ? batch.TotalRecords : 0}</td>
+                  <td>
+                    {batch.LastProcessedIndex != null
+                      ? batch.LastProcessedIndex
+                      : 0}
+                  </td>
                   <td>{batch.SuccessCount != null ? batch.SuccessCount : 0}</td>
                   <td>{batch.FailureCount != null ? batch.FailureCount : 0}</td>
                   <td>{batch.TableName}</td>
