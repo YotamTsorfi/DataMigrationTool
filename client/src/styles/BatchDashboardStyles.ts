@@ -1,5 +1,6 @@
 import styled from "styled-components";
 
+
 export const DashboardContainer = styled.div`
   padding: 20px;
   background-color: #f8f9fa;
@@ -20,30 +21,30 @@ export const SummaryCard = styled.div`
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
   text-align: center;
-  
+
   &.success {
     border-left: 4px solid #4caf50;
   }
-  
+
   &.error {
     border-left: 4px solid #f44336;
   }
-  
+
   &.in-progress {
     border-left: 4px solid #2196f3;
   }
-  
+
   &.info {
     border-left: 4px solid #ff9800;
   }
-  
+
   h3 {
     margin-top: 0;
     font-size: 14px;
     color: #666;
     font-weight: normal;
   }
-  
+
   p.number {
     margin: 8px 0 0;
     font-size: 28px;
@@ -65,7 +66,7 @@ export const ChartRow = styled.div`
   grid-template-columns: 1fr 1fr;
   gap: 20px;
   margin-bottom: 24px;
-  
+
   @media (max-width: 1200px) {
     grid-template-columns: 1fr;
   }
@@ -76,22 +77,18 @@ export const TabContainer = styled.div`
 `;
 
 interface TabProps {
-  active: boolean;
+  $active: boolean;
 }
-
 export const Tab = styled.button<TabProps>`
-  padding: 10px 16px;
-  margin-right: 4px;
-  background-color: ${props => props.active ? '#ffffff' : '#f1f1f1'};
-  border: 1px solid #ddd;
-  border-bottom: ${props => props.active ? '1px solid #fff' : '1px solid #ddd'};
-  border-radius: 4px 4px 0 0;
-  position: relative;
-  top: 1px;
+  padding: 10px 20px;
+  background-color: ${(props) => (props.$active ? "#007bff" : "#f0f0f0")};
+  color: ${(props) => (props.$active ? "white" : "#333")};
+  border: none;
+  border-bottom: ${(props) => (props.$active ? "3px solid #0056b3" : "none")};
   cursor: pointer;
-  
-  &:focus {
-    outline: none;
+
+  &:hover {
+    background-color: ${(props) => (props.$active ? "#0069d9" : "#e0e0e0")};
   }
 `;
 
@@ -108,7 +105,7 @@ export const FilterContainer = styled.div`
   align-items: center;
   margin-bottom: 20px;
   flex-wrap: wrap;
-  
+
   @media (max-width: 768px) {
     flex-direction: column;
     align-items: flex-start;
@@ -118,13 +115,14 @@ export const FilterContainer = styled.div`
 export const FilterItem = styled.div`
   margin-right: 16px;
   margin-bottom: 10px;
-  
+
   label {
     margin-right: 8px;
     font-weight: 500;
   }
-  
-  select, input {
+
+  select,
+  input {
     padding: 6px 10px;
     border: 1px solid #ddd;
     border-radius: 4px;
@@ -134,45 +132,50 @@ export const FilterItem = styled.div`
 export const DataTable = styled.table`
   width: 100%;
   border-collapse: collapse;
-  
-  th, td {
+
+  th,
+  td {
     padding: 10px;
     text-align: left;
     border-bottom: 1px solid #eee;
   }
-  
+
   th {
     background-color: #f5f5f5;
     font-weight: 500;
   }
-  
+
   tr:hover td {
     background-color: #f9f9f9;
   }
 `;
 
 interface StatusBadgeProps {
-  status: string;
+  $status: string;
 }
-
 export const StatusBadge = styled.span<StatusBadgeProps>`
   display: inline-block;
   padding: 4px 8px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: bold;
-  color: white;
-  background-color: ${props => {
-    switch (props.status?.toLowerCase()) {
-      case 'completed': return '#4caf50';
-      case 'failed': return '#f44336';
-      case 'running': 
-      case 'processing': return '#2196f3';
-      case 'queued': return '#ff9800';
-      case 'completedbutnotsynced': return '#9c27b0';
-      default: return '#9e9e9e';
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  background-color: ${(props) => {
+    switch (props.$status.toLowerCase()) {
+      case "completed":
+        return "#4caf50";
+      case "failed":
+        return "#f44336";
+      case "running":
+        return "#2196f3";
+      case "queued":
+        return "#ff9800";
+      case "completedbutnotsynced":
+        return "#9c27b0";
+      default:
+        return "#757575";
     }
   }};
+  color: white;
 `;
 
 export const LoadingOverlay = styled.div`

@@ -82,6 +82,7 @@ interface JobHistoryRecord {
   FailureCount: number;
   TableName: string;
   ScreenName: string;
+  LastProcessedIndex: number;
 }
 
 // Helper function to format dates
@@ -175,9 +176,7 @@ const BatchDashboard: React.FC = () => {
   useEffect(() => {
     const fetchJobTypes = async () => {
       try {
-        const response = await axios.get(
-          "http://localhost:3001/dashboard/job-types"
-        );
+        const response = await axios.get("http://localhost:3001/job/job-types");
         const jobNames = response.data.map((job: any) => job.JobTypeName);
         setAvailableJobs(jobNames);
       } catch (error) {
@@ -354,22 +353,25 @@ const BatchDashboard: React.FC = () => {
 
       <TabContainer>
         <Tab
-          active={activeTab === "summary"}
+          $active={activeTab === "summary"}
           onClick={() => setActiveTab("summary")}
         >
           Summary
         </Tab>
-        <Tab active={activeTab === "jobs"} onClick={() => setActiveTab("jobs")}>
+        <Tab
+          $active={activeTab === "jobs"}
+          onClick={() => setActiveTab("jobs")}
+        >
           Jobs
         </Tab>
         <Tab
-          active={activeTab === "batches"}
+          $active={activeTab === "batches"}
           onClick={() => setActiveTab("batches")}
         >
           Batches
         </Tab>
         <Tab
-          active={activeTab === "errors"}
+          $active={activeTab === "errors"}
           onClick={() => setActiveTab("errors")}
         >
           Errors
@@ -479,6 +481,7 @@ const BatchDashboard: React.FC = () => {
                 <th>End Time</th>
                 <th>Status</th>
                 <th>Total Records</th>
+                <th>Last Index</th>
                 <th>Success</th>
                 <th>Failure</th>
               </tr>
@@ -492,11 +495,24 @@ const BatchDashboard: React.FC = () => {
                   <td>{formatDate(job.StartTime)}</td>
                   <td>{job.EndTime ? formatDate(job.EndTime) : "N/A"}</td>
                   <td>
-                    <StatusBadge status={job.Status}>{job.Status}</StatusBadge>
+                    <StatusBadge $status={job.Status}>{job.Status}</StatusBadge>
                   </td>
-                  <td>{job.TotalRecords.toLocaleString()}</td>
-                  <td>{job.SuccessCount.toLocaleString()}</td>
-                  <td>{job.FailureCount.toLocaleString()}</td>
+                  <td>{job.LastProcessedIndex || 0}</td>
+                  <td>
+                    {job.TotalRecords != null
+                      ? job.TotalRecords.toLocaleString()
+                      : "0"}
+                  </td>
+                  <td>
+                    {job.SuccessCount != null
+                      ? job.SuccessCount.toLocaleString()
+                      : "0"}
+                  </td>
+                  <td>
+                    {job.FailureCount != null
+                      ? job.FailureCount.toLocaleString()
+                      : "0"}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -527,15 +543,15 @@ const BatchDashboard: React.FC = () => {
                   <td>{batch.BatchID.substring(0, 8)}...</td>
                   <td>{batch.JobName}</td>
                   <td>{formatDate(batch.StartTime)}</td>
-                  <td>{formatDate(batch.EndTime)}</td>
+                  <td>{batch.EndTime ? formatDate(batch.EndTime) : "N/A"}</td>
                   <td>
-                    <StatusBadge status={batch.Status}>
+                    <StatusBadge $status={batch.Status}>
                       {batch.Status}
                     </StatusBadge>
                   </td>
-                  <td>{batch.TotalRecords}</td>
-                  <td>{batch.SuccessCount}</td>
-                  <td>{batch.FailureCount}</td>
+                  <td>{batch.TotalRecords != null ? batch.TotalRecords : 0}</td>
+                  <td>{batch.SuccessCount != null ? batch.SuccessCount : 0}</td>
+                  <td>{batch.FailureCount != null ? batch.FailureCount : 0}</td>
                   <td>{batch.TableName}</td>
                 </tr>
               ))}
