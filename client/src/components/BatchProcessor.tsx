@@ -16,7 +16,7 @@ import JobProgressTracker from "./JobProgressTracker";
 //---------------------------------------------
 
 interface JobType {
-  JobTypeID: number;
+  JobTypeId: number;
   JobTypeName: string;
   DBTableName: string;
   ScreenName: string;
@@ -158,7 +158,7 @@ const BatchProcessor: React.FC = () => {
               <select value={selectedJobType} onChange={handleJobTypeChange}>
                 <option value="">Select Job Type</option>
                 {jobTypes.map((job: any) => (
-                  <option key={job.JobTypeID} value={job.JobTypeName}>
+                  <option key={job.JobTypeId} value={job.JobTypeName}>
                     {job.JobTypeName}
                   </option>
                 ))}
@@ -221,7 +221,7 @@ const BatchProcessor: React.FC = () => {
               >
                 <option value="">Select Job Types</option>
                 {jobTypes.map((job: any) => (
-                  <option key={job.JobTypeID} value={job.JobTypeName}>
+                  <option key={job.JobTypeId} value={job.JobTypeName}>
                     {job.JobTypeName}
                   </option>
                 ))}

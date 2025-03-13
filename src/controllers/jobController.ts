@@ -54,7 +54,7 @@ export const getJobTypes = async (req: Request, res: Response) => {
       throw new Error("Database connection pool is null");
     }
     const result = await pool.request().query(`
-      SELECT JobTypeID, JobTypeName, DBTableName, ScreenName FROM PriorityJobTypes
+      SELECT JobTypeId, JobTypeName, DBTableName, ScreenName FROM PriorityJobTypes
     `);
     res.status(200).json(result.recordset);
   } catch (error) {
