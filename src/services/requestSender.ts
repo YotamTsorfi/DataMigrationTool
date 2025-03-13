@@ -49,6 +49,26 @@ export async function sendBatchRequest(
       // Use formatAxiosError to get a clean error message for logging
       const errorMessage = formatAxiosError(error);
 
+      // Check specifically for 429 Too Many Requests
+      if (axios.isAxiosError(error) && error.response?.status === 429) {
+        // Get retry-after header if available, or use exponential backoff with jitter
+        const retryAfter = error.response.headers["retry-after"];
+        let delayMs = retryAfter
+          ? parseInt(retryAfter) * 1000
+          : 1000 * Math.pow(2, retryCount);
+
+        // Add jitter to prevent all retries happening simultaneously
+        delayMs += Math.floor(Math.random() * 1000);
+
+        retryCount++;
+        console.log(
+          `Rate limit exceeded (429). Retry attempt ${retryCount} after ${delayMs}ms delay. ${errorMessage}`
+        );
+
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        continue;
+      }
+
       // Only retry on network errors and 5xx server errors
       if (
         axios.isAxiosError(error) &&
