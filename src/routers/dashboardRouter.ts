@@ -49,7 +49,7 @@ router.get("/dashboard-summary", async (req: Request, res: Response): Promise<vo
     // Execute aggregate queries with optimized performance
     const summaryQuery = `
       SELECT 
-        COUNT(DISTINCT JobID) AS totalJobs,
+        COUNT(DISTINCT JobId) AS totalJobs,
         SUM(CASE WHEN Status = 'Completed' THEN 1 ELSE 0 END) AS completedJobs,
         SUM(CASE WHEN Status = 'Failed' THEN 1 ELSE 0 END) AS failedJobs,
         SUM(CASE WHEN Status = 'In Progress' OR Status = 'Running' THEN 1 ELSE 0 END) AS inProgressJobs,

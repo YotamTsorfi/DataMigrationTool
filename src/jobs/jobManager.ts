@@ -25,11 +25,11 @@ class JobManager {
 
     await DatabaseService.executeQuery(
       `
-      INSERT INTO PriorityJobsHistory (JobID, JobName, TableName, ScreenName, StartTime, TotalRecords, Status)
-      VALUES (@JobID, @JobName, @TableName, @ScreenName, @StartTime, @TotalRecords, @Status)
+      INSERT INTO PriorityJobsHistory (JobId, JobName, TableName, ScreenName, StartTime, TotalRecords, Status)
+      VALUES (@JobId, @JobName, @TableName, @ScreenName, @StartTime, @TotalRecords, @Status)
     `,
       {
-        JobID: jobId,
+        JobId: jobId,
         JobName: jobRequest.jobType,
         TableName: jobRequest.tableName,
         ScreenName: jobRequest.priorityScreenName,
@@ -53,10 +53,10 @@ class JobManager {
       `
       UPDATE PriorityJobsHistory
       SET Status = @Status, SuccessCount = @SuccessCount, FailureCount = @FailureCount, ErrorMessage = @ErrorMessage, EndTime = @EndTime
-      WHERE JobID = @JobID
+      WHERE JobId = @JobId
     `,
       {
-        JobID: jobId,
+        JobId: jobId,
         Status: status,
         SuccessCount: totalSuccess ?? 0,
         FailureCount: totalFailures ?? 0,

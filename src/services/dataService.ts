@@ -185,13 +185,13 @@ export async function recordBatchProcessing(
   try {
     await DatabaseService.executeQuery(
       `
-      INSERT INTO PriorityBatchProcessing (JobName, BatchID, StartTime, EndTime, TotalRecords, SuccessCount, FailureCount, LastProcessedIndex, Status, ErrorMessage, TableName, JobID)
-      VALUES (@JobName, @BatchID, @StartTime, @EndTime, @TotalRecords, @SuccessCount, @FailureCount, @LastProcessedIndex, @Status, @ErrorMessage, @TableName, @JobID)
+      INSERT INTO PriorityBatchProcessing (JobName, BatchId, StartTime, EndTime, TotalRecords, SuccessCount, FailureCount, LastProcessedIndex, Status, ErrorMessage, TableName, JobId)
+      VALUES (@JobName, @BatchId, @StartTime, @EndTime, @TotalRecords, @SuccessCount, @FailureCount, @LastProcessedIndex, @Status, @ErrorMessage, @TableName, @JobId)
     `,
       {
         JobName: jobType,
-        BatchID: batchId,
-        JobID: jobId,
+        BatchId: batchId,
+        JobId: jobId,
         StartTime: startTime,
         EndTime: endTime,
         TotalRecords: totalRecords,
@@ -217,13 +217,13 @@ export async function recordBatchProcessing(
       try {
         await DatabaseService.executeQuery(
           `
-          INSERT INTO PriorityBatchProcessing (JobName, BatchID, StartTime, EndTime, TotalRecords, SuccessCount, FailureCount, LastProcessedIndex, Status, ErrorMessage, TableName, JobID)
-          VALUES (@JobName, @BatchID, @StartTime, @EndTime, @TotalRecords, @SuccessCount, @FailureCount, @LastProcessedIndex, @Status, @ErrorMessage, @TableName, @JobID)
+          INSERT INTO PriorityBatchProcessing (JobName, BatchId, StartTime, EndTime, TotalRecords, SuccessCount, FailureCount, LastProcessedIndex, Status, ErrorMessage, TableName, JobId)
+          VALUES (@JobName, @BatchId, @StartTime, @EndTime, @TotalRecords, @SuccessCount, @FailureCount, @LastProcessedIndex, @Status, @ErrorMessage, @TableName, @JobId)
         `,
           {
             JobName: jobType,
-            BatchID: batchId,
-            JobID: jobId,
+            BatchId: batchId,
+            JobId: jobId,
             StartTime: startTime,
             EndTime: endTime,
             TotalRecords: totalRecords,

@@ -48,7 +48,7 @@ interface DashboardSummary {
 }
 
 interface BatchRecord {
-  BatchID: string;
+  BatchId: string;
   JobName: string;
   StartTime: string;
   EndTime: string;
@@ -57,23 +57,23 @@ interface BatchRecord {
   FailureCount: number;
   Status: string;
   TableName: string;
-  JobID: string;
+  JobId: string;
   LastProcessedIndex: number;
 }
 
 interface ErrorRecord {
-  ErrorID: number;
+  ErrorId: number;
   JobName: string;
   BatchId: string;
   TableName: string;
   RowId: number;
   Error: string;
   Timestamp: string;
-  JobID: string;
+  JobId: string;
 }
 
 interface JobHistoryRecord {
-  JobID: string;
+  JobId: string;
   JobName: string;
   StartTime: string;
   EndTime: string;
@@ -488,8 +488,8 @@ const BatchDashboard: React.FC = () => {
             </thead>
             <tbody>
               {jobHistory.map((job) => (
-                <tr key={job.JobID}>
-                  <td>{job.JobID.substring(0, 8)}...</td>
+                <tr key={job.JobId}>
+                  <td>{job.JobId.substring(0, 8)}...</td>
                   <td>{job.JobName}</td>
                   <td>{job.TableName}</td>
                   <td>{formatDate(job.StartTime)}</td>
@@ -539,8 +539,8 @@ const BatchDashboard: React.FC = () => {
             </thead>
             <tbody>
               {batchHistory.map((batch) => (
-                <tr key={batch.BatchID}>
-                  <td>{batch.BatchID.substring(0, 8)}...</td>
+                <tr key={batch.BatchId}>
+                  <td>{batch.BatchId.substring(0, 8)}...</td>
                   <td>{batch.JobName}</td>
                   <td>{formatDate(batch.StartTime)}</td>
                   <td>{batch.EndTime ? formatDate(batch.EndTime) : "N/A"}</td>
@@ -607,7 +607,7 @@ const BatchDashboard: React.FC = () => {
             </thead>
             <tbody>
               {errorLogs.map((error) => (
-                <tr key={error.ErrorID}>
+                <tr key={error.ErrorId}>
                   <td>{formatDate(error.Timestamp)}</td>
                   <td>{error.JobName}</td>
                   <td>{error.TableName}</td>

@@ -139,7 +139,7 @@ export function processApiResponse(
         JobName: row.__jobType,
         Status: "Failed",
         ErrorMessage: "No response item found",
-        JobID: row.__jobId,
+        JobId: row.__jobId,
       });
 
       // Add to error collection
@@ -149,7 +149,7 @@ export function processApiResponse(
         TableName: row.__tableName,
         RowId: row.RowId,
         Error: "No response item found",
-        JobID: row.__jobId,
+        JobId: row.__jobId,
       });
 
       lastProcessedIndex = row.RowId;
@@ -179,7 +179,7 @@ export function processApiResponse(
       JobName: row.__jobType,
       Status: status,
       ErrorMessage: errorMessage,
-      JobID: row.__jobId,
+      JobId: row.__jobId,
     });
 
     // Track metrics
@@ -195,7 +195,7 @@ export function processApiResponse(
         TableName: row.__tableName,
         RowId: row.RowId,
         Error: errorMessage || "",
-        JobID: row.__jobId,
+        JobId: row.__jobId,
       });
     }
 
