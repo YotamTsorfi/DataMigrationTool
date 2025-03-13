@@ -495,7 +495,7 @@ const BatchDashboard: React.FC = () => {
           <DataTable>
             <thead>
               <tr>
-                <th>Job ID</th>
+                <th>Job Id</th>
                 <th>Job Name</th>
                 <th>Table</th>
                 <th>Start Time</th>
@@ -545,7 +545,8 @@ const BatchDashboard: React.FC = () => {
           <DataTable>
             <thead>
               <tr>
-                <th>Batch ID</th>
+                <th>Batch Id</th>
+                <th>Job Id</th>
                 <th>Job Name</th>
                 <th>Start Time</th>
                 <th>End Time</th>
@@ -561,6 +562,7 @@ const BatchDashboard: React.FC = () => {
               {batchHistory.map((batch) => (
                 <tr key={batch.BatchId}>
                   <td>{batch.BatchId.substring(0, 8)}...</td>
+                  <td>{batch.JobId.substring(0, 8)}...</td>
                   <td>{batch.JobName}</td>
                   <td>{formatDate(batch.StartTime)}</td>
                   <td>{batch.EndTime ? formatDate(batch.EndTime) : "N/A"}</td>
