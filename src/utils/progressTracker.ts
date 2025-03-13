@@ -39,7 +39,12 @@ class ProgressTracker {
    */
   static updateProgress(jobId: string, processedRecords: number, successCount: number, failureCount: number): void {
     const progress = this.jobProgress.get(jobId);
-    if (!progress) return;
+    if (!progress) {
+      console.warn(
+        `Attempted to update progress for non-existent job: ${jobId}`
+      );
+      return;
+    }
     
     progress.processedRecords = processedRecords;
     progress.successCount = successCount;

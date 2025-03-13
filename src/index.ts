@@ -1,7 +1,7 @@
 // index.ts
 
-import express from 'express';
-import cors from 'cors';
+import express from "express";
+import cors from "cors";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import { config } from "./config/config";
@@ -86,4 +86,21 @@ process.on("SIGTERM", () => {
     console.log("Server closed");
     process.exit(0);
   });
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught Exception:", error);
+  writeToLogFile(
+    "error.log",
+    `FATAL ERROR: Uncaught exception: ${error.message}\n${error.stack}`
+  );
+  // Optionally implement notification mechanism for critical errors
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("Unhandled Promise Rejection:", reason);
+  writeToLogFile(
+    "error.log",
+    `FATAL ERROR: Unhandled promise rejection: ${reason}`
+  );
 });

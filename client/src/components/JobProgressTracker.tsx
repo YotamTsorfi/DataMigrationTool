@@ -16,14 +16,15 @@ const ProgressBarOuter = styled.div`
   margin: 10px 0;
 `;
 
-const ProgressBarInner = styled.div<{ width: number; status: string }>`
+const ProgressBarInner = styled.div<{ width: number; $status: string }>`
   height: 100%;
-  width: ${props => props.width}%;
-  background-color: ${props => 
-    props.status === "completed" ? "#4caf50" : 
-    props.status === "failed" ? "#f44336" : 
-    "#2196f3"
-  };
+  width: ${(props) => props.width}%;
+  background-color: ${(props) =>
+    props.$status === "completed"
+      ? "#4caf50"
+      : props.$status === "failed"
+        ? "#f44336"
+        : "#2196f3"};
   border-radius: 10px;
   transition: width 0.3s ease;
 `;
@@ -59,7 +60,7 @@ interface JobProgressTrackerProps {
 
 const JobProgressTracker: React.FC<JobProgressTrackerProps> = ({ jobId }) => {
   const [activeJobs, setActiveJobs] = useState<JobProgress[]>([]);
-//   const [socket, setSocket] = useState<any>(null);
+  //   const [socket, setSocket] = useState<any>(null);
 
   useEffect(() => {
     // Connect to socket server
@@ -69,10 +70,12 @@ const JobProgressTracker: React.FC<JobProgressTrackerProps> = ({ jobId }) => {
     // Listen for progress updates
     socketClient.on("job:progress", (progressData: JobProgress) => {
       if (jobId && progressData.jobId !== jobId) return;
-      
-      setActiveJobs(prev => {
-        const existingJobIndex = prev.findIndex(job => job.jobId === progressData.jobId);
-        
+
+      setActiveJobs((prev) => {
+        const existingJobIndex = prev.findIndex(
+          (job) => job.jobId === progressData.jobId
+        );
+
         if (existingJobIndex >= 0) {
           const updatedJobs = [...prev];
           updatedJobs[existingJobIndex] = progressData;
@@ -86,22 +89,24 @@ const JobProgressTracker: React.FC<JobProgressTrackerProps> = ({ jobId }) => {
     // Initial fetch of active jobs
     if (!jobId) {
       fetch("http://localhost:3001/job/active-jobs")
-        .then(res => res.json())
-        .then(data => {
+        .then((res) => res.json())
+        .then((data) => {
           if (data.success && data.activeJobs) {
             setActiveJobs(data.activeJobs);
           }
         })
-        .catch(err => console.error("Error fetching active jobs:", err));
+        .catch((err) => console.error("Error fetching active jobs:", err));
     } else {
       fetch(`http://localhost:3001/job/progress/${jobId}`)
-        .then(res => res.json())
-        .then(data => {
+        .then((res) => res.json())
+        .then((data) => {
           if (data.success && data.progress) {
             setActiveJobs([data.progress]);
           }
         })
-        .catch(err => console.error(`Error fetching job progress for ${jobId}:`, err));
+        .catch((err) =>
+          console.error(`Error fetching job progress for ${jobId}:`, err)
+        );
     }
 
     // Cleanup
@@ -113,14 +118,16 @@ const JobProgressTracker: React.FC<JobProgressTrackerProps> = ({ jobId }) => {
   // Filter completed jobs after a delay
   useEffect(() => {
     const timer = setTimeout(() => {
-      setActiveJobs(prev => 
-        prev.filter(job => 
-          job.status === "pending" || job.status === "processing" || 
-          Date.now() - (job.lastUpdated || 0) < 60000
+      setActiveJobs((prev) =>
+        prev.filter(
+          (job) =>
+            job.status === "pending" ||
+            job.status === "processing" ||
+            Date.now() - (job.lastUpdated || 0) < 60000
         )
       );
     }, 60000);
-    
+
     return () => clearTimeout(timer);
   }, [activeJobs]);
 
@@ -130,7 +137,7 @@ const JobProgressTracker: React.FC<JobProgressTrackerProps> = ({ jobId }) => {
       {activeJobs.length === 0 ? (
         <p>No active jobs</p>
       ) : (
-        activeJobs.map(job => (
+        activeJobs.map((job) => (
           <JobInfo key={job.jobId}>
             <h4>Job: {job.jobId.substring(0, 8)}...</h4>
             <ProgressContainer>
@@ -141,7 +148,7 @@ const JobProgressTracker: React.FC<JobProgressTrackerProps> = ({ jobId }) => {
                 </span>
               </ProgressDetails>
               <ProgressBarOuter>
-                <ProgressBarInner width={job.percentage} status={job.status} />
+                <ProgressBarInner width={job.percentage} $status={job.status} />
               </ProgressBarOuter>
               <ProgressDetails>
                 <span>Status: {job.status}</span>

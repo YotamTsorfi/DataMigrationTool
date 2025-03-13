@@ -5,6 +5,7 @@ import { JobManager } from "../jobs/jobManager";
 import ProgressTracker from "../utils/progressTracker";
 import { poolPromise } from "../config/db";
 import { DatabaseService } from "../services/databaseService";
+import { formatErrorMessage, logAxiosError } from "../utils/errorHandler";
 
 const router: Router = express.Router();
 
@@ -44,10 +45,20 @@ router.get("/results", async (req: Request, res: Response): Promise<void> => {
       batchResults: batchResults.recordset,
     });
   } catch (error) {
+    // Replace this line
+    // res.status(500).json({
+    //   success: false,
+    //   error: error instanceof Error ? error.message : "Unknown error",
+    // });
+
+    // With this improved error handling
     res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : "Unknown error",
+      error: formatErrorMessage(error),
     });
+
+    // Log the full error details for debugging
+    logAxiosError(error, "Jobs API - Get Results");
   }
 });
 //-----------------------------------

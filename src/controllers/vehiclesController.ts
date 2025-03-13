@@ -3,9 +3,10 @@
 import { Request, Response } from "express";
 import axios, { AxiosError } from "axios";
 import { config } from "../config/config";
+import { formatErrorMessage, logAxiosError } from "../utils/errorHandler";
 //--------------------------------------------------
 
-export const vehiclesController = {  
+export const vehiclesController = {
   //----------------------------------------------------
   async getAllVehicles(req: Request, res: Response) {
     try {
@@ -90,27 +91,22 @@ export const vehiclesController = {
 };
 //----------------------------------------------------
 function handleError(error: unknown, res: Response) {
-  console.error("Full error details:", error);
+  // Log the full error to the console and file for debugging
+  logAxiosError(error, "Vehicles API");
 
   if (axios.isAxiosError(error)) {
     const axiosError = error as AxiosError;
-    console.error("Axios Error Details:", {
-      response: axiosError.response?.data,
-      status: axiosError.response?.status,
-      headers: axiosError.response?.headers,
-      message: axiosError.message,
-    });
 
     res.status(axiosError.response?.status || 500).json({
       message: "Operation failed",
       error: {
         status: axiosError.response?.status,
         data: axiosError.response?.data,
-        message: axiosError.message,
+        message: formatErrorMessage(axiosError),
       },
     });
   } else {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = formatErrorMessage(error);
     res.status(500).json({
       message: "Unexpected error",
       error: errorMessage,

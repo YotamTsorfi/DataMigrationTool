@@ -3,6 +3,7 @@ import http from "http";
 import https from "https";
 import { config } from "../config/config";
 import PerformanceMonitor from "../utils/performanceMonitor";
+import { formatAxiosError, createCleanError } from "../utils/errorHandler";
 
 // Create reusable HTTP/HTTPS agents with keep-alive enabled
 const httpAgent = new http.Agent({
@@ -24,69 +25,53 @@ export async function sendBatchRequest(
   batchBody: string,
   headers: Record<string, string>
 ): Promise<any> {
-  const perfMonitor = new PerformanceMonitor();
-  perfMonitor.startRequest();
+  const maxRetries = 3;
+  let retryCount = 0;
+  let lastError: any;
 
-  try {
-    // console.log("Sending batch request to Priority API...");
-
-    const response = await axios.post(
-      `${config.priorityDEVBaseUrl}/$batch`,
-      batchBody,
-      {
-        headers,
-        httpAgent: httpAgent,
-        httpsAgent: httpsAgent,
-      }
-    );
-
-    perfMonitor.endRequest();
-
-    // console.log(`Batch request completed with status ${response.status}`);
-
-    // Debug: Log detailed response information
-    // console.log("===== RESPONSE DETAILS =====");
-    // console.log("Status:", response.status);
-    // console.log("Content Type:", response.headers['content-type']);
-
-    // Check if the response has a 'responses' array
-    if (response.data && response.data.responses) {
-      //   console.log("Response contains", response.data.responses.length, "items");
-      //   console.log("First response item:", JSON.stringify(response.data.responses[0]).substring(0, 200));
-
-      // Count success vs failures
-      const successCount = response.data.responses.filter(
-        (r: any) => r.status >= 200 && r.status < 300
-      ).length;
-      const failureCount = response.data.responses.length - successCount;
-      // console.log(`Success: ${successCount}, Failures: ${failureCount}`);
-
-      // If there are failures, show the first failure
-      if (failureCount > 0) {
-        const firstFailure = response.data.responses.find(
-          (r: any) => r.status >= 300
-        );
-        if (firstFailure) {
-          console.log(
-            "Sample failure:",
-            JSON.stringify(firstFailure).substring(0, 300)
-          );
+  while (retryCount < maxRetries) {
+    try {
+      // Add timeout parameter explicitly
+      const response = await axios.post(
+        `${config.priorityDEVBaseUrl}/$batch`,
+        batchBody,
+        {
+          headers,
+          timeout: 30000, // 30 seconds timeout
+          httpAgent,
+          httpsAgent,
         }
-      }
-    } else {
-      // console.log(
-      //   "Response data structure:",
-      //   JSON.stringify(response.data).substring(0, 300)
-      // );
-    }
-    // console.log("=============================");
+      );
+      return response;
+    } catch (error: any) {
+      lastError = error;
 
-    return response;
-  } catch (error) {
-    perfMonitor.logError(error);
-    console.error("Error sending batch request:", error);
-    throw error;
+      // Use formatAxiosError to get a clean error message for logging
+      const errorMessage = formatAxiosError(error);
+
+      // Only retry on network errors and 5xx server errors
+      if (
+        axios.isAxiosError(error) &&
+        (error.code === "ETIMEDOUT" ||
+          error.code === "ECONNABORTED" ||
+          error.code === "ECONNREFUSED" ||
+          (error.response?.status && error.response.status >= 500))
+      ) {
+        retryCount++;
+        console.log(`Retry attempt ${retryCount} after error: ${errorMessage}`);
+
+        // Exponential backoff
+        const delay = 1000 * Math.pow(2, retryCount);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      } else {
+        // For other errors, don't retry
+        break;
+      }
+    }
   }
+
+  // Use the new createCleanError function instead of manual error creation
+  throw createCleanError(lastError, "Priority Batch Request");
 }
 
 /**

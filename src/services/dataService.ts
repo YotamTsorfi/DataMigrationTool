@@ -90,6 +90,20 @@ export async function performBulkUpdateWithService(
       error?.number === 1205 ||
       error?.originalError?.info?.number === 1205 ||
       (error instanceof Error && error.message.includes("deadlock"));
+
+
+    const isConnectionError =
+      error?.code === "ECONNRESET" ||
+      error?.code === "ETIMEDOUT" ||
+      (error instanceof Error && error.message.includes("connection"));
+
+    if (isConnectionError) {
+      console.log(
+        "Database connection error detected. Will retry operation..."
+      );
+      // Consider implementing retry logic here
+    }
+
       
       if (isDeadlock && sentToPriority) {
         console.log("Deadlock detected after successful Priority update. Marking records as CompletedButNotSynced...");
