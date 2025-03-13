@@ -601,7 +601,7 @@ const BatchDashboard: React.FC = () => {
                 <th>Time</th>
                 <th>Job Name</th>
                 <th>Table</th>
-                <th>Row ID</th>
+                <th>Row Id</th>
                 <th>Error</th>
               </tr>
             </thead>
