@@ -91,6 +91,14 @@ const formatDate = (dateString: string): string => {
   return date.format("DD/MM/YYYY HH:mm:ss");
 };
 
+const safeFormat = (
+  value: number | null | undefined,
+  useLocale = true
+): string => {
+  if (value == null) return "0";
+  return useLocale ? value.toLocaleString() : value.toString();
+};
+
 // Chart colors
 const COLORS = [
   "#4caf50",
@@ -390,37 +398,49 @@ const BatchDashboard: React.FC = () => {
           <SummaryGrid>
             <SummaryCard>
               <h3>Total Jobs</h3>
-              <p className="number">{summary.totalJobs}</p>
+              <p className="number">{safeFormat(summary.totalJobs)}</p>
             </SummaryCard>
             <SummaryCard className="success">
               <h3>Completed Jobs</h3>
-              <p className="number">{summary.completedJobs}</p>
+              <p className="number">{safeFormat(summary.completedJobs)}</p>
             </SummaryCard>
             <SummaryCard className="error">
               <h3>Failed Jobs</h3>
-              <p className="number">{summary.failedJobs}</p>
+              <p className="number">{safeFormat(summary.failedJobs)}</p>
             </SummaryCard>
             <SummaryCard className="in-progress">
               <h3>In Progress</h3>
-              <p className="number">{summary.inProgressJobs}</p>
+              <p className="number">{safeFormat(summary.inProgressJobs)}</p>
             </SummaryCard>
             <SummaryCard>
               <h3>Total Records</h3>
-              <p className="number">{summary.totalRecords.toLocaleString()}</p>
+              <p className="number">
+                {summary.totalRecords != null
+                  ? summary.totalRecords.toLocaleString()
+                  : "0"}
+              </p>
             </SummaryCard>
             <SummaryCard className="info">
               <h3>Success Rate</h3>
-              <p className="number">{summary.successRate.toFixed(2)}%</p>
+              <p className="number">
+                {summary.successRate != null
+                  ? summary.successRate.toFixed(2)
+                  : "0.00"}
+                %
+              </p>
             </SummaryCard>
             <SummaryCard className="info">
               <h3>Avg. Processing Time</h3>
               <p className="number">
-                {summary.averageProcessingTime.toFixed(2)}s
+                {summary.averageProcessingTime != null
+                  ? summary.averageProcessingTime.toFixed(2)
+                  : "0.00"}
+                s
               </p>
             </SummaryCard>
             <SummaryCard>
               <h3>Today's Jobs</h3>
-              <p className="number">{summary.todayJobs}</p>
+              <p className="number">{safeFormat(summary.todayJobs)}</p>
             </SummaryCard>
           </SummaryGrid>
 
