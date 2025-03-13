@@ -178,8 +178,13 @@ export class DatabaseService {
     data: any[],
     batchSize?: number,
     maxRetries?: number
-  ): Promise<void> {
-    if (data.length === 0) return;
+  ): Promise<{
+    success: boolean;
+    retryCount: number;
+    deadlockDetected: boolean;
+  }> {
+    if (data.length === 0)
+      return { success: true, retryCount: 0, deadlockDetected: false };
 
     // Get configuration values
     const config = await configService.getConfig();
@@ -187,6 +192,9 @@ export class DatabaseService {
     // Use provided values or fallback to config
     const effectiveBatchSize = batchSize || config.DB_BATCH_SIZE;
     const effectiveMaxRetries = maxRetries || config.MAX_RETRIES;
+
+    let hadDeadlock = false;
+    let totalRetries = 0;
 
     // Process in optimal chunks
     for (let i = 0; i < data.length; i += effectiveBatchSize) {
@@ -219,8 +227,10 @@ export class DatabaseService {
             (error as any)?.code === "EABORT";
 
           retries++;
+          totalRetries += 1;
 
           if (isDeadlock || isTransactionAbort) {
+            hadDeadlock = true;
             console.log(
               `❗ ${isDeadlock ? "Database deadlock" : "Transaction abort"} detected in batch ${i}-${i + batch.length}. Retry attempt ${retries}/${effectiveMaxRetries}...`
             );
@@ -257,6 +267,13 @@ export class DatabaseService {
         }
       }
     }
+
+    // Return information about the execution
+    return {
+      success: true,
+      retryCount: totalRetries,
+      deadlockDetected: hadDeadlock,
+    };
   }
 
   //--------------------------------------------------------------------------------

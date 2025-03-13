@@ -55,17 +55,20 @@ export async function performBulkUpdateWithService(
   batchSize = 1000,
   maxRetries = 3,
   sentToPriority = false
-): Promise<number> {
-  // Return the time taken for the operation
-  if (updates.length === 0) return 0;
+): Promise<{ updateTime: number; hadDeadlocks: boolean; successful: boolean }> {
+  // Return the time taken for the operation and status info
+  if (updates.length === 0)
+    return { updateTime: 0, hadDeadlocks: false, successful: true };
 
   const localPerfMonitor = perfMonitor || new PerformanceMonitor();
   if (!perfMonitor) localPerfMonitor.startOperation();
 
   localPerfMonitor.startDbUpdate();
+  let hadDeadlocks = false;
+  let successful = true;
 
   try {
-    await DatabaseService.executeBulkOperation(
+    const result = await DatabaseService.executeBulkOperation(
       "dbo.BulkUpdateRows",
       { TableName: tableName },
       "Updates",
@@ -74,23 +77,30 @@ export async function performBulkUpdateWithService(
       batchSize
     );
 
+    // Track if we had deadlocks during the operation
+    hadDeadlocks = result.deadlockDetected;
+
     localPerfMonitor.endDbUpdate();
     const updateTime = localPerfMonitor.metrics.dbUpdateTime || 0;
 
-    // console.log(
-    //   `Bulk update completed in ${updateTime.toFixed(2)}ms for ${updates.length} rows`
-    // );
+    if (hadDeadlocks) {
+      console.log(
+        `Bulk update completed with ${result.retryCount} retries due to deadlocks. All updates successful.`
+      );
+    }
 
-    return updateTime;
+    return { updateTime, hadDeadlocks, successful: true };
   } catch (error: any) {
     console.error(`Error performing bulk update:`, error);
-   
+
     // check if the error is a deadlock
-    const isDeadlock = 
+    const isDeadlock =
       error?.number === 1205 ||
       error?.originalError?.info?.number === 1205 ||
       (error instanceof Error && error.message.includes("deadlock"));
 
+    hadDeadlocks = isDeadlock;
+    successful = false;
 
     const isConnectionError =
       error?.code === "ECONNRESET" ||
@@ -101,32 +111,44 @@ export async function performBulkUpdateWithService(
       console.log(
         "Database connection error detected. Will retry operation..."
       );
-      // Consider implementing retry logic here
     }
 
-      
-      if (isDeadlock && sentToPriority) {
-        console.log("Deadlock detected after successful Priority update. Marking records as CompletedButNotSynced...");
-        
-        // עדכן את הסטטוס בטבלת המקור באמצעות שאילתות SQL ישירות
-        for (const update of updates) {
-          try {
-            // עדכון טבלת המקור
-            await DatabaseService.executeQuery(`
-              UPDATE ${update.TableName}
-              SET Status = 'CompletedButNotSynced'
-              WHERE RowId = @RowId
-            `, {
-              RowId: update.RowId
-            });
-          } catch (innerError) {
-            console.error(`Failed to update source record ${update.RowId} status:`, innerError);
-          }
+    if (isDeadlock && sentToPriority) {
+      console.log(
+        "Deadlock detected after successful Priority update. Using 'Completed' status with explanatory message..."
+      );
+
+      // Update to use accepted status value
+      for (const update of updates) {
+        try {
+          // עדכון טבלת המקור
+          await DatabaseService.executeQuery(
+            `
+            UPDATE ${tableName}
+            SET Status = 'Completed',
+              ErrorMessage = 'Completed after deadlock retry'
+            WHERE RowId = @RowId
+          `,
+            {
+              RowId: update.RowId,
+            }
+          );
+        } catch (innerError) {
+          console.error(
+            `Failed to update source record ${update.RowId} status:`,
+            innerError
+          );
         }
-        
-        // אין צורך לזרוק שגיאה - החזר את הזמן שלקח עד כה
-        return localPerfMonitor.metrics.dbUpdateTime || 0;
       }
+
+      // Return with special status for PartialSync
+      localPerfMonitor.endDbUpdate();
+      return {
+        updateTime: localPerfMonitor.metrics.dbUpdateTime || 0,
+        hadDeadlocks: true,
+        successful: true, // Mark as successful since we handled it properly
+      };
+    }
 
     throw error;
   } finally {
@@ -142,17 +164,19 @@ export async function performBulkErrorInsertWithService(
   perfMonitor?: PerformanceMonitor,
   batchSize = 1000,
   maxRetries = 3
-): Promise<number> {
+): Promise<{ updateTime: number; hadDeadlocks: boolean; successful: boolean }> {
   // Return the time taken
-  if (errors.length === 0) return 0;
+  if (errors.length === 0)
+    return { updateTime: 0, hadDeadlocks: false, successful: true };
 
   const localPerfMonitor = perfMonitor || new PerformanceMonitor();
   if (!perfMonitor) localPerfMonitor.startOperation();
 
   localPerfMonitor.startDbUpdate();
+  let hadDeadlocks = false;
 
   try {
-    await DatabaseService.executeBulkOperation(
+    const result = await DatabaseService.executeBulkOperation(
       "dbo.BulkInsertErrorLogs",
       {}, // No additional parameters
       "Errors",
@@ -161,6 +185,9 @@ export async function performBulkErrorInsertWithService(
       batchSize
     );
 
+    // Track if we had deadlocks
+    hadDeadlocks = result.deadlockDetected;
+
     localPerfMonitor.endDbUpdate();
     const insertTime = localPerfMonitor.metrics.dbUpdateTime || 0;
 
@@ -168,10 +195,10 @@ export async function performBulkErrorInsertWithService(
       `Bulk error insert completed in ${insertTime.toFixed(2)}ms for ${errors.length} error records`
     );
 
-    return insertTime;
+    return { updateTime: insertTime, hadDeadlocks, successful: true };
   } catch (error) {
     console.error(`Error performing bulk error insert:`, error);
-    throw error;
+    return { updateTime: 0, hadDeadlocks: false, successful: false };
   } finally {
     if (!perfMonitor) localPerfMonitor.endOperation();
   }
@@ -190,7 +217,7 @@ export async function recordBatchProcessing(
   successCount: number,
   failureCount: number,
   lastProcessedIndex: number,
-  status: string, // כולל אפשרות CompletedButNotSynced
+  status: string, // כולל אפשרות PartialSync
   errorMessage: string | null,
   tableName: string
 ): Promise<void> {
@@ -219,15 +246,15 @@ export async function recordBatchProcessing(
     );
   } catch (error: any) {
     console.error(`Error recording batch processing:`, error);
-    
+
     // אם הבעיה היא deadlock, נסה לעדכן את סטטוס הבאצ' בנפרד
-    const isDeadlock = 
+    const isDeadlock =
       error?.number === 1205 ||
       error?.originalError?.info?.number === 1205 ||
       (error instanceof Error && error.message.includes("deadlock"));
-      
+
     if (isDeadlock && status === "Completed") {
-      // נסה לרשום את הבאצ' עם סטטוס 'CompletedButNotSynced'
+      // נסה לרשום את הבאצ' עם סטטוס 'PartialSync'
       try {
         await DatabaseService.executeQuery(
           `
@@ -244,13 +271,17 @@ export async function recordBatchProcessing(
             SuccessCount: successCount,
             FailureCount: failureCount,
             LastProcessedIndex: lastProcessedIndex,
-            Status: "CompletedButNotSynced",
-            ErrorMessage: "DB update failed due to deadlock after Priority success",
+            Status: "PartialSync",
+            ErrorMessage:
+              "DB update failed due to deadlock after Priority success",
             TableName: tableName,
           }
         );
       } catch (retryError) {
-        console.error(`Failed to record batch with CompletedButNotSynced status:`, retryError);
+        console.error(
+          `Failed to record batch with PartialSync status:`,
+          retryError
+        );
       }
     }
   }

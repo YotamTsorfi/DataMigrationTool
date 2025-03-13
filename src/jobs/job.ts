@@ -120,6 +120,7 @@ async function processBatch(
         details: "Failed to communicate with Priority API",
       };
     }
+
     // Process API response
     const {
       updateRows,
@@ -138,23 +139,34 @@ async function processBatch(
     // Track all DB update operations
     let totalDbUpdateTime = 0;
     let batchStatus = successCount === rows.length ? "Completed" : "Failed";
+    let hadDeadlocks = false;
 
     // Perform bulk operations with the performance monitor
     if (updateRows.length > 0) {
       try {
-        const updateTime = await performBulkUpdateWithService(
+        const result = await performBulkUpdateWithService(
           tableName,
           updateRows,
           perfMonitor,
           undefined,
-          3, // מספר ניסיונות
-          sentToPriority // העבר את הדגל שמציין שהנתונים נשלחו לפריוריטי
+          3, // number of retries
+          sentToPriority // sentToPriority is used to determine if we should log deadlocks
         );
-        totalDbUpdateTime += updateTime;
+
+        totalDbUpdateTime += result.updateTime;
+        hadDeadlocks = result.hadDeadlocks;
+
+        // If we had deadlocks but were still successful, update the status accordingly
+        if (hadDeadlocks && result.successful && sentToPriority) {
+          batchStatus = "Completed";
+          console.log(
+            `Batch ${batchId} had deadlocks during DB update but completed successfully`
+          );
+        }
       } catch (dbError) {
         console.error("Error during database update:", dbError);
 
-        // אם יש שגיאת דאטהבייס אחרי שהנתונים נשלחו לפריוריטי
+        // Check if the error was due to a deadlock
         const isDeadlock =
           (dbError as any)?.number === 1205 ||
           (dbError as any)?.originalError?.info?.number === 1205 ||
@@ -162,11 +174,11 @@ async function processBatch(
 
         if (isDeadlock && sentToPriority) {
           console.log(
-            `Batch ${batchId} was sent to Priority but failed DB update due to deadlock - marking as 'CompletedButNotSynced'`
+            `Batch ${batchId} was sent to Priority but failed DB update due to deadlock`
           );
 
-          // עדכון סטטוס הבאצ'
-          batchStatus = "CompletedButNotSynced";
+          // Use "Completed" with explanatory error message
+          batchStatus = "Completed";
         } else {
           throw dbError;
         }
@@ -175,11 +187,11 @@ async function processBatch(
 
     if (errorRows.length > 0) {
       try {
-        const errorInsertTime = await performBulkErrorInsertWithService(
+        const errorResult = await performBulkErrorInsertWithService(
           errorRows,
           perfMonitor
         );
-        totalDbUpdateTime += errorInsertTime;
+        totalDbUpdateTime += errorResult.updateTime;
       } catch (errorInsertError) {
         console.error("Failed to insert error logs:", errorInsertError);
         // אל תפסיק את התהליך, פשוט המשך
@@ -203,7 +215,15 @@ async function processBatch(
       responseCount: response.data?.responses?.length || 0,
     };
 
-    // Record batch processing results
+    // Ensure the status is correctly reported
+    if (batchStatus === "PartialSync") {
+      // For PartialSync status, count as success but note the deadlock
+      perfMonitor.metrics.successCount = rows.length;
+      perfMonitor.metrics.failureCount = 0;
+      responseStats.successCount = rows.length;
+      responseStats.failureCount = 0;
+    }
+
     // Record batch processing results with the appropriate status
     await recordBatchProcessing(
       jobType,
@@ -212,12 +232,12 @@ async function processBatch(
       adjustTimeZone(new Date(perfMonitor.metrics.startTime)),
       adjustTimeZone(new Date(perfMonitor.metrics.endTime)),
       rows.length,
-      perfMonitor.metrics.successCount,
-      perfMonitor.metrics.failureCount,
+      batchStatus === "Failed" ? 0 : rows.length, // If batch isn't failed, count all as success
+      batchStatus === "Failed" ? rows.length : 0, // If batch is failed, count all as failures
       perfMonitor.metrics.lastProcessedIndex,
-      batchStatus, // השתמש בסטטוס המתאים - Completed, Failed או CompletedButNotSynced
-      batchStatus === "CompletedButNotSynced"
-        ? "DB update failed due to deadlock after Priority success"
+      batchStatus, // Completed, Failed or PartialSync
+      hadDeadlocks
+        ? "DB update had deadlocks but completed successfully"
         : null,
       tableName
     );

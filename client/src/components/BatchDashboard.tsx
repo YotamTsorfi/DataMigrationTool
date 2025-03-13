@@ -59,6 +59,7 @@ interface BatchRecord {
   TableName: string;
   JobId: string;
   LastProcessedIndex: number;
+  ErrorMessage: string;
 }
 
 interface ErrorRecord {
@@ -555,6 +556,7 @@ const BatchDashboard: React.FC = () => {
                 <th>Last Index</th>
                 <th>Success</th>
                 <th>Failure</th>
+                <th>Error Message</th>
                 <th>Table</th>
               </tr>
             </thead>
@@ -579,6 +581,7 @@ const BatchDashboard: React.FC = () => {
                   </td>
                   <td>{batch.SuccessCount != null ? batch.SuccessCount : 0}</td>
                   <td>{batch.FailureCount != null ? batch.FailureCount : 0}</td>
+                  <td>{batch.ErrorMessage}</td>
                   <td>{batch.TableName}</td>
                 </tr>
               ))}
