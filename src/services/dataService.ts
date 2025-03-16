@@ -217,13 +217,29 @@ export async function recordBatchProcessing(
   successCount: number,
   failureCount: number,
   lastProcessedIndex: number,
-  status: string, // כולל אפשרות PartialSync
+  status: string,
   errorMessage: string | null,
   tableName: string
 ): Promise<void> {
   const recordStartTime = Date.now();
 
   try {
+    // Ensure status is correct based on success/failure/PartialSync counts
+    let finalStatus = status;
+
+    // If we have mixed results (both successes and failures)
+    if (successCount > 0 && failureCount > 0) {
+      finalStatus = "PartialSync";
+    }
+    // If all records succeeded
+    else if (successCount === totalRecords) {
+      finalStatus = "Completed";
+    }
+    // If all records failed
+    else if (failureCount === totalRecords) {
+      finalStatus = "Failed";
+    }
+
     await DatabaseService.executeQuery(
       `
       INSERT INTO PriorityBatchProcessing (JobName, BatchId, StartTime, EndTime, TotalRecords, SuccessCount, FailureCount, LastProcessedIndex, Status, ErrorMessage, TableName, JobId)
@@ -239,7 +255,7 @@ export async function recordBatchProcessing(
         SuccessCount: successCount,
         FailureCount: failureCount,
         LastProcessedIndex: lastProcessedIndex,
-        Status: status,
+        Status: finalStatus,
         ErrorMessage: errorMessage,
         TableName: tableName,
       }
@@ -253,7 +269,7 @@ export async function recordBatchProcessing(
       error?.originalError?.info?.number === 1205 ||
       (error instanceof Error && error.message.includes("deadlock"));
 
-    if (isDeadlock && status === "Completed") {
+    if (isDeadlock) {
       // נסה לרשום את הבאצ' עם סטטוס 'PartialSync'
       try {
         await DatabaseService.executeQuery(
@@ -268,8 +284,8 @@ export async function recordBatchProcessing(
             StartTime: startTime,
             EndTime: endTime,
             TotalRecords: totalRecords,
-            SuccessCount: successCount,
-            FailureCount: failureCount,
+            SuccessCount: totalRecords, // Count all as success
+            FailureCount: 0, // No failures
             LastProcessedIndex: lastProcessedIndex,
             Status: "PartialSync",
             ErrorMessage:

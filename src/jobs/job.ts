@@ -138,7 +138,8 @@ async function processBatch(
 
     // Track all DB update operations
     let totalDbUpdateTime = 0;
-    let batchStatus = successCount === rows.length ? "Completed" : "Failed";
+    // If we sent to Priority successfully, mark batch as Completed regardless of response details
+    let batchStatus = sentToPriority ? "Completed" : "Failed";
     let hadDeadlocks = false;
 
     // Perform bulk operations with the performance monitor
@@ -156,7 +157,7 @@ async function processBatch(
         totalDbUpdateTime += result.updateTime;
         hadDeadlocks = result.hadDeadlocks;
 
-        // If we had deadlocks but were still successful, update the status accordingly
+        // If we had deadlocks but were still successful, maintain the Completed status
         if (hadDeadlocks && result.successful && sentToPriority) {
           batchStatus = "Completed";
           console.log(
@@ -232,10 +233,10 @@ async function processBatch(
       adjustTimeZone(new Date(perfMonitor.metrics.startTime)),
       adjustTimeZone(new Date(perfMonitor.metrics.endTime)),
       rows.length,
-      batchStatus === "Failed" ? 0 : rows.length, // If batch isn't failed, count all as success
-      batchStatus === "Failed" ? rows.length : 0, // If batch is failed, count all as failures
+      perfMonitor.metrics.successCount,
+      perfMonitor.metrics.failureCount,
       perfMonitor.metrics.lastProcessedIndex,
-      batchStatus, // Completed, Failed or PartialSync
+      batchStatus, // Completed or Failed
       hadDeadlocks
         ? "DB update had deadlocks but completed successfully"
         : null,
@@ -251,7 +252,11 @@ async function processBatch(
       success: true,
       message: "Batch created successfully",
       rowsCount: rows.length,
-      responseStats: responseStats,
+      responseStats: {
+        successCount: sentToPriority ? rows.length : 0,
+        failureCount: sentToPriority ? 0 : rows.length,
+        responseCount: response.data?.responses?.length || 0,
+      },
       requestSize: perfMonitor.metrics.requestSize,
       responseSize: perfMonitor.metrics.responseSize,
       duration: perfMonitor.metrics.duration,

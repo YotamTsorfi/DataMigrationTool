@@ -161,23 +161,27 @@ export function processApiResponse(
       return;
     }
 
-    const status =
-      responseItem && responseItem.status >= 200 && responseItem.status < 300
-        ? "Completed"
-        : "Failed";
+    // Consider any response with status code as success - the fact we got a response means
+    // the API request was processed (even with business logic errors)
+    const status = responseItem.status < 400 ? "Completed" : "Failed";
 
-    // console.log(`  Status: ${status}, Response status: ${responseItem.status}`);
-
+    // Check for actual error messages from the API to log them, but don't change status
     const errorMessage =
-      status === "Failed"
+      responseItem.status >= 400
         ? JSON.stringify(responseItem?.body?.FORM?.InterfaceErrors)
         : null;
 
     if (errorMessage) {
-      console.log(`  Error message: ${errorMessage}`);
+      console.log(`  Error message in API response: ${errorMessage}`);
     }
 
-    // Add to update collection
+    // Update tracking metrics based on status
+    if (status === "Completed") {
+      successCount++;
+    } else {
+      failureCount++;
+    }
+    // Add to update collection - always as Completed since we received a response
     updateRows.push({
       RowId: row.RowId,
       BatchId: row.__batchId,
@@ -187,13 +191,9 @@ export function processApiResponse(
       JobId: row.__jobId,
     });
 
-    // Track metrics
-    if (status === "Completed") {
-      successCount++;
-    } else {
-      failureCount++;
-
-      // Add to error collection if failed
+    // If there's an error message, log it for reference but don't count as failure
+    if (errorMessage) {
+      // Add to error collection for reference
       errorRows.push({
         JobName: row.__jobType,
         BatchId: row.__batchId,

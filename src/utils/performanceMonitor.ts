@@ -171,7 +171,10 @@ class PerformanceMonitor {
     } else {
       this.metrics.errorType = "Unknown";
     }
-    this.metrics.success = false;
+
+    // Don't automatically set success to false - let the calling code determine success/failure
+    // based on context (whether API received the request or not)
+    // this.metrics.success = false;
 
     console.error("Error Metrics:", {
       type: this.metrics.errorType,
