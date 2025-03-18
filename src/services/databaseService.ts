@@ -177,7 +177,8 @@ export class DatabaseService {
     tvpType: string,
     data: any[],
     batchSize?: number,
-    maxRetries?: number
+    maxRetries?: number,
+    batchId?: string
   ): Promise<{
     success: boolean;
     retryCount: number;
@@ -208,6 +209,9 @@ export class DatabaseService {
       let retries = 0;
       let success = false;
 
+      // Get batch identifier for logs
+      const batchIdentifier = batchId ? `batch ${batchId}` : "batch";
+
       while (!success && retries < effectiveMaxRetries) {
         try {
           await this.executeStoredProcedure(procedureName, batchParams);
@@ -232,7 +236,7 @@ export class DatabaseService {
           if (isDeadlock || isTransactionAbort) {
             hadDeadlock = true;
             console.log(
-              `❗ ${isDeadlock ? "Database deadlock" : "Transaction abort"} detected in batch ${i}-${i + batch.length}. Retry attempt ${retries}/${effectiveMaxRetries}...`
+              `❗ ${isDeadlock ? "Database deadlock" : "Transaction abort"} detected in Batch ${batchIdentifier}. Retry attempt ${retries}/${effectiveMaxRetries}...`
             );
           } else {
             // Truncate very long error messages
@@ -244,13 +248,13 @@ export class DatabaseService {
                 : "Unknown error";
 
             console.error(
-              `❌ Error in batch ${i}-${i + batch.length}, retry ${retries}/${effectiveMaxRetries}: ${errorMsg}`
+              `❌ Error in Batch ${batchIdentifier}, retry ${retries}/${effectiveMaxRetries}: ${errorMsg}`
             );
           }
 
           if (retries >= effectiveMaxRetries) {
             console.error(
-              `⛔ Maximum retries (${effectiveMaxRetries}) reached for batch ${i}-${i + batch.length}. Giving up.`
+              `⛔ Maximum retries (${effectiveMaxRetries}) reached for ${batchIdentifier}. Giving up.`
             );
             throw error;
           }
