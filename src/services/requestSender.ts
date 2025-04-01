@@ -180,8 +180,18 @@ export function processApiResponse(
       successCount++;
     } else {
       failureCount++;
+
+      // Add to error collection for ALL failed responses regardless of error message
+      errorRows.push({
+        JobName: row.__jobType,
+        BatchId: row.__batchId,
+        TableName: row.__tableName,
+        RowId: row.RowId,
+        Error: errorMessage || "Failed without specific error message",
+        JobId: row.__jobId,
+      });
     }
-    // Add to update collection - always as Completed since we received a response
+    // Add to update collection - always add status information
     updateRows.push({
       RowId: row.RowId,
       BatchId: row.__batchId,
@@ -190,19 +200,6 @@ export function processApiResponse(
       ErrorMessage: errorMessage,
       JobId: row.__jobId,
     });
-
-    // If there's an error message, log it for reference but don't count as failure
-    if (errorMessage) {
-      // Add to error collection for reference
-      errorRows.push({
-        JobName: row.__jobType,
-        BatchId: row.__batchId,
-        TableName: row.__tableName,
-        RowId: row.RowId,
-        Error: errorMessage || "",
-        JobId: row.__jobId,
-      });
-    }
 
     lastProcessedIndex = row.RowId;
   });
