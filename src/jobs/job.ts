@@ -194,8 +194,7 @@ async function processBatch(
         );
         totalDbUpdateTime += errorResult.updateTime;
       } catch (errorInsertError) {
-        console.error("Failed to insert error logs:", errorInsertError);
-        // אל תפסיק את התהליך, פשוט המשך
+        console.error("Failed to insert error logs:", errorInsertError);        
       }
     }
 

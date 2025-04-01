@@ -16,6 +16,10 @@ export async function fetchDataChunk(
     SELECT TOP (${chunkSize}) RowId, Data
     FROM ${tableName}
     WHERE Status IS NULL AND RowId > ${lastRowId}
+    AND
+    is_eligible = 1
+    AND
+    is_new = 1
     ORDER BY RowId ASC
   `;
 
