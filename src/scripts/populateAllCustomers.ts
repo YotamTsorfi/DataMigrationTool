@@ -7,17 +7,20 @@ async function generateCustomers(count: number) {
   for (let i = 0; i < count; i++) {
     const customer = {
       Data: JSON.stringify({
-        CUSTDES: `לקוח API חדש ${i + 1}`,
+        CUSTDES: `לקוח API_GCC ${i + 1}`,
         STATDES: "פעיל",
         OWNERLOGIN: "tabula",
-        WTAXNUM: `30794333${i + 1}`, // Added i+1 to make WTAXNUM unique   
-        STATUSDATE: `2024-01-${i + 2 < 10 ? '0' + (i + 2) : i + 2}T00:00:00+02:00`
+        CTYPECODE: "4",
+        PHONE: "0503322321",
+        EMAIL: "papa131@gmail.com",
+        PAYCODE: "01",
+        WTAXNUM: `78882${i + 1}`,
+        STATUSDATE: "2024-04-18T00:00:00+02:00",
       }),
     };
 
     customers.push(customer);
 
-    // Log progress every 200 records
     if (i > 0 && i % 200 === 0) {
       console.log(
         `Generated ${i} of ${count} customer records (${Math.floor((i / count) * 100)}%)...`
@@ -40,7 +43,7 @@ async function populateTable() {
   console.log("Database connection established.");
 
   console.log("Generating customer data...");
-  const customers = await generateCustomers(1000); // Adjust the number of customers as needed
+  const customers = await generateCustomers(3000); // Adjust the number of customers as needed
 
   console.log("Beginning database insertion...");
   try {

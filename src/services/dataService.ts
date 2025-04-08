@@ -15,11 +15,15 @@ export async function fetchDataChunk(
   const query = `
     SELECT TOP (${chunkSize}) RowId, Data
     FROM ${tableName}
-    WHERE Status IS NULL AND RowId > ${lastRowId}
+    WHERE
+    -- Status IS NULL     
+    -- AND 
+    RowId > ${lastRowId}
     AND
     is_eligible = 1
     AND
     is_new = 1
+    AND Status != 'Completed'
     ORDER BY RowId ASC
   `;
 

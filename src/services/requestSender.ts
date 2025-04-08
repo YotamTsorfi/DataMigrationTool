@@ -37,7 +37,7 @@ export async function sendBatchRequest(
         batchBody,
         {
           headers,
-          timeout: 30000, // 30 seconds timeout
+          timeout: 60000, // 60 seconds timeout
           httpAgent,
           httpsAgent,
         }
@@ -78,7 +78,15 @@ export async function sendBatchRequest(
           (error.response?.status && error.response.status >= 500))
       ) {
         retryCount++;
-        console.log(`Retry attempt ${retryCount} after error: ${errorMessage}`);
+        const errorType = error.code;
+        const url = error.config?.url || "unknown URL";
+        const dataSize = batchBody
+          ? Math.round(batchBody.length / 1024)
+          : "unknown";
+
+        console.log(
+          `Retry attempt ${retryCount} after ${errorType} error: ${errorMessage}. URL: ${url}, Data size: ${dataSize}KB`
+        );
 
         // Exponential backoff
         const delay = 1000 * Math.pow(2, retryCount);
@@ -165,14 +173,56 @@ export function processApiResponse(
     // the API request was processed (even with business logic errors)
     const status = responseItem.status < 400 ? "Completed" : "Failed";
 
-    // Check for actual error messages from the API to log them, but don't change status
-    const errorMessage =
-      responseItem.status >= 400
-        ? JSON.stringify(responseItem?.body?.FORM?.InterfaceErrors)
-        : null;
+    // שינוי כאן: חילוץ קוד השגיאה בנוסף להודעת השגיאה
+    let errorMessage = null;
+    let errorStatus = null;
+
+    if (responseItem.status >= 400) {
+      // נסה לחלץ את קוד השגיאה
+      errorStatus = responseItem.status.toString();
+
+      // אם יש גם קוד שגיאה פנימי, השתמש בו
+      if (responseItem?.body?.error?.code) {
+        errorStatus = responseItem.body.error.code;
+      }
+
+      // חלץ את הודעת השגיאה - מטפל במספר תבניות אפשריות
+      let errorSource = null;
+
+      // בדיקה האם השגיאה נמצאת בפורמט XML/FORM
+      if (responseItem?.body?.FORM?.InterfaceErrors) {
+        if (responseItem.body.FORM.InterfaceErrors.text) {
+          // מקרה שבו יש שדה text מפורש
+          errorSource = responseItem.body.FORM.InterfaceErrors.text;
+        } else {
+          // אחרת קח את כל אובייקט ה-InterfaceErrors
+          errorSource = responseItem.body.FORM.InterfaceErrors;
+        }
+      }
+      // בדיקה האם השגיאה במבנה error.message
+      else if (responseItem?.body?.error?.message) {
+        errorSource = responseItem.body.error.message;
+      }
+      // בדיקה האם השגיאה היא האובייקט error עצמו
+      else if (responseItem?.body?.error) {
+        errorSource = responseItem.body.error;
+      }
+      // אם אין מקור שגיאה מזוהה
+      else {
+        errorSource = "Unknown error structure";
+      }
+
+      // אם המקור הוא מחרוזת, השתמש בה ישירות, אחרת המר ל-JSON
+      errorMessage =
+        typeof errorSource === "string"
+          ? errorSource
+          : JSON.stringify(errorSource);
+    }
 
     if (errorMessage) {
-      console.log(`  Error message in API response: ${errorMessage}`);
+      console.log(
+        `  Error message in API response: ${errorMessage}, Status: ${errorStatus}`
+      );
     }
 
     // Update tracking metrics based on status
@@ -189,6 +239,7 @@ export function processApiResponse(
         RowId: row.RowId,
         Error: errorMessage || "Failed without specific error message",
         JobId: row.__jobId,
+        ErrorStatus: errorStatus,
       });
     }
     // Add to update collection - always add status information

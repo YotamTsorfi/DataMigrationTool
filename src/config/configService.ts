@@ -15,7 +15,7 @@ class ConfigurationService {
   private config: SystemConfig = {
     CONCURRENT_BATCHES: 10, // Default value
     BATCH_SIZE: 100, // Default value
-    DELAY_BETWEEN_BATCHES: 500, // Default value
+    DELAY_BETWEEN_BATCHES: 800, // Default value
     DB_BATCH_SIZE: 1000, // Default database batch size
     MAX_RETRIES: 3, // Default retries for deadlocks
   };
