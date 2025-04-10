@@ -102,7 +102,6 @@ router.get(
     }
   }
 );
-
 //-----------------------------------
 router.get(
   "/progress/:jobId",
@@ -137,4 +136,142 @@ router.get(
     });
   }
 );
+//-----------------------------------
+
+// Add a route to specify processing type
+router.post(
+  "/start-with-type/:type",
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { type } = req.params;
+      const jobRequest = req.body;
+
+      // Validate processing type
+      if (type !== "batch" && type !== "queue") {
+        res.status(400).json({
+          success: false,
+          error: "Processing type must be 'batch' or 'queue'",
+        });
+        return;
+      }
+
+      // Add processing type to job request
+      jobRequest.processingType = type;
+
+      const jobManager = new JobManager();
+      const jobId = await jobManager.createJob(jobRequest);
+
+      // Start job asynchronously
+      jobManager
+        .startJob(jobId, jobRequest)
+        .catch((error) => console.error(`Error running job ${jobId}:`, error));
+
+      res.status(202).json({
+        success: true,
+        jobId,
+        message: `Job started with ${type} processing, check progress via status endpoint`,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: formatErrorMessage(error),
+      });
+    }
+  }
+);
+
+// Get system configuration
+router.get("/config", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await DatabaseService.executeQuery(
+      `SELECT * FROM PrioritySystemConfig ORDER BY ConfigId`
+    );
+
+    res.status(200).json({
+      success: true,
+      config: result,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: formatErrorMessage(error),
+    });
+  }
+});
+
+// Update system configuration
+router.put(
+  "/config/:key",
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { key } = req.params;
+      const { value } = req.body;
+
+      await DatabaseService.executeQuery(
+        `UPDATE PrioritySystemConfig SET ConfigValue = @Value WHERE ConfigKey = @Key`,
+        {
+          Key: key,
+          Value: value,
+        }
+      );
+
+      res.status(200).json({
+        success: true,
+        message: `Configuration ${key} updated to ${value}`,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: formatErrorMessage(error),
+      });
+    }
+  }
+);
+
+// update grid configuration
+router.put(
+  "/config/grid",
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { horizontalBatchSize, verticalBatchSize } = req.body;
+
+      // Validate inputs
+      if (!horizontalBatchSize || !verticalBatchSize) {
+        res.status(400).json({
+          success: false,
+          error: "Both horizontalBatchSize and verticalBatchSize are required",
+        });
+        return;
+      }
+
+      // Update horizontal batch size
+      await DatabaseService.executeQuery(
+        `UPDATE PrioritySystemConfig SET ConfigValue = @Value WHERE ConfigKey = 'HORIZONTAL_BATCH_SIZE'`,
+        {
+          Value: horizontalBatchSize.toString(),
+        }
+      );
+
+      // Update vertical batch size
+      await DatabaseService.executeQuery(
+        `UPDATE PrioritySystemConfig SET ConfigValue = @Value WHERE ConfigKey = 'VERTICAL_BATCH_SIZE'`,
+        {
+          Value: verticalBatchSize.toString(),
+        }
+      );
+
+      res.status(200).json({
+        success: true,
+        message: `Grid configuration updated: Horizontal=${horizontalBatchSize}, Vertical=${verticalBatchSize}`,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: formatErrorMessage(error),
+      });
+    }
+  }
+);
+
+
 export default router;

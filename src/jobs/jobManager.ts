@@ -2,6 +2,7 @@ import { DatabaseService } from "../services/databaseService";
 import { v4 as uuidv4 } from "uuid";
 import { processBatches } from "../jobs/job";
 import ProgressTracker from "../utils/progressTracker";
+import { processWithQueues } from "../jobs/queueJob";
 
 interface JobRequest {
   recordCount: number;
@@ -9,6 +10,7 @@ interface JobRequest {
   tableName: string;
   priorityScreenName: string;
   jobType: string;
+  processingType?: string;
 }
 
 type JobStatus = "Queued" | "Running" | "Completed" | "Failed";
@@ -25,8 +27,8 @@ class JobManager {
 
     await DatabaseService.executeQuery(
       `
-      INSERT INTO PriorityJobsHistory (JobId, JobName, TableName, ScreenName, StartTime, TotalRecords, Status)
-      VALUES (@JobId, @JobName, @TableName, @ScreenName, @StartTime, @TotalRecords, @Status)
+      INSERT INTO PriorityJobsHistory (JobId, JobName, TableName, ScreenName, StartTime, TotalRecords, Status, ProcessingType)
+      VALUES (@JobId, @JobName, @TableName, @ScreenName, @StartTime, @TotalRecords, @Status,  @ProcessingType)
     `,
       {
         JobId: jobId,
@@ -36,6 +38,7 @@ class JobManager {
         StartTime: adjustTimeZone(new Date()),
         TotalRecords: jobRequest.recordCount,
         Status: "Queued",
+        ProcessingType: jobRequest.processingType || "batch", // Default to "batch" if not provided
       }
     );
 
@@ -70,6 +73,13 @@ class JobManager {
   async startJob(jobId: string, jobRequest: JobRequest): Promise<any> {
     const jobStartTime = Date.now();
     //console.log(`Job ${jobId} starting at: ${new Date().toISOString()}`);
+
+    console.log(`Job ${jobId} starting with request:`, {
+      recordCount: jobRequest.recordCount,
+      tableName: jobRequest.tableName,
+      processingType: jobRequest.processingType || "default not set",
+    });
+
     const formatDateTime = (date: Date): string => {
       const day = date.getDate().toString().padStart(2, "0");
       const month = (date.getMonth() + 1).toString().padStart(2, "0");
@@ -86,6 +96,18 @@ class JobManager {
 
     await this.updateJobStatus(jobId, "Running");
 
+    const processingType =
+      jobRequest.processingType || (await this.getDefaultProcessingType());
+    console.log(`Job ${jobId} using processing type: ${processingType}`);
+
+    await DatabaseService.executeQuery(
+      `UPDATE PriorityJobsHistory SET ProcessingType = @ProcessingType WHERE JobId = @JobId`,
+      {
+        ProcessingType: processingType,
+        JobId: jobId,
+      }
+    );
+
     // console.log(
     //   `Job ${jobId} status updated to Running at: ${new Date().toISOString()}`
     // );
@@ -94,18 +116,32 @@ class JobManager {
     ProgressTracker.initJob(jobId, jobRequest.recordCount);
 
     const batchStartTime = Date.now();
+
     // console.log(
     //   `Job ${jobId} starting batch processing at: ${new Date().toISOString()}`
     // );
 
-    const results = await processBatches(
-      jobRequest.recordCount,
-      jobRequest.startRow,
-      jobRequest.tableName,
-      jobRequest.priorityScreenName,
-      jobRequest.jobType,
-      jobId
-    );
+    let results;
+    if (processingType === "queue") {
+      results = await processWithQueues(
+        jobRequest.recordCount,
+        jobRequest.startRow,
+        jobRequest.tableName,
+        jobRequest.priorityScreenName,
+        jobRequest.jobType,
+        jobId
+      );
+    } else {
+      // Default to batch processing
+      results = await processBatches(
+        jobRequest.recordCount,
+        jobRequest.startRow,
+        jobRequest.tableName,
+        jobRequest.priorityScreenName,
+        jobRequest.jobType,
+        jobId
+      );
+    }
 
     const batchEndTime = Date.now();
     const batchDurationSec = ((batchEndTime - batchStartTime) / 1000).toFixed(
@@ -116,10 +152,13 @@ class JobManager {
     );
 
     const totalSuccess = results.reduce(
-      (acc, result) => acc + (result.success ? 1 : 0),
+      (acc, result) => acc + (result.successCount || (result.success ? 1 : 0)),
       0
     );
-    const totalFailures = results.length - totalSuccess;
+    const totalFailures = results.reduce(
+      (acc, result) => acc + (result.failureCount || (result.success ? 0 : 1)),
+      0
+    );
 
     // Mark job as complete in progress tracker
     ProgressTracker.completeJob(jobId, totalSuccess, totalFailures);
@@ -142,15 +181,32 @@ class JobManager {
     return results;
   }
 
+  //   ----------------------------
   async startMultipleJobs(jobRequests: JobRequest[]): Promise<any[]> {
-    const jobPromises = jobRequests.map(async (jobRequest) => {
-      const jobId = await this.createJob(jobRequest);
-      return this.startJob(jobId, jobRequest);
-    });
-
-    return Promise.all(jobPromises);
+    const results = [];
+    for (const request of jobRequests) {
+      const jobId = await this.createJob(request);
+      const result = await this.startJob(jobId, request);
+      results.push({ jobId, result });
+    }
+    return results;
   }
   //   ----------------------------
+  // Get default processing type from system configuration
+  private async getDefaultProcessingType(): Promise<string> {
+    try {
+      const result = await DatabaseService.executeQuery(
+        `SELECT ConfigValue FROM PrioritySystemConfig WHERE ConfigKey = 'PROCESSING_TYPE'`
+      );
+
+      return result && result[0]
+        ? (result[0] as { ConfigValue: string }).ConfigValue
+        : "batch";
+    } catch (error) {
+      console.error("Error fetching default processing type:", error);
+      return "batch"; // Default to batch processing if we can't get the config
+    }
+  }
 }
 
 export { JobManager };

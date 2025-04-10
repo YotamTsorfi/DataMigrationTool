@@ -68,3 +68,10 @@ CREATE TABLE dbo.PrioritySystemConfig (
     AllowedValues NVARCHAR(MAX) NULL
 );
 
+
+ALTER TABLE dbo.PriorityJobsHistory
+ADD ProcessingType NVARCHAR(20) DEFAULT 'batch';
+
+-- Add unique constraint on ConfigKey
+ALTER TABLE dbo.PrioritySystemConfig
+ADD CONSTRAINT UQ_ConfigKey UNIQUE (ConfigKey);

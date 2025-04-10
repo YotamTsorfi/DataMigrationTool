@@ -9,8 +9,9 @@ import {
   InputLabel,
   Button,
   ReadOnlyInput,
+  RadioGroup,
+  RadioButton,
 } from "./BatchProcessorStyles";
-// import BatchDashboard from "./BatchDashboard";
 import ConfigPanel from "./ConfigPanel";
 import JobProgressTracker from "./JobProgressTracker";
 //---------------------------------------------
@@ -22,12 +23,10 @@ interface JobType {
   ScreenName: string;
 }
 
-interface JobRequest {
-  recordCount: number;
-  startRow: number;
-  tableName: string;
-  priorityScreenName: string;
-  jobType: string;
+interface ConfigItem {
+  ConfigKey: string;
+  ConfigValue: string;
+  Description?: string;
 }
 
 const BatchProcessor: React.FC = () => {
@@ -38,6 +37,7 @@ const BatchProcessor: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [jobTypes, setJobTypes] = useState<JobType[]>([]);
   const [selectedJobType, setSelectedJobType] = useState("");
+  const [processingType, setProcessingType] = useState<string>("batch");
   //---------------------------------------------
 
   useEffect(() => {
@@ -50,9 +50,35 @@ const BatchProcessor: React.FC = () => {
       }
     };
 
-    fetchJobTypes();
-  }, []);
+    const fetchProcessingType = async () => {
+      try {
+        // Only fetch the processing type config instead of all configs
+        const response = await axios.get("http://localhost:3001/config");
+        const defaultProcessingType = response.data.find(
+          (item: ConfigItem) => item.ConfigKey === "PROCESSING_TYPE"
+        );
+        if (defaultProcessingType) {
+          setProcessingType(defaultProcessingType.ConfigValue);
+        }
+      } catch (error) {
+        console.error("Error fetching processing type:", error);
+      }
+    };
 
+    fetchJobTypes();
+    fetchProcessingType();
+  }, []);
+  //---------------------------------------------
+  // const refreshSystemConfig = async () => {
+  //   try {
+  //     const response = await axios.get("http://localhost:3001/job/config");
+  //     if (response.data.success && response.data.config) {
+  //       setSystemConfig(response.data.config);
+  //     }
+  //   } catch (error) {
+  //     console.error("Error refreshing system configuration:", error);
+  //   }
+  // };
   //---------------------------------------------
   const handleJobTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedJob = jobTypes.find(
@@ -67,82 +93,44 @@ const BatchProcessor: React.FC = () => {
     }
     setSelectedJobType(e.target.value);
   };
-
+  //---------------------------------------------
+  const handleProcessingTypeChange = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    setProcessingType(e.target.value);
+  };
+  //---------------------------------------------
   const handleBatchProcess = async () => {
     if (!tableName || !priorityScreenName) {
       toast.error("Table Name and Priority Screen Name are required.");
       return;
     }
-
     setIsProcessing(true);
 
     try {
-      await axios.post("http://localhost:3001/job/run-job", {
-        recordCount,
-        startRow,
-        tableName,
-        priorityScreenName,
-        jobType: selectedJobType,
-      });
-    } catch (error) {
-      console.error("Batch process error:", error);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const [selectedJobTypes, setSelectedJobTypes] = useState<string[]>([]);
-  const [jobRequests, setJobRequests] = useState<JobRequest[]>([]);
-
-  const handleMultipleJobTypeChange = (
-    e: React.ChangeEvent<HTMLSelectElement>
-  ) => {
-    const selectedOptions = Array.from(
-      e.target.selectedOptions,
-      (option) => option.value
-    );
-    setSelectedJobTypes(selectedOptions);
-
-    const newJobRequests = selectedOptions.map((jobType) => {
-      const selectedJob = jobTypes.find((job) => job.JobTypeName === jobType);
-      return {
-        recordCount: 100,
-        startRow: 1,
-        tableName: selectedJob?.DBTableName || "",
-        priorityScreenName: selectedJob?.ScreenName || "",
-        jobType,
-      };
-    });
-
-    setJobRequests(newJobRequests);
-  };
-
-  const handleJobRequestChange = (index: number, field: string, value: any) => {
-    const newJobRequests = [...jobRequests];
-    newJobRequests[index] = { ...newJobRequests[index], [field]: value };
-    setJobRequests(newJobRequests);
-  };
-
-  const handleMultipleBatchProcess = async () => {
-    if (jobRequests.some((job) => !job.tableName || !job.priorityScreenName)) {
-      toast.error("All jobs must have Table Name and Priority Screen Name.");
-      return;
-    }
-
-    setIsProcessing(true);
-
-    try {
+      // Use the specific endpoint for processing type
       await axios.post(
-        "http://localhost:3001/job/run-multiple-jobs",
-        jobRequests
+        `http://localhost:3001/job/start-with-type/${processingType}`,
+        {
+          recordCount,
+          startRow,
+          tableName,
+          priorityScreenName,
+          jobType: selectedJobType,
+        }
       );
+
+      // toast.success(`Job started using ${processingType} processing`);
     } catch (error) {
       console.error("Batch process error:", error);
+      toast.error(
+        `Failed to start job: ${error instanceof Error ? error.message : "Unknown error"}`
+      );
     } finally {
       setIsProcessing(false);
     }
   };
-
+  //---------------------------------------------
   return (
     <div>
       <ToastContainer />
@@ -152,6 +140,40 @@ const BatchProcessor: React.FC = () => {
         </SectionContainer>
         <SectionContainer>
           <h2>Batch Processor</h2>
+
+          <InputContainer>
+            <h3>Processing Type</h3>
+            <RadioGroup>
+              <RadioButton>
+                <input
+                  type="radio"
+                  name="processingType"
+                  value="batch"
+                  checked={processingType === "batch"}
+                  onChange={handleProcessingTypeChange}
+                />
+                <label>Batch Processing</label>
+                <div className="info-tooltip">
+                  Creates batches of records and processes them in parallel
+                </div>
+              </RadioButton>
+              <RadioButton>
+                <input
+                  type="radio"
+                  name="processingType"
+                  value="queue"
+                  checked={processingType === "queue"}
+                  onChange={handleProcessingTypeChange}
+                />
+                <label>Queue Processing (Grid Model)</label>
+                <div className="info-tooltip">
+                  Grid-based processing with horizontal (parallel) and vertical
+                  (sequential) batches
+                </div>
+              </RadioButton>
+            </RadioGroup>
+          </InputContainer>
+
           <InputContainer>
             <InputLabel>
               Job Type:
@@ -205,95 +227,12 @@ const BatchProcessor: React.FC = () => {
             disabled={isProcessing}
             className={`process-button ${isProcessing ? "processing" : ""}`}
           >
-            {isProcessing ? "Processing..." : "Process Batch"}
+            {isProcessing
+              ? "Processing..."
+              : `Process with ${processingType.charAt(0).toUpperCase() + processingType.slice(1)}`}
           </Button>
         </SectionContainer>
 
-        <SectionContainer>
-          <h2>Run Multiple Jobs</h2>
-          <InputContainer>
-            <InputLabel>
-              Job Types:
-              <select
-                multiple
-                value={selectedJobTypes}
-                onChange={handleMultipleJobTypeChange}
-              >
-                <option value="">Select Job Types</option>
-                {jobTypes.map((job: any) => (
-                  <option key={job.JobTypeId} value={job.JobTypeName}>
-                    {job.JobTypeName}
-                  </option>
-                ))}
-              </select>
-            </InputLabel>
-          </InputContainer>
-
-          {jobRequests.map((jobRequest, index) => (
-            <InputContainer key={index}>
-              <h3>{jobRequest.jobType}</h3>
-              <InputLabel>
-                Record Count:
-                <input
-                  type="number"
-                  value={jobRequest.recordCount}
-                  onChange={(e) =>
-                    handleJobRequestChange(
-                      index,
-                      "recordCount",
-                      Number(e.target.value)
-                    )
-                  }
-                />
-              </InputLabel>
-              <InputLabel>
-                Start Row:
-                <input
-                  type="number"
-                  value={jobRequest.startRow}
-                  onChange={(e) =>
-                    handleJobRequestChange(
-                      index,
-                      "startRow",
-                      Number(e.target.value)
-                    )
-                  }
-                />
-              </InputLabel>
-              <InputLabel>
-                DB Table Name:
-                <ReadOnlyInput
-                  type="text"
-                  value={jobRequest.tableName}
-                  readOnly
-                />
-              </InputLabel>
-              <InputLabel>
-                Priority Screen Name:
-                <ReadOnlyInput
-                  type="text"
-                  value={jobRequest.priorityScreenName}
-                  readOnly
-                />
-              </InputLabel>
-            </InputContainer>
-          ))}
-
-          <Button
-            onClick={handleMultipleBatchProcess}
-            disabled={isProcessing}
-            className={`process-button ${isProcessing ? "processing" : ""}`}
-          >
-            {isProcessing ? "Processing..." : "Process Multiple Jobs"}
-          </Button>
-
-          <h2>Selected Jobs</h2>
-          <ul>
-            {selectedJobTypes.map((jobType, index) => (
-              <li key={index}>{jobType}</li>
-            ))}
-          </ul>
-        </SectionContainer>
         <SectionContainer>
           <JobProgressTracker />
         </SectionContainer>

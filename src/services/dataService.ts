@@ -15,15 +15,15 @@ export async function fetchDataChunk(
   const query = `
     SELECT TOP (${chunkSize}) RowId, Data
     FROM ${tableName}
-    WHERE
-    -- Status IS NULL     
-    -- AND 
+    WHERE           
     RowId > ${lastRowId}
     AND
     is_eligible = 1
     AND
     is_new = 1
-    AND Status != 'Completed'
+    AND 
+    Status IS NULL 
+    -- AND Status != 'Completed'
     ORDER BY RowId ASC
   `;
 
@@ -71,11 +71,38 @@ export async function performBulkUpdateWithService(
   const localPerfMonitor = perfMonitor || new PerformanceMonitor();
   if (!perfMonitor) localPerfMonitor.startOperation();
 
+  // Process error messages to extract only the essential information
+  updates.forEach((update) => {
+    if (update.ErrorMessage) {
+      try {
+        // Check if the error message contains a JSON string
+        const jsonStartIndex = update.ErrorMessage.indexOf('{"error":');
+        if (jsonStartIndex !== -1) {
+          // Extract and parse the JSON part
+          const jsonPart = update.ErrorMessage.substring(jsonStartIndex);
+          const errorObj = JSON.parse(jsonPart);
+
+          // Get the detailed message if available
+          if (errorObj.error && errorObj.error.message) {
+            update.ErrorMessage = errorObj.error.message;
+            console.log(
+              `Extracted detailed error message: ${update.ErrorMessage}`
+            );
+          }
+        }
+      } catch (parseError) {
+        console.log(`Error parsing error message JSON: ${parseError}`);
+        // Keep the original message if parsing fails
+      }
+    }
+  });
+
   localPerfMonitor.startDbUpdate();
   let hadDeadlocks = false;
   let successful = true;
 
   try {
+    // Rest of the function remains the same
     const result = await DatabaseService.executeBulkOperation(
       "dbo.BulkUpdateRows",
       { TableName: tableName },
@@ -179,6 +206,32 @@ export async function performBulkErrorInsertWithService(
 
   const localPerfMonitor = perfMonitor || new PerformanceMonitor();
   if (!perfMonitor) localPerfMonitor.startOperation();
+
+  // Process error messages for error log entries
+  errors.forEach((errorEntry) => {
+    if (errorEntry.Error) {
+      try {
+        // Check if the error contains a JSON string with error details
+        const jsonStartIndex = errorEntry.Error.indexOf('{"error":');
+        if (jsonStartIndex !== -1) {
+          // Extract and parse the JSON part
+          const jsonPart = errorEntry.Error.substring(jsonStartIndex);
+          const errorObj = JSON.parse(jsonPart);
+
+          // Get the detailed message if available
+          if (errorObj.error && errorObj.error.message) {
+            errorEntry.Error = errorObj.error.message;
+            console.log(
+              `Extracted detailed error message for log: ${errorEntry.Error}`
+            );
+          }
+        }
+      } catch (parseError) {
+        console.log(`Error parsing error log JSON: ${parseError}`);
+        // Keep the original message if parsing fails
+      }
+    }
+  });
 
   localPerfMonitor.startDbUpdate();
   let hadDeadlocks = false;

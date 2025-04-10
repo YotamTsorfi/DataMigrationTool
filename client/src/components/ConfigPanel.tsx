@@ -12,6 +12,7 @@ interface ConfigItem {
   ConfigValue: string;
   Description: string;
   LastUpdated: string;
+  ConfigId: number;
 }
 
 const ConfigPanel: React.FC = () => {
@@ -25,8 +26,19 @@ const ConfigPanel: React.FC = () => {
   const fetchConfigs = async () => {
     try {
       setLoading(true);
-      const response = await axios.get("http://localhost:3001/config");
-      setConfigs(response.data);
+      const response = await axios.get("http://localhost:3001/job/config");
+
+      // Extract the config array from the response
+      const configData = response.data.success
+        ? response.data.config
+        : response.data;
+
+      // Sort the configurations by ConfigId
+      const sortedConfigs = configData.sort(
+        (a: ConfigItem, b: ConfigItem) => a.ConfigId - b.ConfigId
+      );
+
+      setConfigs(sortedConfigs);
     } catch (error) {
       console.error("Error fetching configuration:", error);
       toast.error("Failed to load configuration");

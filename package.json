@@ -17,7 +17,7 @@
     "clean": "rimraf dist",
     "prebuild": "npm run clean",
     "postbuild": "copy .env dist\\.env || cp .env dist/.env",
-    "insert-to-db": "ts-node src/scripts/populateAllCustomers.ts"
+    "insert-to-db": "ts-node src/scripts/populateAllvehicles.ts"
   },
   "keywords": [],
   "author": "Yotam Tsorfy Shaked",

@@ -75,3 +75,45 @@ export const ResultsContainer = styled.div`
 export const LargeSectionContainer = styled(SectionContainer)`
   width: 90%; /* Adjust the width as needed */
 `;
+
+export const RadioGroup = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 15px;
+`;
+
+export const RadioButton = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+
+  input[type="radio"] {
+    margin: 0;
+  }
+
+  label {
+    margin: 0;
+    font-weight: 500;
+  }
+
+  .info-tooltip {
+    display: none;
+    position: absolute;
+    background-color: #333;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 5px;
+    font-size: 12px;
+    z-index: 10;
+    width: 250px;
+    top: -5px;
+    left: 100%;
+    margin-left: 10px;
+  }
+
+  &:hover .info-tooltip {
+    display: block;
+  }
+`;
