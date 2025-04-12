@@ -1,5 +1,4 @@
 import express from "express";
-import { poolPromise } from "../config/db";
 import { configService } from "../config/configService";
 import { DatabaseService } from "../services/databaseService";
 
@@ -11,9 +10,9 @@ router.get("/", function (req, res) {
   (async function () {
     try {
       const configs = await DatabaseService.executeQuery(`
-        SELECT ConfigKey, ConfigValue, Description, LastUpdated 
-        FROM PrioritySystemConfig
-        ORDER BY ConfigKey
+          SELECT * FROM PrioritySystemConfig 
+          WHERE ConfigKey NOT IN ('Unused_field')
+          ORDER BY ConfigId
       `);
 
       res.status(200).json(configs);
@@ -25,9 +24,9 @@ router.get("/", function (req, res) {
     }
   })();
 });
-
-router.put("/:key", function(req, res) {
-  (async function() {
+//-----------------------------------------------------
+router.put("/:key", function (req, res) {
+  (async function () {
     const key = req.params.key;
     const { value } = req.body;
 

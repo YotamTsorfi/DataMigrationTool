@@ -6,7 +6,7 @@ import { configService } from "../config/configService";
 import PerformanceMonitor from "../utils/performanceMonitor";
 import ProgressTracker from "../utils/progressTracker";
 import { v4 as uuidv4 } from "uuid";
-import { formatAxiosError, createCleanError } from "../utils/errorHandler";
+import { formatAxiosError } from "../utils/errorHandler";
 import { recordBatchProcessing } from "./dataService";
 
 // Create reusable HTTP/HTTPS agents with keep-alive enabled
@@ -71,7 +71,12 @@ export class QueueProcessor {
   private jobType: string;
   private tableName: string;
 
-  constructor(queueId: string, jobId: string, jobType: string, tableName: string) {
+  constructor(
+    queueId: string,
+    jobId: string,
+    jobType: string,
+    tableName: string
+  ) {
     this.queueId = queueId;
     this.jobId = jobId;
     this.jobType = jobType;
@@ -80,30 +85,19 @@ export class QueueProcessor {
     this.performanceMonitor.startOperation();
   }
 
-  /**
-   * בדיקה האם יש פריטים בתור
-   */
+  // Get the number of items in the queue
   public hasItems(): boolean {
     return this.queue.length > 0;
   }
-
-  /**
-   * Add items to the queue
-   */
+  // Add items to the queue
   public addItems(items: QueueItem[]): void {
     this.queue.push(...items);
   }
-
-  /**
-   * Get queue identifier
-   */
+  // Get Queue ID
   public getQueueId(): string {
     return this.queueId;
   }
-
-  /**
-   * Starts processing the queue
-   */
+  // Start processing the queue
   public async process(): Promise<QueueProcessorResult> {
     if (this.processing) {
       throw new Error(`Queue ${this.queueId} is already processing`);
@@ -116,26 +110,26 @@ export class QueueProcessor {
 
     const startTime = Date.now();
     const batchId = uuidv4();
-    
+
     try {
       // console.log(`Queue ${this.queueId} starting processing ${this.queue.length} items`);
-      
+
       // Process all items in the queue
       for (const item of this.queue) {
         await this.processItem(item);
-        
+
         // Apply rate limiting
         await this.applyRateLimit();
-        
+
         // Update progress tracker every few items
         if ((this.successCount + this.failureCount) % 10 === 0) {
           this.updateProgress();
         }
       }
-      
+
       const endTime = Date.now();
       this.performanceMonitor.endOperation();
-      
+
       // Record batch processing results
       await recordBatchProcessing(
         this.jobType,
@@ -151,37 +145,35 @@ export class QueueProcessor {
         null,
         this.tableName
       );
-      
+
       return {
         success: true,
         totalProcessed: this.successCount + this.failureCount,
         successCount: this.successCount,
         failureCount: this.failureCount,
-        duration: endTime - startTime
+        duration: endTime - startTime,
       };
     } catch (error) {
       console.error(`Error processing queue ${this.queueId}:`, error);
       this.performanceMonitor.endOperation();
-      
+
       return {
         success: false,
         totalProcessed: this.successCount + this.failureCount,
         successCount: this.successCount,
         failureCount: this.failureCount,
-        duration: Date.now() - startTime
+        duration: Date.now() - startTime,
       };
     } finally {
       this.processing = false;
     }
   }
 
-  /**
-   * Process a single item in the queue
-   */
+  // Process a single item in the queue
   private async processItem(item: QueueItem): Promise<void> {
     try {
       const response = await this.sendRequest(item);
-      
+
       if (response.success) {
         this.successCount++;
         this.updateRows.push({
@@ -190,22 +182,25 @@ export class QueueProcessor {
           JobName: item.jobType,
           Status: "Completed",
           ErrorMessage: null,
-          JobId: item.jobId
+          JobId: item.jobId,
         });
       } else {
         this.failureCount++;
-        // השתמש בהודעת שגיאה מנוקה
-        const cleanErrorMessage = this.formatErrorMessage(response.error || "", response.status);
-        
+        // Update the error rows with a cleaned error message
+        const cleanErrorMessage = this.formatErrorMessage(
+          response.error || "",
+          response.status
+        );
+
         this.updateRows.push({
           RowId: item.row.RowId,
           BatchId: item.batchId,
           JobName: item.jobType,
           Status: "Failed",
           ErrorMessage: cleanErrorMessage,
-          JobId: item.jobId
+          JobId: item.jobId,
         });
-        
+
         this.errorRows.push({
           JobName: item.jobType,
           BatchId: item.batchId,
@@ -213,26 +208,32 @@ export class QueueProcessor {
           RowId: item.row.RowId,
           Error: cleanErrorMessage,
           JobId: item.jobId,
-          ErrorStatus: response.status
+          ErrorStatus: response.status,
         });
       }
-      
-      this.lastProcessedIndex = Math.max(this.lastProcessedIndex, item.row.RowId);
+
+      this.lastProcessedIndex = Math.max(
+        this.lastProcessedIndex,
+        item.row.RowId
+      );
     } catch (error) {
       console.error(`Error processing item in queue ${this.queueId}:`, error);
       this.failureCount++;
-      
-      const errorMessage = this.formatErrorMessage(error instanceof Error ? error.message : "Unknown error", 0);
-      
+
+      const errorMessage = this.formatErrorMessage(
+        error instanceof Error ? error.message : "Unknown error",
+        0
+      );
+
       this.updateRows.push({
         RowId: item.row.RowId,
         BatchId: item.batchId,
         JobName: item.jobType,
         Status: "Failed",
         ErrorMessage: errorMessage,
-        JobId: item.jobId
+        JobId: item.jobId,
       });
-      
+
       this.errorRows.push({
         JobName: item.jobType,
         BatchId: item.batchId,
@@ -240,144 +241,155 @@ export class QueueProcessor {
         RowId: item.row.RowId,
         Error: errorMessage,
         JobId: item.jobId,
-        ErrorStatus: "Error"
+        ErrorStatus: "Error",
       });
     }
   }
 
-  /**
-   * Format error message to be more user friendly
-   */
+  // Format error message to be more user friendly
   private formatErrorMessage(errorMessage: string, status: number): string {
-    // בדוק אם מדובר בשגיאת HTTP עם קוד שגיאה ספציפי
-    if (status === 409 || (errorMessage && errorMessage.includes("status code 409"))) {
-      return 'Conflict: A record with the specified key already exists';
+    // Check for specific error messages
+    if (
+      status === 409 ||
+      (errorMessage && errorMessage.includes("status code 409"))
+    ) {
+      return "Conflict: A record with the specified key already exists";
     }
 
-    // בדוק אם יש קוד שגיאה אחר בפורמט מוכר
+    // Check if the error message contains a status code in a known format
     const statusMatch = errorMessage.match(/status code (\d+)/);
     if (statusMatch) {
       const statusCode = parseInt(statusMatch[1], 10);
-      
-      // טיפול בקודי שגיאה נפוצים
+
+      // Handle specific status codes with custom messages
       switch (statusCode) {
         case 400:
-          return 'Bad Request: The request is malformed or contains invalid data';
+          return "Bad Request: The request is malformed or contains invalid data";
         case 401:
-          return 'Unauthorized: Authentication is required or has failed';
+          return "Unauthorized: Authentication is required or has failed";
         case 403:
-          return 'Forbidden: The server understood the request but refuses to authorize it';
+          return "Forbidden: The server understood the request but refuses to authorize it";
         case 404:
-          return 'Not Found: The requested resource was not found';
+          return "Not Found: The requested resource was not found";
         case 429:
-          return 'Too Many Requests: Rate limit exceeded, please retry later';
+          return "Too Many Requests: Rate limit exceeded, please retry later";
         case 500:
-          return 'Server Error: An internal server error occurred';
+          return "Server Error: An internal server error occurred";
         case 503:
-          return 'Service Unavailable: The server is currently unable to handle the request';
+          return "Service Unavailable: The server is currently unable to handle the request";
         default:
-          // אם יש קוד שגיאה ספציפי אבל אין לנו הודעה מותאמת עבורו
           return `Error ${statusCode}: An error occurred while processing the request`;
       }
     }
-    
-    // נסה לחלץ JSON מההודעה
+
+    // Try to parse the error message as JSON to extract more details
     try {
-      const jsonStartIndex = errorMessage.indexOf('{');
+      const jsonStartIndex = errorMessage.indexOf("{");
       if (jsonStartIndex >= 0) {
         const errorJson = errorMessage.substring(jsonStartIndex);
         const errorObj = JSON.parse(errorJson);
-        
-        // חלץ הודעה מפורטת מה-JSON
-        const detailedMessage = errorObj?.error?.message || 
-                               errorObj?.message || 
-                               errorObj?.error || 
-                               null;
-        
-        if (detailedMessage && typeof detailedMessage === 'string') {
+
+        // Extract detailed error message from the parsed JSON
+        const detailedMessage =
+          errorObj?.error?.message ||
+          errorObj?.message ||
+          errorObj?.error ||
+          null;
+
+        if (detailedMessage && typeof detailedMessage === "string") {
           return detailedMessage;
         }
       }
     } catch (parseError) {
-      // התעלם משגיאות פרסור - השתמש בהודעה המקורית
+      console.error("Failed to parse error message as JSON:", parseError);
     }
-    
-    // אם ההודעה כוללת URL, נקה אותו
+
+    // If the error message contains a URL, clean it
     if (errorMessage.includes("http")) {
       const urlRegex = /(https?:\/\/[^\s\)]+)/g;
       errorMessage = errorMessage.replace(urlRegex, "[API_URL]");
     }
-    
-    // נקה קודי שגיאה נפוצים מההודעה
+
+    // Remove common error prefixes and clean up the message
     const cleanedError = errorMessage
-      .replace(/ERR_BAD_REQUEST:?\s*/i, '')
-      .replace(/Request failed with/i, 'Error:');
-    
-    return cleanedError || 'Unknown error occurred';
+      .replace(/ERR_BAD_REQUEST:?\s*/i, "")
+      .replace(/Request failed with/i, "Error:");
+
+    return cleanedError || "Unknown error occurred";
   }
 
-  /**
-   * Send a request to the Priority API for a single item
-   */
+  // Send a request to the Priority API for a single item
   private async sendRequest(item: QueueItem): Promise<QueueItemResponse> {
     const maxRetries = 3;
     let retryCount = 0;
-    
-    // במקום להכין את הנתונים, אנחנו שולחים אותם כפי שהם
-    // רק להסיר שדות פנימיים מהאובייקט
-    const { RowId, __batchId, __jobType, __tableName, __jobId, __priorityScreenName, ...requestData } = item.row;
+
+    // Instead of preparing the data, we send it as is
+    // just remove internal fields from the object
+    const {
+      RowId,
+      __batchId,
+      __jobType,
+      __tableName,
+      __jobId,
+      __priorityScreenName,
+      ...requestData
+    } = item.row;
 
     while (retryCount < maxRetries) {
       try {
-        // תיקון הנתיב של ה-URL - וודא שאין כפל סלאשים
+        // Prepare the URL for the request
+        // Check if the base URL ends with a slash and the screen name starts with one
         let baseUrl = config.priorityDEVBaseUrl;
-        if (baseUrl.endsWith('/') && item.priorityScreenName.startsWith('/')) {
+        if (baseUrl.endsWith("/") && item.priorityScreenName.startsWith("/")) {
           baseUrl = baseUrl.slice(0, -1);
-        } else if (!baseUrl.endsWith('/') && !item.priorityScreenName.startsWith('/')) {
-          baseUrl = baseUrl + '/';
+        } else if (
+          !baseUrl.endsWith("/") &&
+          !item.priorityScreenName.startsWith("/")
+        ) {
+          baseUrl = baseUrl + "/";
         }
 
-        // ייתכן שה-URL צריך לכלול יותר פרטים
+        // Construct the full URL for the request
         const url = `${config.priorityDEVBaseUrl}/${item.priorityScreenName}`;
 
-        const response = await axios.post(
-          url,
-          requestData,          
-          {
-            headers: {
-              "Content-Type": "application/json",
-              "Accept": "application/json",
-              "OData-Version": "4.0",
-              "Authorization": `Basic ${Buffer.from(`${config.priorityPAT}:${config.priorityPassword}`).toString("base64")}`
-            },
-            timeout: 30000,
-            httpAgent,
-            httpsAgent
-          }
-        );
+        const response = await axios.post(url, requestData, {
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            "OData-Version": "4.0",
+            Authorization: `Basic ${Buffer.from(`${config.priorityPAT}:${config.priorityPassword}`).toString("base64")}`,
+          },
+          timeout: 30000,
+          httpAgent,
+          httpsAgent,
+        });
 
         return {
           success: true,
           status: response.status,
           data: response.data,
-          row: item.row
+          row: item.row,
         };
       } catch (error: any) {
         retryCount++;
         let errorMessage = formatAxiosError(error);
         let errorStatus = error.response?.status || 500;
-        
+
         // Handle rate limiting (HTTP 429)
         if (axios.isAxiosError(error) && error.response?.status === 429) {
           const retryAfter = error.response.headers["retry-after"];
-          let delayMs = retryAfter ? parseInt(retryAfter) * 1000 : 1000 * Math.pow(2, retryCount);
+          let delayMs = retryAfter
+            ? parseInt(retryAfter) * 1000
+            : 1000 * Math.pow(2, retryCount);
           delayMs += Math.floor(Math.random() * 1000);
-          
-          console.log(`Rate limit exceeded (429). Retry attempt ${retryCount} after ${delayMs}ms delay. ${errorMessage}`);
+
+          console.log(
+            `Rate limit exceeded (429). Retry attempt ${retryCount} after ${delayMs}ms delay. ${errorMessage}`
+          );
           await new Promise((resolve) => setTimeout(resolve, delayMs));
           continue;
         }
-        
+
         // Only retry on network errors and 5xx server errors
         if (
           axios.isAxiosError(error) &&
@@ -387,40 +399,37 @@ export class QueueProcessor {
             (error.response?.status && error.response.status >= 500))
         ) {
           const delay = 1000 * Math.pow(2, retryCount);
-          console.log(`Retry attempt ${retryCount} after error: ${errorMessage}. Delay: ${delay}ms`);
+          console.log(
+            `Retry attempt ${retryCount} after error: ${errorMessage}. Delay: ${delay}ms`
+          );
           await new Promise((resolve) => setTimeout(resolve, delay));
         } else {
-          // עבור שגיאות לקוח, לא מנסים שוב ומחזירים שגיאה
-          // עם הקוד המקורי כדי שנוכל לטפל בו בהתאמה
+          // If the error is not a retryable error, log it and return the error response
           return {
             success: false,
             status: error.response?.status || 0,
             error: errorMessage,
-            row: item.row
+            row: item.row,
           };
         }
       }
     }
-    
+
     return {
       success: false,
       status: 0,
       error: `Failed after ${maxRetries} retries`,
-      row: item.row
+      row: item.row,
     };
   }
 
-  /**
-   * Apply rate limiting between requests
-   */
+  // Apply rate limiting between requests
   private async applyRateLimit(): Promise<void> {
     const delay = Math.max(1000 / this.rateLimit, this.minDelay);
     await new Promise((resolve) => setTimeout(resolve, delay));
   }
 
-  /**
-   * Update the progress tracker
-   */
+  // Update the progress tracker
   private updateProgress(): void {
     ProgressTracker.updateProgress(
       this.jobId,
@@ -429,17 +438,15 @@ export class QueueProcessor {
       this.failureCount
     );
   }
-  
-  /**
-   * Get result data for database updates
-   */
+
+  // Get result data for database updates
   public getResultData() {
     return {
       updateRows: this.updateRows,
       errorRows: this.errorRows,
       successCount: this.successCount,
       failureCount: this.failureCount,
-      lastProcessedIndex: this.lastProcessedIndex
+      lastProcessedIndex: this.lastProcessedIndex,
     };
   }
 }

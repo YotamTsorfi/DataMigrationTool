@@ -26,7 +26,7 @@ const ConfigPanel: React.FC = () => {
   const fetchConfigs = async () => {
     try {
       setLoading(true);
-      const response = await axios.get("http://localhost:3001/job/config");
+      const response = await axios.get("http://localhost:3001/config");
 
       // Extract the config array from the response
       const configData = response.data.success
