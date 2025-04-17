@@ -109,7 +109,7 @@ export const RadioButton = styled.div`
     z-index: 10;
     width: 250px;
     top: -5px;
-    left: 100%;
+    left: 50%;
     margin-left: 10px;
   }
 
