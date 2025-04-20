@@ -8,6 +8,9 @@ interface JobProgress {
   failureCount: number;
   percentage: number;
   status: "pending" | "processing" | "completed" | "failed";
+  errorStatus?: string | null;
+  startTime?: number;
+  currentDuration?: number;
 }
 
 /**

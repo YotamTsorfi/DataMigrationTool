@@ -18,17 +18,20 @@ export async function processWithQueues(
   jobType: string,
   jobId: string
 ): Promise<any[]> {
+  // console.log(`==== Queue Processing Performance Log - Job: ${jobId} ====`);
+  const overallStartTime = Date.now();
+
   // Get system configuration
   const config = await configService.getConfig();
-  
+
   // Set horizontal batch size from configuration or use default
   const HORIZONTAL_BATCH_SIZE = parseInt(
     config.HORIZONTAL_BATCH_SIZE || "10",
     10
   );
-  // Set vertical batch size from configuration or use default 
+  // Set vertical batch size from configuration or use default
   const VERTICAL_BATCH_SIZE = parseInt(config.VERTICAL_BATCH_SIZE || "5", 10);
-  
+
   // Set chunk size for processing
   // This is the number of rows to process in each database fetch operation
   const CHUNK_SIZE = 1000;
@@ -43,18 +46,56 @@ export async function processWithQueues(
   let totalSuccessCount = 0;
   let totalFailureCount = 0;
 
+  // Performance tracking
+  let totalDbFetchTime = 0;
+  let totalQueueBuildTime = 0;
+  let totalQueueProcessTime = 0;
+  let totalDbUpdateTime = 0;
+  let chunkCount = 0;
+
+  // console.log(
+  //   `Queue configuration: ${HORIZONTAL_BATCH_SIZE} horizontal queues, ${VERTICAL_BATCH_SIZE} records per vertical batch`
+  // );
+
   while (processedCount < recordCount) {
+    chunkCount++;
+    // console.log(`\n---- Processing chunk ${chunkCount} ----`);
+    const chunkStartTime = Date.now();
     const chunkSize = Math.min(CHUNK_SIZE, recordCount - processedCount);
 
     // Fetch data chunk from database
     const perfMonitor = new PerformanceMonitor();
     perfMonitor.startDbFetch();
+    // console.log(
+    //   `Fetching ${chunkSize} records from ${tableName} starting from RowId > ${lastRowId}...`
+    // );
+    const dbFetchStartTime = Date.now();
     const rows = await fetchDataChunk(tableName, lastRowId, chunkSize);
+    const dbFetchTime = Date.now() - dbFetchStartTime;
+    totalDbFetchTime += dbFetchTime;
     perfMonitor.endDbFetch();
 
-    if (rows.length === 0) break;
+    // console.log(`DB Fetch completed: ${rows.length} rows in ${dbFetchTime}ms`);
+
+    if (rows.length === 0) {
+      // console.log(`No more rows found, exiting chunk processing`);
+      break;
+    }
 
     // Divide the rows into horizontal and vertical batches
+    // console.log(`Building queues for ${rows.length} records...`);
+    const queueBuildStartTime = Date.now();
+    perfMonitor.startQueueBuild(); // Start tracking queue build time using perfMonitor
+
+    // Create queue processors for horizontal batches
+    const horizontalQueues: QueueProcessor[] = [];
+    for (let h = 0; h < HORIZONTAL_BATCH_SIZE; h++) {
+      horizontalQueues.push(
+        new QueueProcessor(`queue-${h}`, jobId, jobType, tableName)
+      );
+    }
+
+    // Divide data into queues
     for (
       let i = 0;
       i < rows.length;
@@ -64,14 +105,6 @@ export async function processWithQueues(
         i,
         i + HORIZONTAL_BATCH_SIZE * VERTICAL_BATCH_SIZE
       );
-
-      // Create queue processors for horizontal batches by the number of horizontal batches
-      const horizontalQueues: QueueProcessor[] = [];
-      for (let h = 0; h < HORIZONTAL_BATCH_SIZE; h++) {
-        horizontalQueues.push(
-          new QueueProcessor(`queue-${h}`, jobId, jobType, tableName)
-        );
-      }
 
       // Divide the horizontal batch into vertical batches
       for (let h = 0; h < HORIZONTAL_BATCH_SIZE; h++) {
@@ -101,15 +134,37 @@ export async function processWithQueues(
 
         horizontalQueues[h].addItems(queueItems);
       }
+    }
 
-      // Process each queue in parallel - each queue processes its vertical batch in order
-      const queuePromises = horizontalQueues
-        .filter((q) => q.hasItems()) // Just process queues with items
-        .map((queue) => queue.process());
+    // End queue build timing - moved here to ensure it only measures queue building
+    perfMonitor.endQueueBuild();
+    const totalQueueBuildTimeForThisChunk = Date.now() - queueBuildStartTime;
+    totalQueueBuildTime += totalQueueBuildTimeForThisChunk;
+
+    // console.log(
+    //   `Queues built in ${totalQueueBuildTimeForThisChunk}ms. Processing ${horizontalQueues.filter((q) => q.hasItems()).length} active queues in parallel...`
+    // );
+
+    // Now process the queues in parallel - this is a separate operation from queue building
+    for (let i = 0; i < horizontalQueues.length; i += HORIZONTAL_BATCH_SIZE) {
+      const batchQueues = horizontalQueues
+        .slice(i, i + HORIZONTAL_BATCH_SIZE)
+        .filter((q) => q.hasItems());
+
+      if (batchQueues.length === 0) continue;
+
+      // Process each queue in parallel
+      const queueProcessStartTime = Date.now();
+      const queuePromises = batchQueues.map((queue) => queue.process());
 
       const queueResults = await Promise.all(queuePromises);
+      const queueProcessTime = Date.now() - queueProcessStartTime;
+      totalQueueProcessTime += queueProcessTime;
+
+      // console.log(`Batch of queues processed in ${queueProcessTime}ms`);
 
       // Aggregate results from all queues
+      // console.log(`Updating database with queue processing results...`);
       for (let qIndex = 0; qIndex < queueResults.length; qIndex++) {
         const result = queueResults[qIndex];
         results.push(result);
@@ -117,9 +172,18 @@ export async function processWithQueues(
         totalFailureCount += result.failureCount;
 
         // Get the result data for this queue to update the database
-        const resultData = horizontalQueues[qIndex].getResultData();
+        const resultData = batchQueues[qIndex].getResultData();
+
         // Update the database with the results
+        const dbUpdateStartTime = Date.now();
         await processQueueResults(resultData, tableName);
+        const dbUpdateTime = Date.now() - dbUpdateStartTime;
+        totalDbUpdateTime += dbUpdateTime;
+
+        // Comment out the detailed per-queue logs
+        // console.log(
+        //   `Queue ${qIndex + 1}/${queueResults.length}: ${result.successCount} successful, ${result.failureCount} failed, DB update time: ${dbUpdateTime}ms`
+        // );
       }
 
       // Update progress tracker with the total processed count
@@ -134,10 +198,66 @@ export async function processWithQueues(
     // Update the last processed row ID for the next chunk
     lastRowId = (rows[rows.length - 1] as { RowId: number }).RowId;
     processedCount += rows.length;
+
+    const chunkTime = Date.now() - chunkStartTime;
+    // console.log(
+    //   `Chunk ${chunkCount} processing completed in ${chunkTime}ms (${rows.length} records)`
+    // );
   }
 
   // Finalize progress tracking for this job
   ProgressTracker.completeJob(jobId, totalSuccessCount, totalFailureCount);
+
+  const overallTime = Date.now() - overallStartTime;
+
+  // Fix the calculation of time percentages to ensure they're accurate
+  // and don't exceed the total time
+  const dbFetchTimePercentage = Math.min(
+    (totalDbFetchTime / overallTime) * 100,
+    100
+  ).toFixed(1);
+
+  const queueBuildTimePercentage = Math.min(
+    (totalQueueBuildTime / overallTime) * 100,
+    100
+  ).toFixed(1);
+
+  // Don't subtract queue build time from process time - they're separate activities
+  // measured separately by the performance monitor
+  const queueProcessTimePercentage = Math.min(
+    (totalQueueProcessTime / overallTime) * 100,
+    100
+  ).toFixed(1);
+
+  const dbUpdateTimePercentage = Math.min(
+    (totalDbUpdateTime / overallTime) * 100,
+    100
+  ).toFixed(1);
+
+  // Keep the final performance summary logs
+  console.log("\n==== Queue Processing Performance Summary ====");
+  console.log(
+    `Total time: ${overallTime}ms (${(overallTime / 1000).toFixed(2)}s)`
+  );
+  console.log(
+    `Database fetch time: ${totalDbFetchTime}ms (${dbFetchTimePercentage}%)`
+  );
+  console.log(
+    `Queue building time: ${totalQueueBuildTime}ms (${queueBuildTimePercentage}%)`
+  );
+  console.log(
+    `API & Queue processing time: ${totalQueueProcessTime}ms (${queueProcessTimePercentage}%)`
+  );
+  console.log(
+    `Database update time: ${totalDbUpdateTime}ms (${dbUpdateTimePercentage}%)`
+  );
+  console.log(
+    `Records processed: ${totalSuccessCount + totalFailureCount} (${totalSuccessCount} successful, ${totalFailureCount} failed)`
+  );
+  console.log(
+    `Average time per record: ${(overallTime / (totalSuccessCount + totalFailureCount)).toFixed(2)}ms`
+  );
+  console.log("===============================================");
 
   // Return only the summary of results for each queue
   return results.map((result) => ({

@@ -19,6 +19,7 @@ interface PerformanceMetrics {
   dbFetchTime?: number;
   dbUpdateTime?: number;
   batchBuildTime?: number;
+  queueBuildTime?: number; // This property was in the comment but missing in actual interface
   requestTime?: number;
 }
 
@@ -29,6 +30,7 @@ class PerformanceMonitor {
   private dbUpdateStartTime: number = 0;
   private batchBuildStartTime: number = 0;
   private requestStartTime: number = 0;
+  private queueBuildStartTime: number = 0; // Add tracking for queue building time
 
   private externalDbFetchTime: number | undefined;
   private externalDbUpdateTime: number | undefined;
@@ -120,6 +122,20 @@ class PerformanceMonitor {
     //   `API request completed in: ${this.formatTime(this.metrics.requestTime)}`
     // );
     this.requestStartTime = 0; // Reset timer
+  }
+
+  startQueueBuild() {
+    this.queueBuildStartTime = performance.now();
+    // console.log(`Queue build started at: ${this.formatDate(new Date())}`);
+  }
+
+  endQueueBuild() {
+    if (this.queueBuildStartTime === 0) return;
+    this.metrics.queueBuildTime = performance.now() - this.queueBuildStartTime;
+    // console.log(
+    //   `Queue build completed in: ${this.formatTime(this.metrics.queueBuildTime)}`
+    // );
+    this.queueBuildStartTime = 0; // Reset timer
   }
 
   logRequestMetrics(requestData: any) {
@@ -242,6 +258,7 @@ class PerformanceMonitor {
         dbUpdateTime: this.formatTime(this.metrics.dbUpdateTime), // Add DB update time to logs
         batchBuildTime: this.formatTime(this.metrics.batchBuildTime),
         requestTime: this.formatTime(this.metrics.requestTime),
+        queueBuildTime: this.formatTime(this.metrics.queueBuildTime), // Add this property
       },
     };
 
@@ -259,6 +276,7 @@ class PerformanceMonitor {
         this.metrics.dbUpdateTime || this.externalDbUpdateTime
       ), // Add DB update time
       batchBuildTime: this.formatTime(this.metrics.batchBuildTime),
+      queueBuildTime: this.formatTime(this.metrics.queueBuildTime), // Add this property
       requestTime: this.formatTime(this.metrics.requestTime),
       averageTimePerRecord:
         this.metrics.recordCount > 0
@@ -273,6 +291,35 @@ class PerformanceMonitor {
 
   incrementFailureCount() {
     this.metrics.failureCount += 1;
+  }
+
+  resetTimer(timerName: string) {
+    switch (timerName) {
+      case "dbFetch":
+        this.dbFetchStartTime = 0;
+        break;
+      case "dbUpdate":
+        this.dbUpdateStartTime = 0;
+        break;
+      case "batchBuild":
+        this.batchBuildStartTime = 0;
+        break;
+      case "request":
+        this.requestStartTime = 0;
+        break;
+      case "queueBuild":
+        this.queueBuildStartTime = 0;
+        break;
+      case "all":
+        this.dbFetchStartTime = 0;
+        this.dbUpdateStartTime = 0;
+        this.batchBuildStartTime = 0;
+        this.requestStartTime = 0;
+        this.queueBuildStartTime = 0;
+        break;
+      default:
+        break;
+    }
   }
 
   setLastProcessedIndex(index: number) {

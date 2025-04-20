@@ -110,13 +110,22 @@ export class QueueProcessor {
 
     const startTime = Date.now();
     const batchId = uuidv4();
+    
+    // console.log(
+    //   `Queue ${this.queueId} processing ${this.queue.length} items with rate limit ${this.rateLimit}/sec`
+    // );
+
+    // Performance tracking
+    let apiRequestTime = 0;
+    let processingTime = 0;
 
     try {
-      // console.log(`Queue ${this.queueId} starting processing ${this.queue.length} items`);
-
       // Process all items in the queue
       for (const item of this.queue) {
+        const itemStartTime = Date.now();
         await this.processItem(item);
+        const itemProcessTime = Date.now() - itemStartTime;
+        processingTime += itemProcessTime;
 
         // Apply rate limiting
         await this.applyRateLimit();
@@ -129,6 +138,17 @@ export class QueueProcessor {
 
       const endTime = Date.now();
       this.performanceMonitor.endOperation();
+
+      // Get API time metrics from performance monitor
+      apiRequestTime = this.performanceMonitor.metrics.requestTime || 0;
+
+      const metrics = this.performanceMonitor.getFormattedMetrics();
+      // console.log(
+      //   `Queue ${this.queueId} completed: ${this.successCount}/${this.queue.length} successful, ${this.failureCount} failed`
+      // );
+      // console.log(
+      //   `Queue ${this.queueId} time metrics: Total ${metrics.totalDuration}, API requests: ${metrics.requestTime}`
+      // );
 
       // Record batch processing results
       await recordBatchProcessing(
@@ -172,8 +192,12 @@ export class QueueProcessor {
   // Process a single item in the queue
   private async processItem(item: QueueItem): Promise<void> {
     try {
+      const requestStartTime = Date.now();
+      this.performanceMonitor.startRequest();
       const response = await this.sendRequest(item);
-
+      this.performanceMonitor.endRequest();
+      const requestTime = Date.now() - requestStartTime;
+      
       if (response.success) {
         this.successCount++;
         this.updateRows.push({

@@ -7,7 +7,7 @@ async function generateVehicles(count: number) {
   for (let i = 0; i < count; i++) {
     const vehicle = {
       Data: JSON.stringify({
-        VEHICLENUM: `${782111 + i}`,
+        VEHICLENUM: `${70000 + i}`,
         VEHICLETYPECODE: 2,
         COLORCODE: ["50", "51", "17", "52", "56", "77", "98"][
           Math.floor(Math.random() * 7)
@@ -45,7 +45,7 @@ async function populateTable() {
   console.log("Database connection established.");
 
   console.log("Generating vehicle data...");
-  const vehicles = await generateVehicles(10000);
+  const vehicles = await generateVehicles(50000);
 
   console.log("Beginning database insertion...");
   try {
