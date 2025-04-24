@@ -61,8 +61,12 @@ async function processBatch(
   tableName: string,
   priorityScreenName: string,
   jobId: string,
-  dbFetchTime?: number
+  dbFetchTime?: number,
+  priorityIdField?: string
 ): Promise<BatchCreateRowsResult> {
+  //TODO
+  console.log(`processBatch called with priorityIdField: [${priorityIdField}]`);
+
   const perfMonitor = new PerformanceMonitor();
   perfMonitor.startOperation();
 
@@ -129,7 +133,7 @@ async function processBatch(
       failureCount,
       lastProcessedIndex,
       sentToPriority,
-    } = processApiResponse(response, enrichedRows);
+    } = processApiResponse(response, enrichedRows, priorityIdField);
 
     // Update performance metrics
     perfMonitor.metrics.successCount = successCount;
@@ -194,7 +198,7 @@ async function processBatch(
         );
         totalDbUpdateTime += errorResult.updateTime;
       } catch (errorInsertError) {
-        console.error("Failed to insert error logs:", errorInsertError);        
+        console.error("Failed to insert error logs:", errorInsertError);
       }
     }
 
@@ -287,7 +291,8 @@ async function processBatches(
   tableName: string,
   priorityScreenName: string,
   jobType: string,
-  jobId: string
+  jobId: string,
+  priorityIdField: string
 ): Promise<any[]> {
   const config = await configService.getConfig();
   const BATCH_SIZE = config.BATCH_SIZE;
@@ -350,7 +355,8 @@ async function processBatches(
             tableName,
             priorityScreenName,
             jobId,
-            perfMonitor.metrics.dbFetchTime
+            perfMonitor.metrics.dbFetchTime,
+            priorityIdField
           )
         )
       );

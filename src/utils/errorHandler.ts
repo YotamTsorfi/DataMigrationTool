@@ -43,26 +43,36 @@ export function formatErrorMessage(error: any): string {
   return String(error);
 }
 
-export function logAxiosError(error: any, context: string = ''): void {
+export function logAxiosError(error: any, context: string = ""): void {
   // Log detailed error for debugging but display simplified message
   if (axios.isAxiosError(error)) {
     // Log detailed error to file
-    writeToLogFile('error.log', JSON.stringify({
-      timestamp: new Date().toISOString(),
-      context,
-      message: error.message,
-      code: error.code,
-      config: error.config,
-      status: error.response?.status,
-      data: error.response?.data,
-    }, null, 2));
-    
+    writeToLogFile(
+      "error.log",
+      JSON.stringify(
+        {
+          timestamp: new Date().toISOString(),
+          context,
+          message: error.message,
+          code: error.code,
+          config: error.config,
+          status: error.response?.status,
+          data: error.response?.data,
+        },
+        null,
+        2
+      )
+    );
+
     // Print simplified message to console
-    console.error(`${context} Error: ${formatAxiosError(error)}`);
+    // console.error(`${context} Error: ${formatAxiosError(error)}`);
   } else {
     // For non-Axios errors
-    console.error(`${context} Error:`, error.message || error);
-    writeToLogFile('error.log', `${new Date().toISOString()} - ${context} - ${error.message || error}`);
+    // console.error(`${context} Error:`, error.message || error);
+    writeToLogFile(
+      "error.log",
+      `${new Date().toISOString()} - ${context} - ${error.message || error}`
+    );
   }
 }
 
@@ -72,20 +82,20 @@ export function logAxiosError(error: any, context: string = ''): void {
  * @param context Optional context to add to the error message
  * @returns A new Error object with clean message and no stack trace
  */
-export function createCleanError(error: any, context: string = ''): Error {
+export function createCleanError(error: any, context: string = ""): Error {
   // Log the original error with full details
   if (context) {
-    logAxiosError(error, context);
+    // logAxiosError(error, context);
   }
-  
+
   // Create a new error with clean message
   const cleanError = new Error(formatErrorMessage(error));
-  
+
   // Remove stack trace
-  Object.defineProperty(cleanError, 'stack', {
+  Object.defineProperty(cleanError, "stack", {
     value: undefined,
-    configurable: true
+    configurable: true,
   });
-  
+
   return cleanError;
 }

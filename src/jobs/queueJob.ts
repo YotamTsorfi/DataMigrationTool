@@ -16,19 +16,20 @@ export async function processWithQueues(
   tableName: string,
   priorityScreenName: string,
   jobType: string,
-  jobId: string
+  jobId: string,
+  priorityIdField?: string
 ): Promise<any[]> {
   // Get system configuration
   const config = await configService.getConfig();
-  
+
   // Set horizontal batch size from configuration or use default
   const HORIZONTAL_BATCH_SIZE = parseInt(
     config.HORIZONTAL_BATCH_SIZE || "10",
     10
   );
-  // Set vertical batch size from configuration or use default 
+  // Set vertical batch size from configuration or use default
   const VERTICAL_BATCH_SIZE = parseInt(config.VERTICAL_BATCH_SIZE || "5", 10);
-  
+
   // Set chunk size for processing
   // This is the number of rows to process in each database fetch operation
   const CHUNK_SIZE = 1000;
@@ -96,6 +97,7 @@ export async function processWithQueues(
             jobType,
             tableName,
             priorityScreenName,
+            priorityIdField,
           };
         });
 
@@ -222,17 +224,27 @@ async function processQueueResults(
     console.log(`Trying to update rows individually`);
     for (const row of resultData.updateRows) {
       try {
-        // Check if Error column exists in table
-        const errorColumnQuery = `
+        // Check table structure to determine available columns
+        const tableColumns = await DatabaseService.executeQuery(`
           SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
-          WHERE TABLE_NAME = '${tableName}' 
-          AND COLUMN_NAME IN ('ErrorMessage', 'Error')
-        `;
-        const errorColumns = (await DatabaseService.executeQuery(
-          errorColumnQuery
-        )) as { COLUMN_NAME: string }[];
-        const errorColumn =
-          errorColumns.length > 0 ? errorColumns[0].COLUMN_NAME : null;
+          WHERE TABLE_NAME = '${tableName}'
+        `);
+
+        // Create a map of column names for easy lookup
+        const availableColumns = new Set();
+        tableColumns.forEach((col: any) => {
+          availableColumns.add(col.COLUMN_NAME);
+        });
+
+        // Check if error column exists and get its name
+        const errorColumn = availableColumns.has("ErrorMessage")
+          ? "ErrorMessage"
+          : availableColumns.has("Error")
+            ? "Error"
+            : null;
+
+        // Check if table has priority_id column
+        const hasPriorityId = availableColumns.has("priority_id");
 
         let query = `
           UPDATE ${tableName}
@@ -242,6 +254,11 @@ async function processQueueResults(
 
         if (errorColumn) {
           query += `, ${errorColumn} = @ErrorValue`;
+        }
+
+        // Add priority_id to update if the column exists and we have a value
+        if (hasPriorityId && row.priority_id != null) {
+          query += `, priority_id = @PriorityId`;
         }
 
         query += ` WHERE RowId = @RowId`;
@@ -260,6 +277,11 @@ async function processQueueResults(
             errorValue && errorValue.length > 3800
               ? errorValue.substring(0, 3800)
               : errorValue;
+        }
+
+        // Add priority_id parameter if the column exists and we have a value
+        if (hasPriorityId && row.priority_id != null) {
+          params.PriorityId = row.priority_id;
         }
 
         await DatabaseService.executeQuery(query, params);

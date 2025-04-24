@@ -102,7 +102,8 @@ export async function performBulkUpdateWithService(
   let successful = true;
 
   try {
-    // Rest of the function remains the same
+    // Execute bulk update operation - no need to check for columns here
+    // as the stored procedure now handles the priority_id field check
     const result = await DatabaseService.executeBulkOperation(
       "dbo.BulkUpdateRows",
       { TableName: tableName },

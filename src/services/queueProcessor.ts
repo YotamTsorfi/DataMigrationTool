@@ -32,6 +32,7 @@ export interface QueueItem {
   jobType: string;
   tableName: string;
   priorityScreenName: string;
+  priorityIdField?: string;
 }
 
 // Interface for queue processor results
@@ -176,6 +177,27 @@ export class QueueProcessor {
 
       if (response.success) {
         this.successCount++;
+
+        // Extract Priority ID from successful response using the dynamic field
+        let priorityId = null;
+        if (
+          response.data &&
+          typeof response.data === "object" &&
+          item.priorityIdField
+        ) {
+          // If direct field is available at the top level
+          if (response.data[item.priorityIdField]) {
+            priorityId = response.data[item.priorityIdField].toString();
+          }
+          // For batch responses that might have nested structure
+          else if (
+            response.data.body &&
+            response.data.body[item.priorityIdField]
+          ) {
+            priorityId = response.data.body[item.priorityIdField].toString();
+          }
+        }
+
         this.updateRows.push({
           RowId: item.row.RowId,
           BatchId: item.batchId,
@@ -183,6 +205,7 @@ export class QueueProcessor {
           Status: "Completed",
           ErrorMessage: null,
           JobId: item.jobId,
+          priority_id: priorityId,
         });
       } else {
         this.failureCount++;

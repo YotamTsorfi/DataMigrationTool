@@ -107,7 +107,8 @@ export async function sendBatchRequest(
  */
 export function processApiResponse(
   response: any,
-  rows: any[]
+  rows: any[],
+  priorityIdField?: string
 ): {
   updateRows: any[];
   errorRows: any[];
@@ -219,11 +220,31 @@ export function processApiResponse(
           : JSON.stringify(errorSource);
     }
 
-    if (errorMessage) {
-      console.log(
-        `  Error message in API response: ${errorMessage}, Status: ${errorStatus}`
-      );
+    // Extract the Priority ID if available in the response, using the dynamic field
+    let priorityId = null;
+
+    // Check if request was successful and we have a response body
+    if (responseItem?.status < 400 && responseItem?.body) {
+      // Use the priorityIdField parameter to determine which field to check
+      if (priorityIdField && responseItem.body[priorityIdField] !== undefined) {
+        priorityId = responseItem.body[priorityIdField].toString();
+        console.log(`Found ${priorityIdField} ID: ${priorityId}`);
+      } else if (
+        responseItem.body["@odata.context"] &&
+        typeof responseItem.body === "object"
+      ) {
+        // Try to find priorityIdField in the response body if it exists
+        priorityId = priorityIdField
+          ? responseItem.body[priorityIdField]?.toString() || null
+          : null;
+      }
     }
+
+    // if (errorMessage) {
+    //   console.log(
+    //     `  Error message in API response: ${errorMessage}, Status: ${errorStatus}`
+    //   );
+    // }
 
     // Update tracking metrics based on status
     if (status === "Completed") {
@@ -250,6 +271,7 @@ export function processApiResponse(
       Status: status,
       ErrorMessage: errorMessage,
       JobId: row.__jobId,
+      priority_id: priorityId,
     });
 
     lastProcessedIndex = row.RowId;

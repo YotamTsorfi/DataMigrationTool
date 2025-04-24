@@ -4,7 +4,7 @@ import { config } from "./config";
 const poolConfig = {
   ...config.db,
   min: 5,
-  max: 30, // Increase max connections
+  max: 20, // Increase max connections
   idleTimeoutMillis: 30000,
   connectionTimeout: 15000,
   requestTimeout: 60000, // Increase request timeout

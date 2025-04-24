@@ -11,6 +11,7 @@ interface JobRequest {
   priorityScreenName: string;
   jobType: string;
   processingType?: string;
+  priorityIdField: string;
 }
 
 type JobStatus = "Queued" | "Running" | "Completed" | "Failed";
@@ -129,7 +130,8 @@ class JobManager {
         jobRequest.tableName,
         jobRequest.priorityScreenName,
         jobRequest.jobType,
-        jobId
+        jobId,
+        jobRequest.priorityIdField
       );
     } else {
       // Default to batch processing
@@ -139,7 +141,8 @@ class JobManager {
         jobRequest.tableName,
         jobRequest.priorityScreenName,
         jobRequest.jobType,
-        jobId
+        jobId,
+        jobRequest.priorityIdField
       );
     }
 

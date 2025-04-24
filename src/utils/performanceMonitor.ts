@@ -176,11 +176,11 @@ class PerformanceMonitor {
     // based on context (whether API received the request or not)
     // this.metrics.success = false;
 
-    console.error("Error Metrics:", {
-      type: this.metrics.errorType,
-      status: this.metrics.statusCode,
-      timestamp: this.formatDate(new Date()),
-    });
+    // console.error("Error Metrics:", {
+    //   type: this.metrics.errorType,
+    //   status: this.metrics.statusCode,
+    //   timestamp: this.formatDate(new Date()),
+    // });
   }
 
   startDbUpdate() {
@@ -293,12 +293,13 @@ class PerformanceMonitor {
       }
     }
 
-    console.log(`row ${index} Response:`, {
-      status: response.status,
-      data: response.data,
-      error: errorMessage,
-      timestamp: this.formatDate(new Date()),
-    });
+    // Might Slow Down Performance - Uncomment if needed
+    // console.log(`row ${index} Response:`, {
+    //   status: response.status,
+    //   data: response.data,
+    //   error: errorMessage,
+    //   timestamp: this.formatDate(new Date()),
+    // });
   }
 
   static logServerMetrics() {

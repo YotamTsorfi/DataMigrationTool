@@ -21,6 +21,7 @@ interface JobType {
   JobTypeName: string;
   DBTableName: string;
   ScreenName: string;
+  priority_id: string;
 }
 
 interface ConfigItem {
@@ -38,6 +39,7 @@ const BatchProcessor: React.FC = () => {
   const [jobTypes, setJobTypes] = useState<JobType[]>([]);
   const [selectedJobType, setSelectedJobType] = useState("");
   const [processingType, setProcessingType] = useState<string>("batch");
+  const [priorityIdField, setPriorityIdField] = useState("");
   //---------------------------------------------
 
   useEffect(() => {
@@ -58,7 +60,7 @@ const BatchProcessor: React.FC = () => {
           (item: ConfigItem) => item.ConfigKey === "PROCESSING_TYPE"
         );
         if (defaultProcessingType) {
-          setProcessingType(defaultProcessingType.ConfigValue);
+          setProcessingType(defaultProcessingType.ConfigValue.toLowerCase());
         }
       } catch (error) {
         console.error("Error fetching processing type:", error);
@@ -87,9 +89,11 @@ const BatchProcessor: React.FC = () => {
     if (selectedJob) {
       setTableName(selectedJob.DBTableName);
       setPriorityScreenName(selectedJob.ScreenName);
+      setPriorityIdField(selectedJob.priority_id);
     } else {
       setTableName("");
       setPriorityScreenName("");
+      setPriorityIdField("");
     }
     setSelectedJobType(e.target.value);
   };
@@ -101,8 +105,10 @@ const BatchProcessor: React.FC = () => {
   };
   //---------------------------------------------
   const handleBatchProcess = async () => {
-    if (!tableName || !priorityScreenName) {
-      toast.error("Table Name and Priority Screen Name are required.");
+    if (!tableName || !priorityScreenName || !priorityIdField) {
+      toast.error(
+        "Table Name and Priority Screen Name and priority Id Field are required."
+      );
       return;
     }
     setIsProcessing(true);
@@ -117,6 +123,7 @@ const BatchProcessor: React.FC = () => {
           tableName,
           priorityScreenName,
           jobType: selectedJobType,
+          priorityIdField,
         }
       );
 
@@ -149,7 +156,7 @@ const BatchProcessor: React.FC = () => {
                   type="radio"
                   name="processingType"
                   value="batch"
-                  checked={processingType === "batch"}
+                  checked={processingType.toLowerCase() === "batch"}
                   onChange={handleProcessingTypeChange}
                 />
                 <label>Batch Processing</label>
@@ -162,7 +169,7 @@ const BatchProcessor: React.FC = () => {
                   type="radio"
                   name="processingType"
                   value="queue"
-                  checked={processingType === "queue"}
+                  checked={processingType.toLowerCase() === "queue"}
                   onChange={handleProcessingTypeChange}
                 />
                 <label>Queue Processing (Grid Model)</label>
@@ -217,6 +224,15 @@ const BatchProcessor: React.FC = () => {
                 type="text"
                 value={priorityScreenName}
                 onChange={(e) => setPriorityScreenName(e.target.value)}
+                readOnly
+              />
+            </InputLabel>
+            <InputLabel>
+              Priority ID Field:
+              <ReadOnlyInput
+                type="text"
+                value={priorityIdField}
+                onChange={(e) => setPriorityIdField(e.target.value)}
                 readOnly
               />
             </InputLabel>

@@ -8,6 +8,7 @@ interface JobRequest {
   tableName: string;
   priorityScreenName: string;
   jobType: string;
+  priorityIdField: string;
 }
 
 export const runJobWithInput = async (req: Request, res: Response) => {
@@ -17,6 +18,7 @@ export const runJobWithInput = async (req: Request, res: Response) => {
     tableName,
     priorityScreenName,
     jobType,
+    priorityIdField,
   }: JobRequest = req.body;
 
   try {
@@ -27,6 +29,7 @@ export const runJobWithInput = async (req: Request, res: Response) => {
       tableName,
       priorityScreenName,
       jobType,
+      priorityIdField,
     });
 
     const results = await jobManager.startJob(jobId, {
@@ -35,6 +38,7 @@ export const runJobWithInput = async (req: Request, res: Response) => {
       tableName,
       priorityScreenName,
       jobType,
+      priorityIdField,
     });
 
     res.status(200).json(results);
@@ -54,7 +58,7 @@ export const getJobTypes = async (req: Request, res: Response) => {
       throw new Error("Database connection pool is null");
     }
     const result = await pool.request().query(`
-      SELECT JobTypeId, JobTypeName, DBTableName, ScreenName FROM PriorityJobTypes
+      SELECT JobTypeId, JobTypeName, DBTableName, ScreenName, priority_id FROM PriorityJobTypes
     `);
     res.status(200).json(result.recordset);
   } catch (error) {
