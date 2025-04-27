@@ -75,3 +75,20 @@ ADD ProcessingType NVARCHAR(20) DEFAULT 'batch';
 -- Add unique constraint on ConfigKey
 ALTER TABLE dbo.PrioritySystemConfig
 ADD CONSTRAINT UQ_ConfigKey UNIQUE (ConfigKey);
+
+
+----------------------------------------27_04_2025
+CREATE TABLE [dbo].[PriorityChildJob] (
+    [ChildJobeId] INT IDENTITY(1,1) NOT NULL, -- מספר רץ אוטומטי
+    [JobTypeName] NVARCHAR(255) NULL,
+    [DBTableName] NVARCHAR(255) NULL,
+    [ScreenName] NVARCHAR(255) NULL,
+    [SourceSystem] NVARCHAR(100) NULL,
+    [priority_id] NVARCHAR(255) NULL,
+    [refParentJobId] INT NULL,
+
+    CONSTRAINT PK_PriorityChildJob PRIMARY KEY (ChildJobeId), -- מפתח ראשי
+    CONSTRAINT FK_PriorityChildJob_PriorityJobTypes
+        FOREIGN KEY (refParentJobId)
+        REFERENCES dbo.PriorityJobTypes (JobTypeId) -- מפתח זר
+);
