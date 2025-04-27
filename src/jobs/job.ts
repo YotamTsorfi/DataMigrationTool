@@ -65,7 +65,7 @@ async function processBatch(
   priorityIdField?: string
 ): Promise<BatchCreateRowsResult> {
   //TODO
-  console.log(`processBatch called with priorityIdField: [${priorityIdField}]`);
+  // console.log(`processBatch called with priorityIdField: [${priorityIdField}]`);
 
   const perfMonitor = new PerformanceMonitor();
   perfMonitor.startOperation();

@@ -228,7 +228,7 @@ export function processApiResponse(
       // Use the priorityIdField parameter to determine which field to check
       if (priorityIdField && responseItem.body[priorityIdField] !== undefined) {
         priorityId = responseItem.body[priorityIdField].toString();
-        console.log(`Found ${priorityIdField} ID: ${priorityId}`);
+        // console.log(`Found ${priorityIdField} ID: ${priorityId}`);
       } else if (
         responseItem.body["@odata.context"] &&
         typeof responseItem.body === "object"
@@ -272,6 +272,7 @@ export function processApiResponse(
       ErrorMessage: errorMessage,
       JobId: row.__jobId,
       priority_id: priorityId,
+      is_new: status === "Completed" ? 0 : 1,
     });
 
     lastProcessedIndex = row.RowId;
