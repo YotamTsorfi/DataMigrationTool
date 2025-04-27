@@ -26,7 +26,9 @@ const ConfigPanel: React.FC = () => {
   const fetchConfigs = async () => {
     try {
       setLoading(true);
-      const response = await axios.get("http://localhost:3001/config");
+      const response = await axios.get(
+        `${process.env.REACT_APP_API_URL}/config`
+      );
 
       // Extract the config array from the response
       const configData = response.data.success
@@ -55,9 +57,12 @@ const ConfigPanel: React.FC = () => {
 
   const saveConfig = async (config: ConfigItem) => {
     try {
-      await axios.put(`http://localhost:3001/config/${config.ConfigKey}`, {
-        value: config.ConfigValue,
-      });
+      await axios.put(
+        `${process.env.REACT_APP_API_URL}/config/${config.ConfigKey}`,
+        {
+          value: config.ConfigValue,
+        }
+      );
       toast.success(`${config.ConfigKey} updated successfully`);
     } catch (error) {
       console.error("Error updating config:", error);

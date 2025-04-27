@@ -45,7 +45,9 @@ const BatchProcessor: React.FC = () => {
   useEffect(() => {
     const fetchJobTypes = async () => {
       try {
-        const response = await axios.get("http://localhost:3001/job/job-types");
+        const response = await axios.get(
+          `${process.env.REACT_APP_API_URL}/job/job-types`
+        );
         setJobTypes(response.data);
       } catch (error) {
         console.error("Error fetching job types:", error);
@@ -55,7 +57,9 @@ const BatchProcessor: React.FC = () => {
     const fetchProcessingType = async () => {
       try {
         // Only fetch the processing type config instead of all configs
-        const response = await axios.get("http://localhost:3001/config");
+        const response = await axios.get(
+          `${process.env.REACT_APP_API_URL}/config`
+        );
         const defaultProcessingType = response.data.find(
           (item: ConfigItem) => item.ConfigKey === "PROCESSING_TYPE"
         );
@@ -73,7 +77,7 @@ const BatchProcessor: React.FC = () => {
   //---------------------------------------------
   // const refreshSystemConfig = async () => {
   //   try {
-  //     const response = await axios.get("http://localhost:3001/job/config");
+  //     const response = await axios.get(`${process.env.REACT_APP_API_URL}/job/config`);
   //     if (response.data.success && response.data.config) {
   //       setSystemConfig(response.data.config);
   //     }
@@ -116,7 +120,7 @@ const BatchProcessor: React.FC = () => {
     try {
       // Use the specific endpoint for processing type
       await axios.post(
-        `http://localhost:3001/job/start-with-type/${processingType}`,
+        `${process.env.REACT_APP_API_URL}/job/start-with-type/${processingType}`,
         {
           recordCount,
           startRow,

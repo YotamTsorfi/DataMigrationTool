@@ -159,7 +159,7 @@ const BatchDashboard: React.FC = () => {
       try {
         const params = { dateRange, statusFilter, jobFilter, tableFilter };
         const response = await axios.get(
-          "http://localhost:3001/dashboard/dashboard-summary",
+          `${process.env.REACT_APP_API_URL}/dashboard/dashboard-summary`,
           { params }
         );
         setSummary(response.data);
@@ -186,7 +186,9 @@ const BatchDashboard: React.FC = () => {
   useEffect(() => {
     const fetchJobTypes = async () => {
       try {
-        const response = await axios.get("http://localhost:3001/job/job-types");
+        const response = await axios.get(
+          `${process.env.REACT_APP_API_URL}/job/job-types`
+        );
         const jobNames = response.data.map((job: any) => job.JobTypeName);
         setAvailableJobs(jobNames);
       } catch (error) {
@@ -205,7 +207,7 @@ const BatchDashboard: React.FC = () => {
       try {
         if (activeTab === "batches") {
           const response = await axios.get(
-            "http://localhost:3001/dashboard/results",
+            `${process.env.REACT_APP_API_URL}/dashboard/results`,
             {
               params: {
                 page: batchPage,
@@ -221,7 +223,7 @@ const BatchDashboard: React.FC = () => {
           setTotalBatches(response.data.total);
         } else if (activeTab === "errors") {
           const response = await axios.get(
-            "http://localhost:3001/dashboard/errors",
+            `${process.env.REACT_APP_API_URL}/dashboard/errors`,
             {
               params: {
                 page: errorPage,
@@ -236,7 +238,7 @@ const BatchDashboard: React.FC = () => {
           setTotalErrors(response.data.total);
         } else if (activeTab === "jobs") {
           const response = await axios.get(
-            "http://localhost:3001/dashboard/jobs-history",
+            `${process.env.REACT_APP_API_URL}/dashboard/jobs-history`,
             {
               params: {
                 dateRange,

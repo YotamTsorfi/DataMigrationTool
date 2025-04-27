@@ -2,7 +2,7 @@
 
 declare namespace NodeJS {
     interface ProcessEnv {
-      PRIORITY_DEV_BASE_URL: string;
+      PRIORITY_BASE_URL: string;
       PRIORITY_PAT: string;
       PRIORITY_PASSWORD: string;
 

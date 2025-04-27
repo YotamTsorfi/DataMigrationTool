@@ -19,10 +19,16 @@ const app = express();
 const port = config.port;
 const httpServer = createServer(app);
 
+const allowedOrigins = [
+  `http://localhost:${port}`,
+  "http://localhost:3000",
+  "http://localhost:3005",
+];
+
 // Initialize Socket.IO
 const io = new Server(httpServer, {
   cors: {
-    origin: "http://localhost:3000",
+    origin: allowedOrigins,
     methods: ["GET", "POST"],
     credentials: true,
   },
@@ -44,7 +50,7 @@ io.on("connection", (socket) => {
 //app.use(cors());
 app.use(
   cors({
-    origin: "http://localhost:3000", // restrict calls to those this address
+    origin: allowedOrigins,
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })

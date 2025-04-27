@@ -64,7 +64,7 @@ const JobProgressTracker: React.FC<JobProgressTrackerProps> = ({ jobId }) => {
 
   useEffect(() => {
     // Connect to socket server
-    const socketClient = io("http://localhost:3001");
+    const socketClient = io(process.env.REACT_APP_API_URL);
     // setSocket(socketClient);
 
     // Listen for progress updates
@@ -88,7 +88,7 @@ const JobProgressTracker: React.FC<JobProgressTrackerProps> = ({ jobId }) => {
 
     // Initial fetch of active jobs
     if (!jobId) {
-      fetch("http://localhost:3001/job/active-jobs")
+      fetch(`${process.env.REACT_APP_API_URL}/job/active-jobs`)
         .then((res) => res.json())
         .then((data) => {
           if (data.success && data.activeJobs) {
@@ -97,7 +97,7 @@ const JobProgressTracker: React.FC<JobProgressTrackerProps> = ({ jobId }) => {
         })
         .catch((err) => console.error("Error fetching active jobs:", err));
     } else {
-      fetch(`http://localhost:3001/job/progress/${jobId}`)
+      fetch(`${process.env.REACT_APP_API_URL}/job/progress/${jobId}`)
         .then((res) => res.json())
         .then((data) => {
           if (data.success && data.progress) {

@@ -1,11 +1,20 @@
 // src/config/config.ts
 
 import dotenv from "dotenv";
-dotenv.config();
+
+// Load environment-specific config
+const envFile = process.env.NODE_ENV === 'production' 
+  ? '.env.production' 
+  : '.env.development';
+
+dotenv.config({ path: envFile });
+
+
+// dotenv.config();
 
 const requiredEnvVars = [
   "SERVER_PORT",
-  "PRIORITY_DEV_BASE_URL",
+  "PRIORITY_BASE_URL",
   "PRIORITY_PAT",
   "PRIORITY_PASSWORD",
   "CARMELTON_DB_USER",
@@ -22,7 +31,7 @@ requiredEnvVars.forEach((envVar) => {
 });
 
 export const config = {
-  priorityDEVBaseUrl: process.env.PRIORITY_DEV_BASE_URL!,
+  priorityDEVBaseUrl: process.env.PRIORITY_BASE_URL!,
   priorityPAT: process.env.PRIORITY_PAT!,
   priorityPassword: process.env.PRIORITY_PASSWORD!,
 
@@ -38,5 +47,5 @@ export const config = {
     },
   },
 
-  port: parseInt(process.env.SERVER_PORT || "3001", 10),
+  port: parseInt(process.env.SERVER_PORT || "3002", 10),
 };
