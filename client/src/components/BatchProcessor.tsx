@@ -22,6 +22,7 @@ interface JobType {
   DBTableName: string;
   ScreenName: string;
   priority_id: string;
+  linkedField: string;
 }
 
 interface ConfigItem {
@@ -40,6 +41,8 @@ const BatchProcessor: React.FC = () => {
   const [selectedJobType, setSelectedJobType] = useState("");
   const [processingType, setProcessingType] = useState<string>("batch");
   const [priorityIdField, setPriorityIdField] = useState("");
+  const [priorityLinkedField, setPriorityLinkedField] = useState("");
+  const [priorityJobTypeId, setPriorityJobTypeId] = useState(0);
   //---------------------------------------------
 
   useEffect(() => {
@@ -94,10 +97,14 @@ const BatchProcessor: React.FC = () => {
       setTableName(selectedJob.DBTableName);
       setPriorityScreenName(selectedJob.ScreenName);
       setPriorityIdField(selectedJob.priority_id);
+      setPriorityLinkedField(selectedJob.linkedField);
+      setPriorityJobTypeId(selectedJob.JobTypeId);
     } else {
       setTableName("");
       setPriorityScreenName("");
       setPriorityIdField("");
+      setPriorityLinkedField("");
+      setPriorityJobTypeId(0);
     }
     setSelectedJobType(e.target.value);
   };
@@ -128,6 +135,8 @@ const BatchProcessor: React.FC = () => {
           priorityScreenName,
           jobType: selectedJobType,
           priorityIdField,
+          priorityLinkedField,
+          priorityJobTypeId,
         }
       );
 
@@ -237,6 +246,15 @@ const BatchProcessor: React.FC = () => {
                 type="text"
                 value={priorityIdField}
                 onChange={(e) => setPriorityIdField(e.target.value)}
+                readOnly
+              />
+            </InputLabel>
+            <InputLabel>
+              Priority Linked Field:
+              <ReadOnlyInput
+                type="text"
+                value={priorityLinkedField}
+                onChange={(e) => setPriorityLinkedField(e.target.value)}
                 readOnly
               />
             </InputLabel>

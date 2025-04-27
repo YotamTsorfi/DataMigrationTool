@@ -12,6 +12,8 @@ interface JobRequest {
   jobType: string;
   processingType?: string;
   priorityIdField: string;
+  priorityLinkedField?: string;
+  priorityJobTypeId?: number;
 }
 
 type JobStatus = "Queued" | "Running" | "Completed" | "Failed";
@@ -109,6 +111,28 @@ class JobManager {
       }
     );
 
+    // Check if priorityLinkedField from job request has a value
+    // If so, send it to the processing function
+    if (jobRequest.priorityLinkedField) {
+      console.log(
+        `Job ${jobId} has priorityLinkedField: ${jobRequest.priorityLinkedField}`
+      );
+      console.log(
+        `Job ${jobId} has priorityJobTypeId  : ${jobRequest.priorityJobTypeId}`
+      );
+
+      const db_result = await DatabaseService.executeQuery(
+        `SELECT COUNT(*) AS count FROM PriorityChildJob WHERE refParentJobId = @JobTypeId`,
+        {
+          JobTypeId: jobRequest.priorityJobTypeId,
+        }
+      );
+
+      // Extract the count value from the result
+      const childJobCount = (db_result[0] as { count: number })?.count || 0;
+      console.log(`Job ${jobId} has ${childJobCount} child jobs`);
+    }
+
     // console.log(
     //   `Job ${jobId} status updated to Running at: ${new Date().toISOString()}`
     // );
@@ -123,6 +147,7 @@ class JobManager {
     // );
 
     let results;
+    /*
     if (processingType === "queue") {
       results = await processWithQueues(
         jobRequest.recordCount,
@@ -180,7 +205,7 @@ class JobManager {
       totalFailures,
       totalFailures > 0 ? "Some batches failed" : undefined
     );
-
+  */
     return results;
   }
 
