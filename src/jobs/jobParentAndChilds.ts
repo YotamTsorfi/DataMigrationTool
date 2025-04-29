@@ -53,8 +53,15 @@ interface ChildJob {
     linkedField: string,
     childJobs: ChildJob[]
   ): Promise<BatchResult[]> {
-    console.log(`Starting processParentChildBatches for job ${jobId}`);
-    console.log(`Parent table: ${parentTableName}, linked field: ${linkedField}`);
+    // Log parent job details for better visibility
+    console.log("Parent job details:");
+    console.log(`  Table Name: ${parentTableName}`);
+    console.log(`  Screen Name: ${parentScreenName}`);
+    console.log(`  Parent ID Field: ${parentIdField}`);
+    console.log(`  Linked Field: ${linkedField}`);
+    console.log(`  Job Type: ${jobType}`);
+    // console.log(`Starting processParentChildBatches for job ${jobId}`);
+
     console.log(`Processing ${childJobs.length} child jobs`);
 
     const results: BatchResult[] = [];
