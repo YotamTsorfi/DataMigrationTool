@@ -131,7 +131,17 @@ class JobManager {
       // Extract the count value from the result
       const childJobCount = (db_result[0] as { count: number })?.count || 0;
       console.log(`Job ${jobId} has ${childJobCount} child jobs`);
-    }
+
+      // if childJobCount && childJobCount > 0 && processingType === "batch"
+      // Send to new processParentAndChildBatches function
+
+      // Create new file of jobParentAndChild.ts
+      // fetch the data from parent and child entities (from each parent combine json with his childs)
+      // process in bulks of 1000 records (or whatever is set in the system config) and combine the rows
+      // Send the rows to priority
+
+      // process the response and update the db entities
+    } 
 
     // console.log(
     //   `Job ${jobId} status updated to Running at: ${new Date().toISOString()}`
