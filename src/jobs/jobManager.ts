@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import { processBatches } from "../jobs/job";
 import ProgressTracker from "../utils/progressTracker";
 import { processWithQueues } from "../jobs/queueJob";
+import { processParentChildBatches } from "../jobs/jobParentAndChilds";
 
 interface JobRequest {
   recordCount: number;
@@ -14,6 +15,15 @@ interface JobRequest {
   priorityIdField: string;
   priorityLinkedField?: string;
   priorityJobTypeId?: number;
+}
+
+interface ChildJob {
+  ChildJobeId: number;
+  JobTypeName: string;
+  DBTableName: string;
+  ScreenName: string;
+  priority_id: string;
+  HasSiblings: boolean;
 }
 
 type JobStatus = "Queued" | "Running" | "Completed" | "Failed";
@@ -75,6 +85,7 @@ class JobManager {
   //   ----------------------------
   async startJob(jobId: string, jobRequest: JobRequest): Promise<any> {
     const jobStartTime = Date.now();
+    let results;
     //console.log(`Job ${jobId} starting at: ${new Date().toISOString()}`);
 
     console.log(`Job ${jobId} starting with request:`, {
@@ -121,15 +132,18 @@ class JobManager {
         `Job ${jobId} has priorityJobTypeId  : ${jobRequest.priorityJobTypeId}`
       );
 
-      const db_result = await DatabaseService.executeQuery(
-        `SELECT COUNT(*) AS count FROM PriorityChildJob WHERE refParentJobId = @JobTypeId`,
+      // Get child jobs in a single query
+      const childJobs = (await DatabaseService.executeQuery(
+        `SELECT ChildJobeId, JobTypeName, DBTableName, ScreenName, priority_id, HasSiblings 
+        FROM PriorityChildJob 
+        WHERE refParentJobId = @JobTypeId`,
         {
           JobTypeId: jobRequest.priorityJobTypeId,
         }
-      );
+      )) as ChildJob[];
 
-      // Extract the count value from the result
-      const childJobCount = (db_result[0] as { count: number })?.count || 0;
+      // Use the length of the returned array for the count
+      const childJobCount = childJobs.length;
       console.log(`Job ${jobId} has ${childJobCount} child jobs`);
 
       // if childJobCount && childJobCount > 0 && processingType === "batch"
@@ -141,7 +155,28 @@ class JobManager {
       // Send the rows to priority
 
       // process the response and update the db entities
-    } 
+
+      // If we have child jobs and we're using batch processing, use the parent-child processor
+      if (childJobCount > 0 && processingType === "batch") {
+        console.log(`Job ${jobId} using parent-child batch processing`);
+
+        // Call the parent-child processor with the already retrieved child job details
+        results = await processParentChildBatches(
+          jobRequest.recordCount,
+          jobRequest.startRow,
+          jobRequest.tableName,
+          jobRequest.priorityScreenName,
+          jobRequest.jobType,
+          jobId,
+          jobRequest.priorityIdField,
+          jobRequest.priorityLinkedField,
+          childJobs
+        );
+
+        // Process results and complete the job
+        // ...remaining processing code...
+      }
+    }
 
     // console.log(
     //   `Job ${jobId} status updated to Running at: ${new Date().toISOString()}`
@@ -156,7 +191,6 @@ class JobManager {
     //   `Job ${jobId} starting batch processing at: ${new Date().toISOString()}`
     // );
 
-    let results;
     /*
     if (processingType === "queue") {
       results = await processWithQueues(
