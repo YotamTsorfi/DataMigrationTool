@@ -55,46 +55,53 @@ interface ChildJob {
   ): Promise<BatchResult[]> {
     console.log(`Starting processParentChildBatches for job ${jobId}`);
     console.log(`Parent table: ${parentTableName}, linked field: ${linkedField}`);
-    console.log(`Processing ${childJobs.length} child job types`);
-  
+    console.log(`Processing ${childJobs.length} child jobs`);
+
     const results: BatchResult[] = [];
     const batchSize = await getBatchSize();
     const totalBatches = Math.ceil(totalRecords / batchSize);
-    
+
     try {
       for (let batchNum = 0; batchNum < totalBatches; batchNum++) {
         const offset = startRow + batchNum * batchSize;
-        console.log(`Processing batch ${batchNum + 1}/${totalBatches}, offset: ${offset}`);
-        
+        console.log(
+          `Processing batch ${batchNum + 1}/${totalBatches}, offset: ${offset}`
+        );
+
         // Log childJobs for inspection
-        console.log('Child jobs details:');
+        console.log("Child jobs details:");
         childJobs.forEach((job, index) => {
-            console.log(`Child job ${index + 1}:`);
-            console.log(`  JobType: ${job.JobTypeName}`);
-            console.log(`  TableName: ${job.DBTableName}`);
-            console.log(`  ScreenName: ${job.ScreenName}`);
-            console.log(`  Priority ID: ${job.priority_id}`);
-            console.log(`  HasSiblings: ${job.HasSiblings}`);
+          console.log(`Child job ${index + 1}:`);
+          console.log(`  JobType: ${job.JobTypeName}`);
+          console.log(`  TableName: ${job.DBTableName}`);
+          console.log(`  ScreenName: ${job.ScreenName}`);
+          console.log(`  Priority ID: ${job.priority_id}`);
+          console.log(`  HasSiblings: ${job.HasSiblings}`);
         });
 
         // Example of how to fetch parent records for this batch
         //const parentRecords = await fetchParentRecords(parentTableName, offset, batchSize, parentIdField);
+        // Create new file for Fetching data from both parent and child entities
+        // Process the data in batches of 1000 records (or whatever is set in the system config / or at the parent job**) and combine the rows by the requirements.
+        // Send the rows to Priority using the batch API
+        // Process the response and update the database entities accordingly
+
         //console.log(`Fetched ${parentRecords.length} parent records`);
         // 1. Fetch parent records for this batch
         //const parentRecords = await fetchParentRecords(parentTableName, offset, batchSize, parentIdField);
-        
+
         // 2. For each parent record, fetch the related child records
         //const combinedData = await combineParentChildData(parentRecords, parentIdField, linkedField, childJobs);
-        
+
         // 3. Send the combined data to Priority
         //const batchResult = await sendToPriority(combinedData, parentScreenName);
-        
+
         // 4. Process the response and update database entities
         //await processBatchResponse(batchResult, parentTableName, childJobs);
-        
+
         // 5. Update progress
-       // ProgressTracker.updateProgress(jobId, batchSize, batchResult.success ? batchSize : 0);
-        
+        // ProgressTracker.updateProgress(jobId, batchSize, batchResult.success ? batchSize : 0);
+
         // 6. Add result to results array
         // results.push({
         //   success: batchResult.success,
@@ -102,16 +109,15 @@ interface ChildJob {
         //   failureCount: batchResult.success ? 0 : batchSize,
         //   error: batchResult.success ? undefined : batchResult.error
         // });
-
       }
-      
+
       return results;
     } catch (error) {
       console.error(`Error in processParentChildBatches: ${error}`);
       results.push({
         success: false,
         failureCount: totalRecords,
-        error: error
+        error: error,
       });
       return results;
     }

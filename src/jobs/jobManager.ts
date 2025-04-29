@@ -125,12 +125,12 @@ class JobManager {
     // Check if priorityLinkedField from job request has a value
     // If so, send it to the processing function
     if (jobRequest.priorityLinkedField) {
-      console.log(
-        `Job ${jobId} has priorityLinkedField: ${jobRequest.priorityLinkedField}`
-      );
-      console.log(
-        `Job ${jobId} has priorityJobTypeId  : ${jobRequest.priorityJobTypeId}`
-      );
+      // console.log(
+      //   `Job ${jobId} has priorityLinkedField: ${jobRequest.priorityLinkedField}`
+      // );
+      // console.log(
+      //   `Job ${jobId} has priorityJobTypeId  : ${jobRequest.priorityJobTypeId}`
+      // );
 
       // Get child jobs in a single query
       const childJobs = (await DatabaseService.executeQuery(
@@ -144,7 +144,7 @@ class JobManager {
 
       // Use the length of the returned array for the count
       const childJobCount = childJobs.length;
-      console.log(`Job ${jobId} has ${childJobCount} child jobs`);
+      // console.log(`Job ${jobId} has ${childJobCount} child jobs`);
 
       // if childJobCount && childJobCount > 0 && processingType === "batch"
       // Send to new processParentAndChildBatches function
@@ -158,7 +158,7 @@ class JobManager {
 
       // If we have child jobs and we're using batch processing, use the parent-child processor
       if (childJobCount > 0 && processingType === "batch") {
-        console.log(`Job ${jobId} using parent-child batch processing`);
+        // console.log(`Job ${jobId} using parent-child batch processing`);
 
         // Call the parent-child processor with the already retrieved child job details
         results = await processParentChildBatches(
