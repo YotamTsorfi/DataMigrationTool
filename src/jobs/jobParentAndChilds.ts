@@ -23,7 +23,9 @@ import {
   measureResponsePerformance,
 } from "../services/requestSender";
 
-interface ChildJob {
+
+import { streamParentChildData } from '../services/parentChildDataFetcher';
+export interface ChildJob {
     ChildJobeId: number;
     JobTypeName: string;
     DBTableName: string;
@@ -66,6 +68,8 @@ interface ChildJob {
 
     const results: BatchResult[] = [];
     const batchSize = await getBatchSize();
+    let processedRecords = 0;
+    const maxBatchSizeForApi = 1000;
     const totalBatches = Math.ceil(totalRecords / batchSize);
 
     try {
@@ -85,6 +89,48 @@ interface ChildJob {
           console.log(`  Priority ID: ${job.priority_id}`);
           console.log(`  HasSiblings: ${job.HasSiblings}`);
         });
+
+        const dataStream = streamParentChildData(
+          parentTableName,
+          batchSize,
+          startRow,
+          totalRecords,
+          parentIdField,
+          linkedField,
+          parentScreenName,
+          childJobs
+        );
+
+        let currentBatch: any[] = [];
+
+      // עיבוד הנתונים בזמן אמת כשהם זורמים מהדאטה בייס
+      for await (const record of dataStream) {
+        currentBatch.push(record);
+        processedRecords++;
+      
+        // כשמגיעים לגודל המקסימלי, שולחים את המנה לשרת
+        // TODO: move sendToPriority to separate file and import it here
+        if (currentBatch.length >= maxBatchSizeForApi) {
+          const batchResult = await sendToPriority(currentBatch);
+          results.push(batchResult);
+          
+          // עדכון התקדמות
+          // ProgressTracker.updateProgress(jobId, currentBatch.length, 
+          //   batchResult.success ? currentBatch.length : 0);
+          
+          // איפוס המנה הנוכחית
+          currentBatch = [];
+        }
+      }
+
+        // שליחת מנה אחרונה אם נשארו רשומות
+        if (currentBatch.length > 0) {
+          const batchResult = await sendToPriority(currentBatch);
+          results.push(batchResult);
+          // ProgressTracker.updateProgress(jobId, currentBatch.length, 
+          //   batchResult.success ? currentBatch.length : 0);
+        }
+    
 
         // Example of how to fetch parent records for this batch
         //const parentRecords = await fetchParentRecords(parentTableName, offset, batchSize, parentIdField);
@@ -123,13 +169,14 @@ interface ChildJob {
       console.error(`Error in processParentChildBatches: ${error}`);
       results.push({
         success: false,
-        failureCount: totalRecords,
+        failureCount: totalRecords - processedRecords,
         error: error,
       });
       return results;
     }
   }
   
+  // TODO: need to change it and get the batch size from PriorityJobTypes table
   // Helper function to get batch size from configuration
   async function getBatchSize(): Promise<number> {
     try {
@@ -193,7 +240,41 @@ interface ChildJob {
   }
 
 
+// פונקציית עזר לשליחת נתונים לשירות Priority
+async function sendToPriority(records: any[]): Promise<BatchResult> {
+  try {
+    // יצירת גוף הבקשה
+    // const boundary = generateBoundary();
+    // const requestBody = buildBatchRequestBody(records, boundary);
+    // const headers = createBatchHeaders(boundary);
+    
+    // // שליחת הבקשה ועיבוד התשובה
+    // const response = await sendBatchRequest(requestBody, headers);
+    // const result = await processApiResponse(response);
+    
+    // return {
+    //   success: result.success,
+    //   successCount: result.successCount || 0,
+    //   failureCount: result.failureCount || 0,
+    //   error: result.error
+    // };
 
+    //TODO Delete after debugging
+    return {
+      success: true,
+      successCount: 0,
+      failureCount: 0,
+      error: "error"
+    };
+  } catch (error) {
+    console.error(`Error sending batch to Priority: ${error}`);
+    return {
+      success: false,
+      failureCount: records.length,
+      error
+    };
+  }
+}
 
 
 
