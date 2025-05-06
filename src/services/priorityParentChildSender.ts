@@ -12,6 +12,7 @@ import {
   measureRequestPerformance,
 } from "../services/requestSender";
 import { processParentChildResponse } from "./priorityParentChildResponseProcessor";
+import { writeToLogFile } from "../config/logger";
 
 // תוצאת שליחה של מנה (Batch)
 export interface BatchSendResult {
@@ -89,6 +90,33 @@ export async function sendParentChildBatch(
       `Basic ${Buffer.from(`${config.priorityPAT}:${config.priorityPassword}`).toString("base64")}`
     );
     perfMonitor.endBatchBuild();
+
+
+    //****   DEBUG    ****/
+    // שמירת בקשת ה-HTTP המלאה לקובץ לוג - הוסף כאן
+    const requestLogData = {
+        url: `${config.priorityDEVBaseUrl}/$batch`,
+        method: "POST",
+        headers: headers,
+        boundary: boundary,
+        batchId: batchId,
+        timestamp: new Date().toISOString(),
+        recordCount: records.length
+      };
+  
+      // שמירת הבקשה המלאה לקובץ לוג
+      writeToLogFile(
+        "request_debug.log", 
+        JSON.stringify(requestLogData)
+      );
+  
+      // שמירת גוף הבקשה המלא לקובץ נפרד
+      writeToLogFile(
+        "request_body.log",
+        batchBody
+      );
+    //****   DEBUG    ****/
+
 
     // מדידת זמן השליחה
     perfMonitor.startRequest();
