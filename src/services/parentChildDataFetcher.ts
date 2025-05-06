@@ -1,32 +1,17 @@
 import { DatabaseService } from "../services/databaseService";
 import { ChildJob } from "../jobs/jobParentAndChilds";
 import { Readable, Transform } from 'stream';
-
-
 interface ParentRecord {
   RowId: number;
   Data: string;
   [key: string]: any; 
 }
-
 interface ChildRecord {
   RowId: number;
   Data: string;
   [key: string]: any; 
 }
-
-// interface CombinedRecord {
-//   parent: ParentRecord;
-//   parsedParentData: any;
-//   children: {
-//     [jobType: string]: {
-//       records: ChildRecord[];
-//       parsedData: any[];
-//     };
-//   };
-// }
-
-
+//---------------------------------------------------------------------------
 // תוצאת הפונקציה תהיה סטרים של אובייקטי JSON מוכנים לשליחה
 /*
 לעצור ולהמשיך את הריצה שלה - הפונקציה יכולה "להפסיק" באמצע הריצה ולהמשיך מאותה נקודה בפעם הבאה שהיא מתבקשת לרוץ
@@ -66,8 +51,7 @@ export async function* streamParentChildData(
           
         // מיצוי ערכי המפתח לצורך שליפת ילדים
         const linkedValues = parentRecords.map(record => record[linkedField]);
-        console.log(`Extracted ${linkedValues.length} linked values from parent records`);
-    
+        // console.log(`Extracted ${linkedValues.length} linked values from parent records`);
     
         // שליפת נתוני ילדים לכל סוגי הילדים
         const childDataMap = await fetchAllChildData(childJobs, linkedValues, linkedField);
@@ -107,33 +91,30 @@ export async function* streamParentChildData(
                     priorityObject[subformKey] = parsedChildData[0]; // בכל מקרה לוקחים את הראשון
                 }
                 }
-            }
-                        
-            /// TODO: ADD Some Cahnges to check git host
+            }                                    
             // הפקת אובייקט JSON מוכן לשימוש
             yield priorityObject;
             processedRows++;
-        }
-        
+        }        
           // התקדמות לחלק הבא
         currentOffset += parentRecords.length;      
     }
   }
-
+//---------------------------------------------------------------------------
 // Map-בניית מבנה היררכי של נתוני הילדים באמצעות מבני נתונים מסוג 
 async function fetchAllChildData(
     childJobs: ChildJob[],
     linkedValues: any[],
     linkedField: string 
   ): Promise<Map<string, Map<any, ChildRecord[]>>> {
-    console.log(`Fetching child data, Parent linked value: ${linkedValues}`);
+    // console.log(`Fetching child data, Parent linked value: ${linkedValues}`);
 
     // מפה דו-רמתית: סוג הילד -> ערך מקשר -> רשימת רשומות
     const childDataMap = new Map<string, Map<any, ChildRecord[]>>();
     
     // שליפה מקבילה של כל סוגי הילדים
     await Promise.all(childJobs.map(async (childJob) => {
-        console.log(`Fetching children for job type: ${childJob.JobTypeName}, table: ${childJob.DBTableName}`);
+        // console.log(`Fetching children for job type: ${childJob.JobTypeName}, table: ${childJob.DBTableName}`);
         
         // תיקון: העברת linkedField במקום childJob.priority_id
         const childRecords = await fetchChildRecords(
@@ -142,7 +123,7 @@ async function fetchAllChildData(
           linkedValues
         );
 
-        console.log(`Fetched ${childRecords.length} child records for ${childJob.JobTypeName}`);
+        // console.log(`Fetched ${childRecords.length} child records for ${childJob.JobTypeName}`);
       
         // יצירת מפה פנימית לסוג הילד הנוכחי
         const innerMap = new Map<any, ChildRecord[]>();
@@ -161,7 +142,7 @@ async function fetchAllChildData(
     
     return childDataMap;
   }
-
+//---------------------------------------------------------------------------
 /**
  * שליפת רשומות אב העומדות בתנאים הנדרשים
  */
@@ -172,7 +153,7 @@ async function fetchEligibleParentRecords(
     linkedField: string
   ): Promise<ParentRecord[]> {
     try {
-      console.log(`Starting to fetch parent records from ${tableName}`);
+      // console.log(`Starting to fetch parent records from ${tableName}`);
       const query = `
         SELECT RowId, Data, ${linkedField}
         FROM ${tableName}
@@ -184,16 +165,16 @@ async function fetchEligibleParentRecords(
         FETCH NEXT ${limit} ROWS ONLY
       `;
     
-      console.log(`Fetching parent records from ${tableName} with offset ${offset}, limit ${limit}`);
+      // console.log(`Fetching parent records from ${tableName} with offset ${offset}, limit ${limit}`);
       const results = await DatabaseService.executeQuery(query);
-      console.log(`Finished fetching ${results?.length || 0} parent records`);
+      // console.log(`Finished fetching ${results?.length || 0} parent records`);
       return results as ParentRecord[];
     } catch (error) {
       console.error(`Error in fetchEligibleParentRecords: ${error}`);
       throw error;
     }
   }
-
+//---------------------------------------------------------------------------
 /**
  * שליפת רשומות ילדים על פי רשימת ערכי קישור
  * משתמש בשאילתה מותאמת כדי לטפל ביעילות במספר גדול של ערכים
@@ -228,10 +209,10 @@ async function fetchChildRecords(
     ORDER BY RowId ASC
   `;
 
-  console.log(`Fetching ${linkValues.length} child records from ${tableName}`);
+  // console.log(`Fetching ${linkValues.length} child records from ${tableName}`);
   return await DatabaseService.executeQuery(query, params);
 }
-
+//---------------------------------------------------------------------------
 /**
  * שליפת רשומות ילדים עם טבלה זמנית עבור מספר גדול של ערכי קישור
  */
@@ -272,7 +253,7 @@ async function fetchChildRecordsWithTempTable(
     await DatabaseService.executeQuery(`DROP TABLE IF EXISTS ${tempTableName}`);
   }
 }
-
+//---------------------------------------------------------------------------
 /**
  * פענוח נתוני JSON בצורה בטוחה
  */
