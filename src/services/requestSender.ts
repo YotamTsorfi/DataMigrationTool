@@ -37,7 +37,7 @@ export async function sendBatchRequest(
         batchBody,
         {
           headers,
-          timeout: 60000, // 60 seconds timeout
+          timeout: 500, //60000 = 60 seconds timeout
           httpAgent,
           httpsAgent,
         }
