@@ -61,11 +61,8 @@ export async function* streamParentChildData(
             const linkValue = parent[linkedField];
             const parsedParentData = parseJsonData(parent.Data);            
 
-            // יצירת אובייקט JSON מאוחד ישירות לפורמט הסופי
-            const priorityObject = {
-            FORM: parentScreenName,
-            ...parsedParentData,
-            };
+            // שימוש ישיר באובייקט המקורי
+            const priorityObject = parsedParentData;
 
             // הוספת הילדים הרלוונטיים לכל אב בהתאם להגדרת HasSiblings
             for (const job of childJobs) {
