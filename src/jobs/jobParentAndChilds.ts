@@ -25,6 +25,7 @@ import {
 
 
 import { streamParentChildData } from '../services/parentChildDataFetcher';
+import { writeToLogFile } from "../config/logger";
 export interface ChildJob {
     ChildJobeId: number;
     JobTypeName: string;
@@ -74,22 +75,22 @@ export interface ChildJob {
 
     try {
       for (let batchNum = 0; batchNum < totalBatches; batchNum++) {
-        const offset = startRow + batchNum * batchSize;
-        console.log(
-          `Processing batch ${batchNum + 1}/${totalBatches}, offset: ${offset}`
-        );
+          const offset = startRow + batchNum * batchSize;
+          console.log(
+            `Processing batch ${batchNum + 1}/${totalBatches}, offset: ${offset}`
+          );
 
-        // Log childJobs for inspection
-        console.log("Child jobs details:");
-        childJobs.forEach((job, index) => {
-          console.log(`Child job ${index + 1}:`);
-          console.log(`  JobType: ${job.JobTypeName}`);
-          console.log(`  TableName: ${job.DBTableName}`);
-          console.log(`  ScreenName: ${job.ScreenName}`);
-          console.log(`  Priority ID: ${job.priority_id}`);
-          console.log(`  HasSiblings: ${job.HasSiblings}`);
-        });
-
+          // Log childJobs for inspection
+          console.log("Child jobs details:");
+          childJobs.forEach((job, index) => {
+            console.log(`Child job ${index + 1}:`);
+            console.log(`  JobType: ${job.JobTypeName}`);
+            console.log(`  TableName: ${job.DBTableName}`);
+            console.log(`  ScreenName: ${job.ScreenName}`);
+            console.log(`  Priority ID: ${job.priority_id}`);
+            console.log(`  HasSiblings: ${job.HasSiblings}`);
+          });
+      
         const dataStream = streamParentChildData(
           parentTableName,
           batchSize,
@@ -101,6 +102,16 @@ export interface ChildJob {
           childJobs
         );
 
+        // אפילו בדיקה פשוטה זו תספיק כדי להפעיל את הגנרטור
+        // והיא תאפשר לך לראות את הלוגים
+        for await (const record of dataStream) {
+          writeToLogFile(
+            "parentChildData.log",
+            `[INFO] Record data: ${JSON.stringify(record)}`
+          );
+          //break; // אפשר לעצור אחרי רשומה אחת לצורך בדיקה
+        }
+    /*
         let currentBatch: any[] = [];
 
       // עיבוד הנתונים בזמן אמת כשהם זורמים מהדאטה בייס
@@ -131,7 +142,7 @@ export interface ChildJob {
           //   batchResult.success ? currentBatch.length : 0);
         }
     
-
+      */
         // Example of how to fetch parent records for this batch
         //const parentRecords = await fetchParentRecords(parentTableName, offset, batchSize, parentIdField);
         // Create new file for Fetching data from both parent and child entities
@@ -176,6 +187,7 @@ export interface ChildJob {
     }
   }
   
+  //---------------------------------------------------------------------------
   // TODO: need to change it and get the batch size from PriorityJobTypes table
   // Helper function to get batch size from configuration
   async function getBatchSize(): Promise<number> {
@@ -198,7 +210,7 @@ export interface ChildJob {
     const query = `SELECT * FROM ${tableName} ORDER BY ${idField} OFFSET ${offset} ROWS FETCH NEXT ${limit} ROWS ONLY`;
     return await DatabaseService.executeQuery(query);
   }
-  
+  //---------------------------------------------------------------------------
   // Helper function to combine parent and child data
   async function combineParentChildData(
     parentRecords: any[],
@@ -231,51 +243,50 @@ export interface ChildJob {
     
     return combinedData;
   }
-  
+  //---------------------------------------------------------------------------
   // Helper function to process batch response and update database
   async function processBatchResponse(batchResult: any, parentTableName: string, childJobs: ChildJob[]): Promise<void> {
     // Implementation depends on the response structure and update requirements
     // This would update both parent and child tables based on the Priority response
     console.log(`Processing batch response for ${parentTableName}`);
   }
+  //---------------------------------------------------------------------------
+  // פונקציית עזר לשליחת נתונים לשירות Priority
+  async function sendToPriority(records: any[]): Promise<BatchResult> {
+    try {
+      // יצירת גוף הבקשה
+      // const boundary = generateBoundary();
+      // const requestBody = buildBatchRequestBody(records, boundary);
+      // const headers = createBatchHeaders(boundary);
+      
+      // // שליחת הבקשה ועיבוד התשובה
+      // const response = await sendBatchRequest(requestBody, headers);
+      // const result = await processApiResponse(response);
+      
+      // return {
+      //   success: result.success,
+      //   successCount: result.successCount || 0,
+      //   failureCount: result.failureCount || 0,
+      //   error: result.error
+      // };
 
-
-// פונקציית עזר לשליחת נתונים לשירות Priority
-async function sendToPriority(records: any[]): Promise<BatchResult> {
-  try {
-    // יצירת גוף הבקשה
-    // const boundary = generateBoundary();
-    // const requestBody = buildBatchRequestBody(records, boundary);
-    // const headers = createBatchHeaders(boundary);
-    
-    // // שליחת הבקשה ועיבוד התשובה
-    // const response = await sendBatchRequest(requestBody, headers);
-    // const result = await processApiResponse(response);
-    
-    // return {
-    //   success: result.success,
-    //   successCount: result.successCount || 0,
-    //   failureCount: result.failureCount || 0,
-    //   error: result.error
-    // };
-
-    //TODO Delete after debugging
-    return {
-      success: true,
-      successCount: 0,
-      failureCount: 0,
-      error: "error"
-    };
-  } catch (error) {
-    console.error(`Error sending batch to Priority: ${error}`);
-    return {
-      success: false,
-      failureCount: records.length,
-      error
-    };
+      //TODO Delete after debugging
+      return {
+        success: true,
+        successCount: 0,
+        failureCount: 0,
+        error: "error"
+      };
+    } catch (error) {
+      console.error(`Error sending batch to Priority: ${error}`);
+      return {
+        success: false,
+        failureCount: records.length,
+        error
+      };
+    }
   }
-}
-
+//---------------------------------------------------------------------------
 
 
 export { processParentChildBatches };

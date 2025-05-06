@@ -15,16 +15,16 @@ interface ChildRecord {
   [key: string]: any; 
 }
 
-interface CombinedRecord {
-  parent: ParentRecord;
-  parsedParentData: any;
-  children: {
-    [jobType: string]: {
-      records: ChildRecord[];
-      parsedData: any[];
-    };
-  };
-}
+// interface CombinedRecord {
+//   parent: ParentRecord;
+//   parsedParentData: any;
+//   children: {
+//     [jobType: string]: {
+//       records: ChildRecord[];
+//       parsedData: any[];
+//     };
+//   };
+// }
 
 
 // תוצאת הפונקציה תהיה סטרים של אובייקטי JSON מוכנים לשליחה
@@ -50,120 +50,149 @@ export async function* streamParentChildData(
     let currentOffset = startRow;
     
     while (processedRows < maxRows) {
-      const currentBatchSize = Math.min(batchSize, maxRows - processedRows);
+        const currentBatchSize = Math.min(batchSize, maxRows - processedRows);
       
-      // שליפת רשומות האב
-      const parentRecords = await fetchEligibleParentRecords(
+        // שליפת רשומות האב
+        const parentRecords = await fetchEligibleParentRecords(
         parentTableName,
         currentOffset,
         currentBatchSize,
         linkedField
-      );
+        );
       
-      if (parentRecords.length === 0) {
-        break; // אין עוד רשומות לעיבוד
-      }
-      
-      // מיצוי ערכי המפתח לצורך שליפת ילדים
-      const linkedValues = parentRecords.map(record => record[linkedField]);
-      
-      // שליפת נתוני ילדים לכל סוגי הילדים
-      const childDataMap = await fetchAllChildData(childJobs, linkedValues);
-      
-      // עיבוד כל רשומת אב בנפרד ויצירת JSON מוכן
-      for (const parent of parentRecords) {
-        const linkValue = parent[linkedField];
-        const parsedParentData = parseJsonData(parent.Data);
-        
-        // יצירת אובייקט JSON מאוחד ישירות לפורמט הסופי
-        const priorityObject = {
-          FORM: parentScreenName,
-          ...parsedParentData,
-          SUBFORMS: {}
-        };
-        
-        // הוספת הילדים הרלוונטיים לכל אב
-        for (const job of childJobs) {
-          const childRecords = childDataMap.get(job.JobTypeName)?.get(linkValue) || [];
-          priorityObject.SUBFORMS[job.ScreenName] = childRecords.map(child => 
-            parseJsonData(child.Data)
-          );
+        if (parentRecords.length === 0) {
+            break; // אין עוד רשומות לעיבוד
+        }
+          
+        // מיצוי ערכי המפתח לצורך שליפת ילדים
+        const linkedValues = parentRecords.map(record => record[linkedField]);
+        console.log(`Extracted ${linkedValues.length} linked values from parent records`);
+    
+    
+        // שליפת נתוני ילדים לכל סוגי הילדים
+        const childDataMap = await fetchAllChildData(childJobs, linkedValues, linkedField);
+
+        // עיבוד כל רשומת אב בנפרד ויצירת JSON מוכן
+        for (const parent of parentRecords) {
+            const linkValue = parent[linkedField];
+            const parsedParentData = parseJsonData(parent.Data);            
+
+            // יצירת אובייקט JSON מאוחד ישירות לפורמט הסופי
+            const priorityObject = {
+            FORM: parentScreenName,
+            ...parsedParentData,
+            };
+
+            // הוספת הילדים הרלוונטיים לכל אב בהתאם להגדרת HasSiblings
+            for (const job of childJobs) {
+                const childRecords = childDataMap.get(job.JobTypeName)?.get(linkValue) || [];
+                const parsedChildData = childRecords.map(child => parseJsonData(child.Data));
+
+                // שם המפתח נקבע לפי ScreenName + _SUBFORM
+                const subformKey = `${job.ScreenName}_SUBFORM`;
+                
+                if (job.HasSiblings) {
+                // אם יש אפשרות לילדים מרובים, משתמשים במערך
+                priorityObject[subformKey] = parsedChildData;
+                } else {
+                // אם מדובר על ילד יחיד, משתמשים באובייקט
+                // במקרה שאין ילדים או יש יותר מילד אחד (מה שאמור להיות שגיאה במצב HasSiblings=false),
+                // נטפל בזה בצורה מסודרת:
+                if (parsedChildData.length === 0) {
+                    priorityObject[subformKey] = {}; // אובייקט ריק אם אין ילדים
+                } else if (parsedChildData.length === 1) {
+                    priorityObject[subformKey] = parsedChildData[0]; // לוקחים את הילד היחיד
+                } else {
+                    console.warn(`Expected only one child record for ${job.ScreenName} but found ${parsedChildData.length}`);
+                    priorityObject[subformKey] = parsedChildData[0]; // בכל מקרה לוקחים את הראשון
+                }
+                }
+            }
+                        
+
+            // הפקת אובייקט JSON מוכן לשימוש
+            yield priorityObject;
+            processedRows++;
         }
         
-        // הפקת אובייקט JSON מוכן לשימוש
-        yield priorityObject;
-        processedRows++;
-      }
-      
-      // התקדמות לחלק הבא
-      currentOffset += parentRecords.length;
+          // התקדמות לחלק הבא
+        currentOffset += parentRecords.length;      
     }
   }
-
-
 
 // Map-בניית מבנה היררכי של נתוני הילדים באמצעות מבני נתונים מסוג 
 async function fetchAllChildData(
     childJobs: ChildJob[],
-    linkedValues: any[]
+    linkedValues: any[],
+    linkedField: string 
   ): Promise<Map<string, Map<any, ChildRecord[]>>> {
+    console.log(`Fetching child data, Parent linked value: ${linkedValues}`);
+
     // מפה דו-רמתית: סוג הילד -> ערך מקשר -> רשימת רשומות
     const childDataMap = new Map<string, Map<any, ChildRecord[]>>();
     
     // שליפה מקבילה של כל סוגי הילדים
     await Promise.all(childJobs.map(async (childJob) => {
-      const childRecords = await fetchChildRecords(
-        childJob.DBTableName,
-        childJob.priority_id,
-        linkedValues
-      );
+        console.log(`Fetching children for job type: ${childJob.JobTypeName}, table: ${childJob.DBTableName}`);
+        
+        // תיקון: העברת linkedField במקום childJob.priority_id
+        const childRecords = await fetchChildRecords(
+          childJob.DBTableName,
+          linkedField,  // משתמשים בשדה המקשר שהועבר מהאב
+          linkedValues
+        );
+
+        console.log(`Fetched ${childRecords.length} child records for ${childJob.JobTypeName}`);
       
-      // יצירת מפה פנימית לסוג הילד הנוכחי
-      const innerMap = new Map<any, ChildRecord[]>();
+        // יצירת מפה פנימית לסוג הילד הנוכחי
+        const innerMap = new Map<any, ChildRecord[]>();
       
-      // ארגון הרשומות לפי ערך המפתח
-      for (const record of childRecords) {
-        const linkValue = record[childJob.priority_id];
-        if (!innerMap.has(linkValue)) {
-          innerMap.set(linkValue, []);
+        // ארגון הרשומות לפי ערך המפתח - גם כאן משתמשים בlinkedField
+        for (const record of childRecords) {
+          const linkValue = record[linkedField];  // תיקון: משתמשים באותו שדה מקשר גם כאן
+          if (!innerMap.has(linkValue)) {
+            innerMap.set(linkValue, []);
+          }
+          innerMap.get(linkValue)!.push(record);
         }
-        innerMap.get(linkValue)!.push(record);
-      }
       
-      childDataMap.set(childJob.JobTypeName, innerMap);
+        childDataMap.set(childJob.JobTypeName, innerMap);
     }));
     
     return childDataMap;
   }
 
-
-
-
-
-
 /**
  * שליפת רשומות אב העומדות בתנאים הנדרשים
  */
 async function fetchEligibleParentRecords(
-  tableName: string,
-  offset: number,
-  limit: number,
-  linkedField: string
-): Promise<ParentRecord[]> {
-  const query = `
-     SELECT RowId, Data, ${linkedField}
-    FROM ${tableName}
-    WHERE is_eligible = 1
-    AND is_new = 1
-    AND Status IS NULL
-    ORDER BY RowId ASC
-    OFFSET ${offset} ROWS
-    FETCH NEXT ${limit} ROWS ONLY
-  `;
-
-  console.log(`Fetching parent records from ${tableName} with offset ${offset}, limit ${limit}`);
-  return await DatabaseService.executeQuery(query);
-}
+    tableName: string,
+    offset: number,
+    limit: number,
+    linkedField: string
+  ): Promise<ParentRecord[]> {
+    try {
+      console.log(`Starting to fetch parent records from ${tableName}`);
+      const query = `
+        SELECT RowId, Data, ${linkedField}
+        FROM ${tableName}
+        WHERE is_eligible = 1
+        AND is_new = 1
+        AND Status IS NULL
+        ORDER BY RowId ASC
+        OFFSET ${offset} ROWS
+        FETCH NEXT ${limit} ROWS ONLY
+      `;
+    
+      console.log(`Fetching parent records from ${tableName} with offset ${offset}, limit ${limit}`);
+      const results = await DatabaseService.executeQuery(query);
+      console.log(`Finished fetching ${results?.length || 0} parent records`);
+      return results as ParentRecord[];
+    } catch (error) {
+      console.error(`Error in fetchEligibleParentRecords: ${error}`);
+      throw error;
+    }
+  }
 
 /**
  * שליפת רשומות ילדים על פי רשימת ערכי קישור
