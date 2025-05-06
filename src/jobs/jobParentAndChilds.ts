@@ -72,6 +72,7 @@ export interface ChildJob {
     let processedRecords = 0;
     const maxBatchSizeForApi = 1000;
     const totalBatches = Math.ceil(totalRecords / batchSize);
+    startRow = 0;
 
     try {
       for (let batchNum = 0; batchNum < totalBatches; batchNum++) {
@@ -107,13 +108,14 @@ export interface ChildJob {
         for await (const record of dataStream) {
           writeToLogFile(
             "parentChildData.log",
-            `[INFO] Record data: ${JSON.stringify(record)}`
+            `${JSON.stringify(record)}`
           );
           //break; // אפשר לעצור אחרי רשומה אחת לצורך בדיקה
         }
     /*
         let currentBatch: any[] = [];
 
+      // Send the combined data to Priority
       // עיבוד הנתונים בזמן אמת כשהם זורמים מהדאטה בייס
       for await (const record of dataStream) {
         currentBatch.push(record);
@@ -142,37 +144,11 @@ export interface ChildJob {
           //   batchResult.success ? currentBatch.length : 0);
         }
     
-      */
-        // Example of how to fetch parent records for this batch
-        //const parentRecords = await fetchParentRecords(parentTableName, offset, batchSize, parentIdField);
-        // Create new file for Fetching data from both parent and child entities
+      */                      
         // Process the data in batches of 1000 records (or whatever is set in the system config / or at the parent job**) and combine the rows by the requirements.
         // Send the rows to Priority using the batch API
         // Process the response and update the database entities accordingly
-
-        //console.log(`Fetched ${parentRecords.length} parent records`);
-        // 1. Fetch parent records for this batch
-        //const parentRecords = await fetchParentRecords(parentTableName, offset, batchSize, parentIdField);
-
-        // 2. For each parent record, fetch the related child records
-        //const combinedData = await combineParentChildData(parentRecords, parentIdField, linkedField, childJobs);
-
-        // 3. Send the combined data to Priority
-        //const batchResult = await sendToPriority(combinedData, parentScreenName);
-
-        // 4. Process the response and update database entities
-        //await processBatchResponse(batchResult, parentTableName, childJobs);
-
-        // 5. Update progress
-        // ProgressTracker.updateProgress(jobId, batchSize, batchResult.success ? batchSize : 0);
-
-        // 6. Add result to results array
-        // results.push({
-        //   success: batchResult.success,
-        //   successCount: batchResult.success ? batchSize : 0,
-        //   failureCount: batchResult.success ? 0 : batchSize,
-        //   error: batchResult.success ? undefined : batchResult.error
-        // });
+        //  Process the response and update database entities        
       }
 
       return results;
@@ -205,88 +181,5 @@ export interface ChildJob {
     }
   }
   
-  // Helper function to fetch parent records
-  async function fetchParentRecords(tableName: string, offset: number, limit: number, idField: string): Promise<any[]> {
-    const query = `SELECT * FROM ${tableName} ORDER BY ${idField} OFFSET ${offset} ROWS FETCH NEXT ${limit} ROWS ONLY`;
-    return await DatabaseService.executeQuery(query);
-  }
-  //---------------------------------------------------------------------------
-  // Helper function to combine parent and child data
-  async function combineParentChildData(
-    parentRecords: any[],
-    parentIdField: string,
-    linkedField: string,
-    childJobs: ChildJob[]
-  ): Promise<any[]> {
-    const combinedData = [];
-    
-    for (const parent of parentRecords) {
-      const parentId = parent[parentIdField];
-      const linkedValue = parent[linkedField];
-      
-      // Create base record from parent
-      const record = { ...parent, children: {} };
-      
-      // For each child job type, fetch related records
-      for (const childJob of childJobs) {
-        const childRecords = await DatabaseService.executeQuery(
-          `SELECT * FROM ${childJob.DBTableName} WHERE ${childJob.priority_id} = @LinkedValue`,
-          { LinkedValue: linkedValue }
-        );
-        
-        // Add child records to parent record
-        record.children[childJob.JobTypeName] = childRecords;
-      }
-      
-      combinedData.push(record);
-    }
-    
-    return combinedData;
-  }
-  //---------------------------------------------------------------------------
-  // Helper function to process batch response and update database
-  async function processBatchResponse(batchResult: any, parentTableName: string, childJobs: ChildJob[]): Promise<void> {
-    // Implementation depends on the response structure and update requirements
-    // This would update both parent and child tables based on the Priority response
-    console.log(`Processing batch response for ${parentTableName}`);
-  }
-  //---------------------------------------------------------------------------
-  // פונקציית עזר לשליחת נתונים לשירות Priority
-  async function sendToPriority(records: any[]): Promise<BatchResult> {
-    try {
-      // יצירת גוף הבקשה
-      // const boundary = generateBoundary();
-      // const requestBody = buildBatchRequestBody(records, boundary);
-      // const headers = createBatchHeaders(boundary);
-      
-      // // שליחת הבקשה ועיבוד התשובה
-      // const response = await sendBatchRequest(requestBody, headers);
-      // const result = await processApiResponse(response);
-      
-      // return {
-      //   success: result.success,
-      //   successCount: result.successCount || 0,
-      //   failureCount: result.failureCount || 0,
-      //   error: result.error
-      // };
-
-      //TODO Delete after debugging
-      return {
-        success: true,
-        successCount: 0,
-        failureCount: 0,
-        error: "error"
-      };
-    } catch (error) {
-      console.error(`Error sending batch to Priority: ${error}`);
-      return {
-        success: false,
-        failureCount: records.length,
-        error
-      };
-    }
-  }
 //---------------------------------------------------------------------------
-
-
 export { processParentChildBatches };
