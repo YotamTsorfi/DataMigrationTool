@@ -122,6 +122,9 @@ class JobManager {
       }
     );
 
+    // Check if we need parent-child processing
+    let isParentChildProcessing = false;
+
     // Check if priorityLinkedField from job request has a value
     // If so, send it to the processing function
     if (jobRequest.priorityLinkedField) {
@@ -148,7 +151,8 @@ class JobManager {
 
       // If we have child jobs and we're using batch processing, use the parent-child processor
       if (childJobCount > 0 && processingType === "batch") {
-        // console.log(`Job ${jobId} using parent-child batch processing`);
+        console.log(`Job ${jobId} using parent-child batch processing`);
+        isParentChildProcessing = true;
 
         // Call the parent-child processor with the already retrieved child job details
         results = await processParentChildBatches(
@@ -163,86 +167,110 @@ class JobManager {
           childJobs
         );
 
-        // Process results and complete the job
-        // ...remaining processing code...
+        // Calculate success and failure for parent-child processing
+        const totalSuccess = results.reduce(
+          (acc, result) => acc + (result.successCount || 0),
+          0
+        );
+        const totalFailures = results.reduce(
+          (acc, result) => acc + (result.failureCount || 0),
+          0
+        );
+
+        // Update job status for parent-child processing
+        await this.updateJobStatus(
+          jobId,
+          totalFailures === 0 ? "Completed" : "Failed",
+          totalSuccess,
+          totalFailures,
+          totalFailures > 0 ? "Some records failed" : undefined
+        );
+
+        // Mark job as complete in progress tracker
+        ProgressTracker.completeJob(jobId, totalSuccess, totalFailures);
+      }
+
+      // Only run standard processing if parent-child processing wasn't used
+      if (!isParentChildProcessing) {
+        console.log(`Job ${jobId} starting ${processingType} processing`);
+        console.log(
+          `Job ${jobId} status updated to Running at: ${new Date().toISOString()}`
+        );
+
+        // Initialize progress tracking
+        ProgressTracker.initJob(jobId, jobRequest.recordCount);
+
+        const batchStartTime = Date.now();
+
+        console.log(
+          `Job ${jobId} starting batch processing at: ${new Date().toISOString()}`
+        );
+
+        if (processingType === "queue") {
+          results = await processWithQueues(
+            jobRequest.recordCount,
+            jobRequest.startRow,
+            jobRequest.tableName,
+            jobRequest.priorityScreenName,
+            jobRequest.jobType,
+            jobId,
+            jobRequest.priorityIdField
+          );
+        } else {
+          // Default to batch processing
+          results = await processBatches(
+            jobRequest.recordCount,
+            jobRequest.startRow,
+            jobRequest.tableName,
+            jobRequest.priorityScreenName,
+            jobRequest.jobType,
+            jobId,
+            jobRequest.priorityIdField
+          );
+        }
+
+        const batchEndTime = Date.now();
+        const batchDurationSec = (
+          (batchEndTime - batchStartTime) /
+          1000
+        ).toFixed(2);
+        console.log(
+          `Job ${jobId} completed batch processing in ${batchDurationSec} seconds at: ${formatDateTime(new Date())}`
+        );
+
+        const totalSuccess = results.reduce(
+          (acc, result) =>
+            acc + (result.successCount || (result.success ? 1 : 0)),
+          0
+        );
+        const totalFailures = results.reduce(
+          (acc, result) =>
+            acc + (result.failureCount || (result.success ? 0 : 1)),
+          0
+        );
+
+        // Mark job as complete in progress tracker
+        ProgressTracker.completeJob(jobId, totalSuccess, totalFailures);
+
+        const jobEndTime = Date.now();
+        const jobDurationSec = ((jobEndTime - jobStartTime) / 1000).toFixed(2);
+
+        console.log(
+          `Job ${jobId} completed in ${jobDurationSec} seconds. Overall results: Success: ${totalSuccess}, Failures: ${totalFailures}`
+        );
+
+        await this.updateJobStatus(
+          jobId,
+          totalFailures === 0 ? "Completed" : "Failed",
+          totalSuccess,
+          totalFailures,
+          totalFailures > 0 ? "Some batches failed" : undefined
+        );
+
+        return results;
       }
     }
-
-    // console.log(
-    //   `Job ${jobId} status updated to Running at: ${new Date().toISOString()}`
-    // );
-
-    // Initialize progress tracking
-    ProgressTracker.initJob(jobId, jobRequest.recordCount);
-
-    const batchStartTime = Date.now();
-
-    // console.log(
-    //   `Job ${jobId} starting batch processing at: ${new Date().toISOString()}`
-    // );
-
-    /*
-    if (processingType === "queue") {
-      results = await processWithQueues(
-        jobRequest.recordCount,
-        jobRequest.startRow,
-        jobRequest.tableName,
-        jobRequest.priorityScreenName,
-        jobRequest.jobType,
-        jobId,
-        jobRequest.priorityIdField
-      );
-    } else {
-      // Default to batch processing
-      results = await processBatches(
-        jobRequest.recordCount,
-        jobRequest.startRow,
-        jobRequest.tableName,
-        jobRequest.priorityScreenName,
-        jobRequest.jobType,
-        jobId,
-        jobRequest.priorityIdField
-      );
-    }
-
-    const batchEndTime = Date.now();
-    const batchDurationSec = ((batchEndTime - batchStartTime) / 1000).toFixed(
-      2
-    );
-    console.log(
-      `Job ${jobId} completed batch processing in ${batchDurationSec} seconds at: ${formatDateTime(new Date())}`
-    );
-
-    const totalSuccess = results.reduce(
-      (acc, result) => acc + (result.successCount || (result.success ? 1 : 0)),
-      0
-    );
-    const totalFailures = results.reduce(
-      (acc, result) => acc + (result.failureCount || (result.success ? 0 : 1)),
-      0
-    );
-
-    // Mark job as complete in progress tracker
-    ProgressTracker.completeJob(jobId, totalSuccess, totalFailures);
-
-    const jobEndTime = Date.now();
-    const jobDurationSec = ((jobEndTime - jobStartTime) / 1000).toFixed(2);
-
-    console.log(
-      `Job ${jobId} completed in ${jobDurationSec} seconds. Overall results: Success: ${totalSuccess}, Failures: ${totalFailures}`
-    );
-
-    await this.updateJobStatus(
-      jobId,
-      totalFailures === 0 ? "Completed" : "Failed",
-      totalSuccess,
-      totalFailures,
-      totalFailures > 0 ? "Some batches failed" : undefined
-    );
-  */
-    return results;
   }
-
   //   ----------------------------
   async startMultipleJobs(jobRequests: JobRequest[]): Promise<any[]> {
     const results = [];
