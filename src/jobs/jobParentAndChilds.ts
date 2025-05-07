@@ -135,7 +135,8 @@ export interface ChildJob {
               parentScreenName,
               jobId,
               parentIdField,
-              childTableNames
+              childTableNames,
+              childJobs              
             );
 
             // סיום מדידת זמן שליחה

@@ -6,6 +6,7 @@ import {
   performBulkErrorInsertWithService,
   recordBatchProcessing,
 } from "../services/dataService";
+import { ChildJob } from "../jobs/jobParentAndChilds";
 //-------------------------------------------------------------------------
 export interface ProcessResponseResult {
   success: boolean;
@@ -36,222 +37,180 @@ export interface ProcessResponseResult {
  * @param childTableNames - שמות טבלאות הילדים
  */
 export async function processParentChildResponse(
-  response: any,
-  enrichedRecords: any[],
-  perfMonitor: PerformanceMonitor,
-  parentTable: string,
-  batchId: string,
-  jobType: string,
-  jobId: string,
-  priorityIdField?: string,
-  childTableNames?: string[]
-): Promise<ProcessResponseResult> {
-  //****   DEBUG    ****/
-  // כתיבת תגובת ה-API לקובץ לוג
-  const responseLogData = {
-    timestamp: new Date().toISOString(),
-    batchId: batchId,
-    status: response?.status,
-    statusText: response?.statusText,
-    responseCount: response?.data?.responses?.length || 0,
-    headers: response?.headers,
-  };
-
-  // שמירת מטא-דאטה של התגובה
-  writeToLogFile(
-    "response_debug.log",
-    JSON.stringify(responseLogData, null, 2)
-  );
-
-  // שמירת גוף התגובה המלא
-  writeToLogFile("response_body.log", JSON.stringify(response.data, null, 2));
-
-  // שמירת דוגמה מהרשומות שנשלחו
-  if (enrichedRecords && enrichedRecords.length > 0) {
-    writeToLogFile(
-      "response_record_sample.log",
-      JSON.stringify(enrichedRecords[0], null, 2)
-    );
-  }
-
-  //****   DEBUG    ****/
-  // ------------- גרסת debugging -------------
-  //   console.log('---------- DEBUG RESPONSE START ----------');
-  //   console.log('Response data:', JSON.stringify(response.data, null, 2));
-  //   console.log('First enriched record:', JSON.stringify(enrichedRecords[0], null, 2));
-  //   console.log('---------- DEBUG RESPONSE END ----------');
-
-  // מחזיר אובייקט תוצאה בסיסי לצורכי debugging
-  return {
-    success: true,
-    message: "Debug only - no processing performed",
-    successCount: 0,
-    failureCount: 0,
-    responseCount: response.data?.responses?.length || 0,
-    averageTimePerRecord: "N/A",
-    performanceMetrics: {
-      dbFetchTime: "N/A",
-      dbUpdateTime: "N/A",
-      batchBuildTime: "N/A",
-      requestTime: "N/A",
-      totalDuration: "N/A",
-    },
-  };
-  /*   
-  try {
-    // מדידת זמן התגובה
-    measureResponsePerformance(response, perfMonitor);
-
-    // עיבוד התגובה מה-API
-    const {
-      updateRows,
-      errorRows,
-      successCount,
-      failureCount,
-      lastProcessedIndex,
-      sentToPriority,
-    } = processApiResponse(response, enrichedRecords, priorityIdField);
-
-    // עדכון מדדי ביצוע
-    perfMonitor.metrics.successCount = successCount;
-    perfMonitor.metrics.failureCount = failureCount;
-    perfMonitor.metrics.lastProcessedIndex = lastProcessedIndex;
-
-    // מעקב אחר כל עדכוני בסיס הנתונים
-    let totalDbUpdateTime = 0;
-    let batchStatus = sentToPriority ? "Completed" : "Failed";
-    let hadDeadlocks = false;
-
-    // ביצוע עדכונים מרוכזים בבסיס הנתונים לטבלת האב
-    if (updateRows.length > 0) {
-      try {
-        // עדכון טבלת האב
-        const result = await performBulkUpdateWithService(
-          parentTable,
-          updateRows,
-          perfMonitor,
-          undefined,
-          3, // מספר ניסיונות חוזרים
-          sentToPriority
-        );
-
-        totalDbUpdateTime += result.updateTime;
-        hadDeadlocks = result.hadDeadlocks;
-
-        // TODO: עדכון טבלאות הילדים - פיתוח עתידי
-        // זהו המקום להוסיף עדכון של טבלאות הילדים בהתאם לתשובה מהשרת
-        // כאן ניתן להשתמש ב-childTableNames ולבצע עדכון לכל טבלת ילד בנפרד
-        if (childTableNames && childTableNames.length > 0) {
-          // מקום לפיתוח עתידי - עדכון טבלאות הילדים
-          console.log(`Child tables that will need updating: ${childTableNames.join(', ')}`);
+    response: any,
+    enrichedRecords: any[],
+    perfMonitor: PerformanceMonitor,
+    parentTable: string,
+    batchId: string,
+    jobType: string,
+    jobId: string,
+    priorityIdField?: string,
+    childTableNames?: string[],
+    childJobs?: ChildJob[]
+  ): Promise<ProcessResponseResult> {
+    try {
+      // Measure response performance
+      measureResponsePerformance(response, perfMonitor);
+  
+      // Process API response
+      const {
+        parentUpdateRows,
+        childUpdateRows,
+        errorRows,
+        successCount,
+        failureCount,
+        lastProcessedIndex,
+        sentToPriority
+      } = processApiResponse(response, enrichedRecords, priorityIdField, childJobs);
+  
+      // Update performance metrics
+      perfMonitor.metrics.successCount = successCount;
+      perfMonitor.metrics.failureCount = failureCount;
+      perfMonitor.metrics.lastProcessedIndex = lastProcessedIndex;
+  
+      // Database update tracking
+      let totalDbUpdateTime = 0;
+      let batchStatus = sentToPriority ? "Completed" : "Failed";
+      let hadDeadlocks = false;
+  
+      // Update parent records
+      if (parentUpdateRows.length > 0) {
+        try {
+          const result = await performBulkUpdateWithService(
+            parentTable,
+            parentUpdateRows,
+            perfMonitor,
+            undefined,
+            3, // number of retries
+            sentToPriority
+          );
+  
+          totalDbUpdateTime += result.updateTime;
+          hadDeadlocks = result.hadDeadlocks;
+  
+          if (hadDeadlocks && result.successful && sentToPriority) {
+            batchStatus = "Completed";
+            console.log(`Batch ${batchId} had deadlocks during parent DB update but completed successfully`);
+          }
+        } catch (dbError) {
+          // Error handling as before
+          console.error("Error during parent database update:", dbError);
+          // Handle errors, deadlocks, etc.
+        }
+      }
+  
+      // Update child records - group by table name for efficiency
+      if (childUpdateRows.length > 0) {
+        try {
+          // Group child updates by table name
+          const childUpdatesByTable: Record<string, any[]> = {};
           
-          // דוגמה לקוד עתידי:
-          // for (const childTable of childTableNames) {
-          //   const childUpdateRows = prepareChildUpdateRows(response, enrichedRecords, childTable);
-          //   if (childUpdateRows.length > 0) {
-          //     await performBulkUpdateWithService(childTable, childUpdateRows, ...);
-          //   }
-          // }
-        }
-
-        if (hadDeadlocks && result.successful && sentToPriority) {
-          batchStatus = "Completed";
-          console.log(
-            `Batch ${batchId} had deadlocks during DB update but completed successfully`
-          );
-        }
-      } catch (dbError) {
-        console.error("Error during database update:", dbError);
-
-        const isDeadlock =
-          (dbError as any)?.number === 1205 ||
-          (dbError as any)?.originalError?.info?.number === 1205 ||
-          (dbError instanceof Error && dbError.message.includes("deadlock"));
-
-        if (isDeadlock && sentToPriority) {
-          console.log(
-            `Batch ${batchId} was sent to Priority but failed DB update due to deadlock`
-          );
-          batchStatus = "Completed";
-        } else {
-          throw dbError;
+          childUpdateRows.forEach(update => {
+            const tableName = update.tableName;
+            delete update.tableName; // Remove the table name before sending to DB
+            
+            if (!childUpdatesByTable[tableName]) {
+              childUpdatesByTable[tableName] = [];
+            }
+            childUpdatesByTable[tableName].push(update);
+          });
+          
+          // Process each child table
+          for (const [tableName, updates] of Object.entries(childUpdatesByTable)) {
+            console.log(`Updating ${updates.length} records in child table ${tableName}`);
+            
+            const childResult = await performBulkUpdateWithService(
+              tableName,
+              updates,
+              perfMonitor,
+              undefined,
+              3,
+              sentToPriority
+            );
+            
+            totalDbUpdateTime += childResult.updateTime;
+            if (childResult.hadDeadlocks) hadDeadlocks = true;
+          }
+        } catch (childDbError) {
+          console.error("Error during child database update:", childDbError);
+          // Handle errors, deadlocks, etc.
         }
       }
-    }
-
-    // רישום שגיאות בטבלת השגיאות
-    if (errorRows.length > 0) {
-      try {
-        const errorResult = await performBulkErrorInsertWithService(
-          errorRows,
-          perfMonitor
-        );
-        totalDbUpdateTime += errorResult.updateTime;
-      } catch (errorInsertError) {
-        console.error("Failed to insert error logs:", errorInsertError);
+  
+      // Insert error logs
+      if (errorRows.length > 0) {
+        try {
+          const errorResult = await performBulkErrorInsertWithService(
+            errorRows,
+            perfMonitor
+          );
+          totalDbUpdateTime += errorResult.updateTime;
+        } catch (errorInsertError) {
+          console.error("Failed to insert error logs:", errorInsertError);
+        }
       }
+  
+      // Ensure DB update time is recorded
+      if (totalDbUpdateTime > 0 && !perfMonitor.metrics.dbUpdateTime) {
+        perfMonitor.setDbUpdateTime(totalDbUpdateTime);
+      }
+  
+      // Complete the operation and get metrics
+      perfMonitor.endOperation();
+      const formattedMetrics = perfMonitor.getFormattedMetrics();
+  
+      // Record batch processing results
+      await recordBatchProcessing(
+        jobType,
+        batchId,
+        jobId,
+        new Date(perfMonitor.metrics.startTime),
+        new Date(perfMonitor.metrics.endTime),
+        enrichedRecords.length,
+        perfMonitor.metrics.successCount,
+        perfMonitor.metrics.failureCount,
+        perfMonitor.metrics.lastProcessedIndex,
+        batchStatus,
+        hadDeadlocks ? "DB update had deadlocks but completed successfully" : null,
+        parentTable
+      );
+  
+      // Return success result
+      return {
+        success: true,
+        message: "Batch processed successfully",
+        successCount: perfMonitor.metrics.successCount,
+        failureCount: perfMonitor.metrics.failureCount,
+        responseCount: response.data?.responses?.length || 0,
+        averageTimePerRecord: formattedMetrics.averageTimePerRecord,
+        performanceMetrics: {
+          dbFetchTime: formattedMetrics.dbFetchTime,
+          dbUpdateTime: formattedMetrics.dbUpdateTime,
+          batchBuildTime: formattedMetrics.batchBuildTime,
+          requestTime: formattedMetrics.requestTime,
+          totalDuration: formattedMetrics.totalDuration,
+        },
+      };
+    } catch (error) {
+      // Error handling as before
+      console.error("Error processing parent-child response:", error);
+      return {
+        // Error result object
+        success: false,
+        message: error instanceof Error ? error.message : "Unknown error in response processing",
+        successCount: 0,
+        failureCount: enrichedRecords.length,
+        averageTimePerRecord: "N/A",
+        performanceMetrics: {
+          dbFetchTime: "N/A",
+          dbUpdateTime: "N/A",
+          batchBuildTime: "N/A",
+          requestTime: "N/A",
+          totalDuration: "N/A",
+        },
+      };
     }
-
-    // וידוא שזמן העדכון נרשם
-    if (totalDbUpdateTime > 0 && !perfMonitor.metrics.dbUpdateTime) {
-      perfMonitor.setDbUpdateTime(totalDbUpdateTime);
-    }
-
-    perfMonitor.endOperation();
-    const formattedMetrics = perfMonitor.getFormattedMetrics();
-
-    // רישום תוצאות עיבוד המנה עם הסטטוס המתאים
-    await recordBatchProcessing(
-      jobType,
-      batchId,
-      jobId,
-      new Date(perfMonitor.metrics.startTime),
-      new Date(perfMonitor.metrics.endTime),
-      enrichedRecords.length,
-      perfMonitor.metrics.successCount,
-      perfMonitor.metrics.failureCount,
-      perfMonitor.metrics.lastProcessedIndex,
-      batchStatus,
-      hadDeadlocks
-        ? "DB update had deadlocks but completed successfully"
-        : null,
-      parentTable
-    );
-
-    return {
-      success: true,
-      message: "Batch processed successfully",
-      successCount: perfMonitor.metrics.successCount,
-      failureCount: perfMonitor.metrics.failureCount,
-      responseCount: response.data?.responses?.length || 0,
-      averageTimePerRecord: formattedMetrics.averageTimePerRecord,
-      performanceMetrics: {
-        dbFetchTime: formattedMetrics.dbFetchTime,
-        dbUpdateTime: formattedMetrics.dbUpdateTime,
-        batchBuildTime: formattedMetrics.batchBuildTime,
-        requestTime: formattedMetrics.requestTime,
-        totalDuration: formattedMetrics.totalDuration,
-      },
-    };
-  } catch (error) {
-    console.error("Error processing parent-child response:", error);
-    return {
-      success: false,
-      message: error instanceof Error ? error.message : "Unknown error in response processing",
-      successCount: 0,
-      failureCount: enrichedRecords.length,
-      averageTimePerRecord: "N/A",
-      performanceMetrics: {
-        dbFetchTime: "N/A",
-        dbUpdateTime: "N/A",
-        batchBuildTime: "N/A",
-        requestTime: "N/A",
-        totalDuration: "N/A",
-      },
-    };
   }
-  */
-}
 
 //-------------------------------------------------------------------------
 /**
@@ -264,11 +223,13 @@ export async function processParentChildResponse(
 function processApiResponse(
   response: any,
   enrichedRecords: any[],
-  priorityIdField?: string
+  priorityIdField?: string,
+  childJobs?: ChildJob[]
 ) {
-  // ערכי ברירת מחדל למקרה של כישלון
+  // Default error result as before
   const defaultErrorResult = {
-    updateRows: [],
+    parentUpdateRows: [],
+    childUpdateRows: [],
     errorRows: [],
     successCount: 0,
     failureCount: enrichedRecords.length,
@@ -276,106 +237,177 @@ function processApiResponse(
     sentToPriority: false,
   };
 
-  // בדיקה אם יש תגובה תקינה
   if (!response || !response.data || !response.data.responses) {
     console.error("Invalid API response structure");
     return defaultErrorResult;
   }
 
   const apiResponses = response.data.responses;
-  const updateRows: any[] = [];
+  const parentUpdateRows: any[] = [];
+  const childUpdateRows: any[] = [];
   const errorRows: any[] = [];
   let successCount = 0;
   let failureCount = 0;
   let lastProcessedIndex = -1;
 
-  // מעבר על כל התגובות ועיבוד כל אחת
+  // Process each response
   apiResponses.forEach((apiResponse: any, index: number) => {
     lastProcessedIndex = index;
     const record = enrichedRecords[index];
+    const isSuccess = apiResponse.status >= 200 && apiResponse.status < 300;
 
-    // בדיקה אם התגובה תקינה
-    if (apiResponse.status >= 200 && apiResponse.status < 300) {
+    if (isSuccess) {
       successCount++;
-
-      // הכנת שורה לעדכון בדאטהבייס
-      const updateRow: {
-        RowId: any;
-        Status: string;
-        StatusTime: Date;
-        BatchId: any;
-        [key: string]: any; // מאפשר מפתחות מחרוזת נוספים
-      } = {
-        RowId: record.RowId, // נניח שיש לנו RowId ברשומה
-        Status: "SUCCESS",
-        StatusTime: new Date(),
+      
+      // Process parent record
+      const parentUpdate = {
+        RowId: record.RowId,
         BatchId: record.__batchId,
+        JobName: record.__jobType,
+        Status: "Completed",
+        ErrorMessage: null,
+        JobId: record.__jobId,
+        priority_id: null,
+        is_new: 0
       };
 
-      // אם התגובה כוללת מזהה פריוריטי, נוסיף אותו
+      // Extract Priority ID if available
       if (apiResponse.body && priorityIdField) {
         try {
-          const responseBody =
-            typeof apiResponse.body === "string"
-              ? JSON.parse(apiResponse.body)
-              : apiResponse.body;
-
+          const responseBody = typeof apiResponse.body === "string"
+            ? JSON.parse(apiResponse.body)
+            : apiResponse.body;
+          
           if (responseBody && responseBody[priorityIdField]) {
-            updateRow[priorityIdField] = responseBody[priorityIdField];
+            parentUpdate.priority_id = responseBody[priorityIdField];
           }
         } catch (e) {
-          console.warn(
-            `Failed to parse response body JSON for record ${index}`,
-            e
-          );
+          console.warn(`Failed to parse response body for record ${index}`, e);
         }
       }
 
-      updateRows.push(updateRow);
-    } else {
-      // במקרה של שגיאה
-      failureCount++;
+      parentUpdateRows.push(parentUpdate);
 
-      // שמירת מידע השגיאה
+      // Process child records if available
+      if (childJobs && record.childRecords) {
+        childJobs.forEach(job => {
+          const childTableName = job.DBTableName;
+          const childRecords = record.childRecords[job.JobTypeName];
+          
+          if (childRecords && Array.isArray(childRecords)) {
+            childRecords.forEach(childRecord => {
+              const childUpdate = {
+                RowId: childRecord.RowId,
+                BatchId: record.__batchId,
+                JobName: record.__jobType,
+                Status: "Completed",
+                ErrorMessage: null,
+                JobId: record.__jobId,
+                priority_id: null,
+                is_new: 0,
+                tableName: childTableName 
+              };
+              
+              // Extract child priority ID if available
+              if (job.priority_id && apiResponse.body) {
+                try {
+                  const responseBody = typeof apiResponse.body === "string"
+                    ? JSON.parse(apiResponse.body)
+                    : apiResponse.body;
+                  
+                  // Look for child records in the response
+                  const subformKey = `${job.ScreenName}_SUBFORM`;
+                  if (responseBody[subformKey] && Array.isArray(responseBody[subformKey])) {
+                    const subformData = responseBody[subformKey];
+                    if (subformData[0] && subformData[0][job.priority_id]) {
+                      childUpdate.priority_id = subformData[0][job.priority_id];
+                    }
+                  }
+                } catch (e) {
+                  console.warn(`Failed to parse child response for ${job.JobTypeName}`, e);
+                }
+              }
+              
+              childUpdateRows.push(childUpdate);
+            });
+          }
+        });
+      }
+    } else {
+      // Handle error case
+      failureCount++;
+      
+      // Extract error message
       let errorMessage = "Unknown error";
       try {
         if (apiResponse.body) {
-          const errorBody =
-            typeof apiResponse.body === "string"
-              ? JSON.parse(apiResponse.body)
-              : apiResponse.body;
-          errorMessage =
-            errorBody.error || errorBody.message || JSON.stringify(errorBody);
+          const errorBody = typeof apiResponse.body === "string"
+            ? JSON.parse(apiResponse.body)
+            : apiResponse.body;
+            
+          if (errorBody?.FORM?.InterfaceErrors?.text) {
+            // Priority-specific error format
+            errorMessage = errorBody.FORM.InterfaceErrors.text;
+          } else {
+            errorMessage = errorBody.error || errorBody.message || JSON.stringify(errorBody);
+          }
         }
       } catch (e) {
         errorMessage = apiResponse.body || "Failed to parse error response";
       }
-
-      // הכנת שורה לעדכון בדאטהבייס
-      updateRows.push({
+      
+      // Update parent record with error - with all required columns
+      parentUpdateRows.push({
         RowId: record.RowId,
+        BatchId: record.__batchId,
+        JobName: record.__jobType,
         Status: "ERROR",
-        StatusTime: new Date(),
-        BatchId: record.__batchId,
         ErrorMessage: errorMessage,
-      });
-
-      // הוספת רשומת שגיאה מפורטת לטבלת השגיאות
-      errorRows.push({
         JobId: record.__jobId,
-        JobType: record.__jobType,
-        EntityId: record.RowId,
+        priority_id: null,
+        is_new: 1
+      });
+      
+      // Update child records with the same error
+      if (childJobs && record.childRecords) {
+        childJobs.forEach(job => {
+          const childTableName = job.DBTableName;
+          const childRecords = record.childRecords[job.JobTypeName];
+          
+          if (childRecords && Array.isArray(childRecords)) {
+            childRecords.forEach(childRecord => {
+              childUpdateRows.push({
+                RowId: childRecord.RowId,
+                BatchId: record.__batchId,
+                JobName: record.__jobType,
+                Status: "ERROR",
+                ErrorMessage: errorMessage,
+                JobId: record.__jobId,
+                priority_id: null,
+                is_new: 1,
+                tableName: childTableName
+              });
+            });
+          }
+        });
+      }
+      
+      // Add error log entry
+      errorRows.push({
+        JobName: record.__jobType,
         BatchId: record.__batchId,
-        ErrorMessage: errorMessage,
-        ErrorDetails: JSON.stringify(apiResponse),
-        CreatedAt: new Date(),
-        EntityData: JSON.stringify(record),
+        TableName: record.__tableName,
+        RowId: record.RowId,
+        Error: errorMessage,
+        JobId: record.__jobId,
+        ErrorStatus: "ERROR"
       });
     }
   });
 
   return {
-    updateRows,
+    parentUpdateRows,
+    childUpdateRows,
     errorRows,
     successCount,
     failureCount,

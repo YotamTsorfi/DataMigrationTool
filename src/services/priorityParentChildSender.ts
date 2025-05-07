@@ -12,8 +12,8 @@ import {
   measureRequestPerformance,
 } from "../services/requestSender";
 import { processParentChildResponse } from "./priorityParentChildResponseProcessor";
+import { ChildJob } from "../jobs/jobParentAndChilds";
 import { writeToLogFile } from "../config/logger";
-
 // תוצאת שליחה של מנה (Batch)
 export interface BatchSendResult {
   success: boolean;
@@ -52,7 +52,8 @@ export async function sendParentChildBatch(
   priorityScreenName: string,
   jobId: string,
   priorityIdField?: string,
-  childTableNames?: string[]
+  childTableNames?: string[],
+  childJobs?: ChildJob[]  
 ): Promise<BatchSendResult> {
   // יצירת מזהה ייחודי למנה
   const batchId = uuidv4();
@@ -75,6 +76,7 @@ export async function sendParentChildBatch(
       __tableName: tableName,
       __jobId: jobId,
       __priorityScreenName: priorityScreenName,
+      RowId: record.RowId
     }));
 
     // מדידת זמן הבקשה
@@ -152,7 +154,8 @@ export async function sendParentChildBatch(
       jobType,
       jobId,
       priorityIdField,
-      childTableNames
+      childTableNames,
+      childJobs 
     );
 
     return {
@@ -200,7 +203,8 @@ export async function sendParentChildBatchesInParallel(
   priorityScreenName: string,
   jobId: string,
   priorityIdField?: string,
-  childTableNames?: string[]
+  childTableNames?: string[],
+  childJobs?: ChildJob[] 
 ): Promise<BatchSendResult[]> {
   // הגבלת מספר השליחות המקבילות
   const limit = pLimit(concurrency);
@@ -218,7 +222,8 @@ export async function sendParentChildBatchesInParallel(
         priorityScreenName, 
         jobId, 
         priorityIdField,
-        childTableNames
+        childTableNames,
+        childJobs
       );
     })
   );

@@ -89,9 +89,16 @@ export async function* streamParentChildData(
                     priorityObject[subformKey] = parsedChildData[0]; // בכל מקרה לוקחים את הראשון
                 }
                 }
-            }                                    
-            // הפקת אובייקט JSON מוכן לשימוש
-            yield priorityObject;
+            }    
+            
+            // Include the RowId in the object for tracking purposes
+            const priorityObjectWithTracking = {
+              ...priorityObject,
+              RowId: parent.RowId // Preserve RowId for error tracking
+            };
+            // Yield the enriched object
+            yield priorityObjectWithTracking;
+            
             processedRows++;
         }        
           // התקדמות לחלק הבא
@@ -99,7 +106,9 @@ export async function* streamParentChildData(
     }
   }
 //---------------------------------------------------------------------------
-// Map-בניית מבנה היררכי של נתוני הילדים באמצעות מבני נתונים מסוג 
+/**
+ * Map-בניית מבנה היררכי של נתוני הילדים באמצעות מבני נתונים מסוג 
+ */
 async function fetchAllChildData(
     childJobs: ChildJob[],
     linkedValues: any[],
