@@ -205,12 +205,12 @@ export async function sendParentChildBatchesInParallel(
   // הגבלת מספר השליחות המקבילות
   const limit = pLimit(concurrency);
   
-  console.log(`Sending ${batches.length} batches with max concurrency of ${concurrency}`);
+  //console.log(`Sending ${batches.length} batches with max concurrency of ${concurrency}`);
   
   // שליחת כל המנות במקביל עם הגבלת מקבוליות
   const sendPromises = batches.map((batch, index) => 
     limit(() => {
-      console.log(`Starting batch ${index + 1}/${batches.length} with ${batch.length} records`);
+      //console.log(`Starting batch ${index + 1}/${batches.length} with ${batch.length} records`);
       return sendParentChildBatch(
         batch, 
         jobType, 
@@ -231,7 +231,7 @@ export async function sendParentChildBatchesInParallel(
   const successfulRecords = results.reduce((sum, result) => sum + result.successCount, 0);
   const failedRecords = results.reduce((sum, result) => sum + result.failureCount, 0);
   
-  console.log(`Completed sending ${batches.length} batches: ${successfulRecords} successful, ${failedRecords} failed out of ${totalRecords} total records`);
+  //console.log(`Completed sending ${batches.length} batches: ${successfulRecords} successful, ${failedRecords} failed out of ${totalRecords} total records`);
   
   return results;
 }

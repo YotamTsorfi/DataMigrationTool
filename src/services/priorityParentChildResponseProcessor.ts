@@ -1,4 +1,5 @@
 import PerformanceMonitor from "../utils/performanceMonitor";
+import { writeToLogFile } from "../config/logger";
 import { measureResponsePerformance } from "../services/requestSender";
 import {
   performBulkUpdateWithService,
@@ -45,13 +46,41 @@ export async function processParentChildResponse(
   priorityIdField?: string,
   childTableNames?: string[]
 ): Promise<ProcessResponseResult> {
+  //****   DEBUG    ****/
+  // כתיבת תגובת ה-API לקובץ לוג
+  const responseLogData = {
+    timestamp: new Date().toISOString(),
+    batchId: batchId,
+    status: response?.status,
+    statusText: response?.statusText,
+    responseCount: response?.data?.responses?.length || 0,
+    headers: response?.headers,
+  };
 
-      // ------------- גרסת debugging -------------
-  console.log('---------- DEBUG RESPONSE START ----------');
-  console.log('Response data:', JSON.stringify(response.data, null, 2));
-  console.log('First enriched record:', JSON.stringify(enrichedRecords[0], null, 2));
-  console.log('---------- DEBUG RESPONSE END ----------');
-  
+  // שמירת מטא-דאטה של התגובה
+  writeToLogFile(
+    "response_debug.log",
+    JSON.stringify(responseLogData, null, 2)
+  );
+
+  // שמירת גוף התגובה המלא
+  writeToLogFile("response_body.log", JSON.stringify(response.data, null, 2));
+
+  // שמירת דוגמה מהרשומות שנשלחו
+  if (enrichedRecords && enrichedRecords.length > 0) {
+    writeToLogFile(
+      "response_record_sample.log",
+      JSON.stringify(enrichedRecords[0], null, 2)
+    );
+  }
+
+  //****   DEBUG    ****/
+  // ------------- גרסת debugging -------------
+  //   console.log('---------- DEBUG RESPONSE START ----------');
+  //   console.log('Response data:', JSON.stringify(response.data, null, 2));
+  //   console.log('First enriched record:', JSON.stringify(enrichedRecords[0], null, 2));
+  //   console.log('---------- DEBUG RESPONSE END ----------');
+
   // מחזיר אובייקט תוצאה בסיסי לצורכי debugging
   return {
     success: true,
@@ -61,14 +90,14 @@ export async function processParentChildResponse(
     responseCount: response.data?.responses?.length || 0,
     averageTimePerRecord: "N/A",
     performanceMetrics: {
-      dbFetchTime: "N/A", 
+      dbFetchTime: "N/A",
       dbUpdateTime: "N/A",
       batchBuildTime: "N/A",
       requestTime: "N/A",
-      totalDuration: "N/A"
-    }
+      totalDuration: "N/A",
+    },
   };
- /*   
+  /*   
   try {
     // מדידת זמן התגובה
     measureResponsePerformance(response, perfMonitor);
@@ -232,7 +261,11 @@ export async function processParentChildResponse(
  * @param priorityIdField - שדה המזהה בפריוריטי
  * @returns מידע מעובד על הצלחות, כישלונות ושורות לעדכון
  */
-function processApiResponse(response: any, enrichedRecords: any[], priorityIdField?: string) {
+function processApiResponse(
+  response: any,
+  enrichedRecords: any[],
+  priorityIdField?: string
+) {
   // ערכי ברירת מחדל למקרה של כישלון
   const defaultErrorResult = {
     updateRows: [],
@@ -260,13 +293,13 @@ function processApiResponse(response: any, enrichedRecords: any[], priorityIdFie
   apiResponses.forEach((apiResponse: any, index: number) => {
     lastProcessedIndex = index;
     const record = enrichedRecords[index];
-    
+
     // בדיקה אם התגובה תקינה
     if (apiResponse.status >= 200 && apiResponse.status < 300) {
       successCount++;
-      
+
       // הכנת שורה לעדכון בדאטהבייס
-      const updateRow: { 
+      const updateRow: {
         RowId: any;
         Status: string;
         StatusTime: Date;
@@ -274,51 +307,59 @@ function processApiResponse(response: any, enrichedRecords: any[], priorityIdFie
         [key: string]: any; // מאפשר מפתחות מחרוזת נוספים
       } = {
         RowId: record.RowId, // נניח שיש לנו RowId ברשומה
-        Status: 'SUCCESS',
+        Status: "SUCCESS",
         StatusTime: new Date(),
         BatchId: record.__batchId,
       };
-      
+
       // אם התגובה כוללת מזהה פריוריטי, נוסיף אותו
       if (apiResponse.body && priorityIdField) {
         try {
-          const responseBody = typeof apiResponse.body === 'string' ? 
-            JSON.parse(apiResponse.body) : apiResponse.body;
-          
+          const responseBody =
+            typeof apiResponse.body === "string"
+              ? JSON.parse(apiResponse.body)
+              : apiResponse.body;
+
           if (responseBody && responseBody[priorityIdField]) {
             updateRow[priorityIdField] = responseBody[priorityIdField];
           }
         } catch (e) {
-          console.warn(`Failed to parse response body JSON for record ${index}`, e);
+          console.warn(
+            `Failed to parse response body JSON for record ${index}`,
+            e
+          );
         }
       }
-      
+
       updateRows.push(updateRow);
     } else {
       // במקרה של שגיאה
       failureCount++;
-      
+
       // שמירת מידע השגיאה
       let errorMessage = "Unknown error";
       try {
         if (apiResponse.body) {
-          const errorBody = typeof apiResponse.body === 'string' ? 
-            JSON.parse(apiResponse.body) : apiResponse.body;
-          errorMessage = errorBody.error || errorBody.message || JSON.stringify(errorBody);
+          const errorBody =
+            typeof apiResponse.body === "string"
+              ? JSON.parse(apiResponse.body)
+              : apiResponse.body;
+          errorMessage =
+            errorBody.error || errorBody.message || JSON.stringify(errorBody);
         }
       } catch (e) {
         errorMessage = apiResponse.body || "Failed to parse error response";
       }
-      
+
       // הכנת שורה לעדכון בדאטהבייס
       updateRows.push({
         RowId: record.RowId,
-        Status: 'ERROR',
+        Status: "ERROR",
         StatusTime: new Date(),
         BatchId: record.__batchId,
-        ErrorMessage: errorMessage
+        ErrorMessage: errorMessage,
       });
-      
+
       // הוספת רשומת שגיאה מפורטת לטבלת השגיאות
       errorRows.push({
         JobId: record.__jobId,
@@ -328,7 +369,7 @@ function processApiResponse(response: any, enrichedRecords: any[], priorityIdFie
         ErrorMessage: errorMessage,
         ErrorDetails: JSON.stringify(apiResponse),
         CreatedAt: new Date(),
-        EntityData: JSON.stringify(record)
+        EntityData: JSON.stringify(record),
       });
     }
   });
@@ -339,6 +380,6 @@ function processApiResponse(response: any, enrichedRecords: any[], priorityIdFie
     successCount,
     failureCount,
     lastProcessedIndex,
-    sentToPriority: true
+    sentToPriority: true,
   };
 }

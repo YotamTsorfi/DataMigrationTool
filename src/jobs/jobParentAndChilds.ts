@@ -35,16 +35,26 @@ export interface ChildJob {
     childJobs: ChildJob[]
   ): Promise<BatchResult[]> {
     // Log parent job details for better visibility
+    console.log("------------- DEBUG --------------------");
     console.log("Parent job details:");
     console.log(`  Table Name: ${parentTableName}`);
     console.log(`  Screen Name: ${parentScreenName}`);
     console.log(`  Parent ID Field: ${parentIdField}`);
     console.log(`  Linked Field: ${linkedField}`);
     console.log(`  Job Type: ${jobType}`);
-    // console.log(`Starting processParentChildBatches for job ${jobId}`);
-
-    console.log(`Processing ${childJobs.length} child jobs`);
-
+    console.log("------------");
+    // Log childJobs for inspection
+    console.log("Child jobs details:");
+    childJobs.forEach((job, index) => {
+      console.log(`Child job ${index + 1}:`);
+      console.log(`  JobType: ${job.JobTypeName}`);
+      console.log(`  TableName: ${job.DBTableName}`);
+      console.log(`  ScreenName: ${job.ScreenName}`);
+      console.log(`  Priority ID: ${job.priority_id}`);
+      console.log(`  HasSiblings: ${job.HasSiblings}`);
+    });
+    console.log("---------------END DEBUG ---------------------");
+    
     // אתחול מעקב התקדמות למשימה
     ProgressTracker.initJob(jobId, totalRecords);
 
@@ -64,21 +74,9 @@ export interface ChildJob {
     try {
       for (let batchNum = 0; batchNum < totalBatches; batchNum++) {
           const offset = startRow + batchNum * batchSize;
-          console.log(
-            `Processing batch ${batchNum + 1}/${totalBatches}, offset: ${offset}`
-          );
-
-          // Log childJobs for inspection
-          console.log("Child jobs details:");
-          childJobs.forEach((job, index) => {
-            console.log(`Child job ${index + 1}:`);
-            console.log(`  JobType: ${job.JobTypeName}`);
-            console.log(`  TableName: ${job.DBTableName}`);
-            console.log(`  ScreenName: ${job.ScreenName}`);
-            console.log(`  Priority ID: ${job.priority_id}`);
-            console.log(`  HasSiblings: ${job.HasSiblings}`);
-          });
-      
+          // console.log(
+          //   `Processing batch ${batchNum + 1}/${totalBatches}, offset: ${offset}`
+          // );
           // מדידת זמן שליפת נתונים
           const perfMonitor = new PerformanceMonitor();
           perfMonitor.startDbFetch();
@@ -112,7 +110,7 @@ export interface ChildJob {
           
           // סיום מדידת זמן שליפת נתונים
           perfMonitor.endDbFetch();
-          console.log(`Fetched ${processedRecords} records in ${perfMonitor.getFormattedMetrics().dbFetchTime}`);
+          // console.log(`Fetched ${processedRecords} records in ${perfMonitor.getFormattedMetrics().dbFetchTime}`);
 
           // הוספת המנה האחרונה אם יש בה נתונים
           if (currentBatch.length > 0) {
@@ -124,7 +122,7 @@ export interface ChildJob {
 
           // שליחת כל המנות במקביל עם מקבוליות של 10
           if (batches.length > 0) {
-            console.log(`Sending ${batches.length} batches with total ${processedRecords} records to Priority API`);
+            // console.log(`Sending ${batches.length} batches with total ${processedRecords} records to Priority API`);
 
             // מדידת זמן שליחה
             perfMonitor.startRequest();
@@ -162,8 +160,8 @@ export interface ChildJob {
             // הוספת התוצאות למערך התוצאות הכולל
             results.push(...batchResults);     
             
-            console.log(`Batch ${batchNum + 1} completed: ${batchSuccessCount} successful, ${batchFailureCount} failed out of ${processedRecords} records`);
-            console.log(`Total progress: ${processedRecords}/${totalRecords} records processed (${totalSuccessCount} successful, ${totalFailureCount} failed)`);            
+            // console.log(`Batch ${batchNum + 1} completed: ${batchSuccessCount} successful, ${batchFailureCount} failed out of ${processedRecords} records`);
+            // console.log(`Total progress: ${processedRecords}/${totalRecords} records processed (${totalSuccessCount} successful, ${totalFailureCount} failed)`);            
 
           }
       
