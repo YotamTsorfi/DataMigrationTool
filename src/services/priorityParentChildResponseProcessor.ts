@@ -62,16 +62,6 @@ export async function processParentChildResponse(
         lastProcessedIndex,
         sentToPriority
       } = processApiResponse(response, enrichedRecords, priorityIdField, childJobs);
-  
-// Add this right after destructuring the result from processApiResponse
-console.log(`🔍 processApiResponse returned: ${parentUpdateRows.length} parent updates, ${childUpdateRows.length} child updates, ${errorRows.length} error entries`);
-// Add this before the child records update section
-console.log(`🔍 Child update rows before processing: ${JSON.stringify(childUpdateRows.map(u => ({
-    RowId: u.RowId,
-    tableName: u.tableName,
-    Status: u.Status
-  })))}`);
-
 
       // Update performance metrics
       perfMonitor.metrics.successCount = successCount;
@@ -129,17 +119,9 @@ console.log(`🔍 Child update rows before processing: ${JSON.stringify(childUpd
             }
             childUpdatesByTable[tableName].push(update);
           });
-
-          console.log(`🔍 Child updates grouped by table: ${
-            Object.entries(childUpdatesByTable).map(([table, updates]) => 
-              `${table}: ${updates.length} updates`
-            ).join(', ')
-          }`);          
           
           // Process each child table
-          for (const [tableName, updates] of Object.entries(childUpdatesByTable)) {
-            console.log(`Updating ${updates.length} records in child table ${tableName}`);
-            
+          for (const [tableName, updates] of Object.entries(childUpdatesByTable)) {            
             const childResult = await performBulkUpdateWithService(
               tableName,
               updates,
@@ -431,25 +413,18 @@ if (childJobs && record.childRecords) {
       });
       
       // Update child records with the same error
-      if (childJobs && record.childRecords) {
-        console.log(`🔍 ERROR PATH: Processing child records for parent RowId: ${record.RowId}, found ${childJobs.length} child job types`);
-
+      if (childJobs && record.childRecords) {        
         // Log the keys available in childRecords for debugging
-        console.log(`🔍 Keys available in childRecords: ${JSON.stringify(Object.keys(record.childRecords))}`);
-  
+          
         childJobs.forEach(job => {
             const childTableName = job.DBTableName;            
             const jobTypeName = job.JobTypeName;
-            
-            console.log(`🔍 Looking for child records with job type: ${jobTypeName}`);
-
+                        
             // Enhanced lookup with more logging
             let childRecords;
             const exactMatch = record.childRecords[jobTypeName];
             const lowercaseMatch = record.childRecords[jobTypeName.toLowerCase()];
             const uppercaseMatch = record.childRecords[jobTypeName.toUpperCase()];
-            
-            console.log(`🔍 Exact match found: ${!!exactMatch}, Lowercase match: ${!!lowercaseMatch}, Uppercase match: ${!!uppercaseMatch}`);
             
             // Try to find child records using broader approach
             childRecords = exactMatch || lowercaseMatch || uppercaseMatch;
@@ -457,22 +432,15 @@ if (childJobs && record.childRecords) {
             // If still no match, try something more flexible
             if (!childRecords) {
                 // Try looking for match by ScreenName or any partial key
-                for (const key of Object.keys(record.childRecords)) {
-                console.log(`🔍 Checking key: ${key} against jobTypeName: ${jobTypeName}`);
-                
-                // Check if the key contains the screen name
-                if (key.includes(job.ScreenName) || jobTypeName.includes(key) || key.includes(jobTypeName)) {
-                    console.log(`🔍 Found potential match with key: ${key}`);
-                    childRecords = record.childRecords[key];
-                    break;
-                }
+                for (const key of Object.keys(record.childRecords)) {                
+                    // Check if the key contains the screen name
+                    if (key.includes(job.ScreenName) || jobTypeName.includes(key) || key.includes(jobTypeName)) {                    
+                        childRecords = record.childRecords[key];
+                        break;
+                    }
                 }
             }
 
-            // Use optional chaining to avoid errors with undefined childRecords
-            const recordCount = childRecords?.length || 0;
-            console.log(`- For job ${jobTypeName}: found ${recordCount} child records`);
-                  
             if (childRecords && Array.isArray(childRecords)) {
                 childRecords.forEach(childRecord => {
                 // Ensure errorMessage is always a string
@@ -510,9 +478,7 @@ if (childJobs && record.childRecords) {
                 }
 
                 // This line might be missing - verify it exists
-                childUpdateRows.push(childUpdate);
-                console.log(`🔍 Added child error update for RowId ${childRecord.RowId} in table ${childTableName}`);
-
+                childUpdateRows.push(childUpdate);                
             });
           }
         });
