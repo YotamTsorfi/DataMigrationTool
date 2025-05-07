@@ -63,6 +63,16 @@ export async function processParentChildResponse(
         sentToPriority
       } = processApiResponse(response, enrichedRecords, priorityIdField, childJobs);
   
+// Add this right after destructuring the result from processApiResponse
+console.log(`🔍 processApiResponse returned: ${parentUpdateRows.length} parent updates, ${childUpdateRows.length} child updates, ${errorRows.length} error entries`);
+// Add this before the child records update section
+console.log(`🔍 Child update rows before processing: ${JSON.stringify(childUpdateRows.map(u => ({
+    RowId: u.RowId,
+    tableName: u.tableName,
+    Status: u.Status
+  })))}`);
+
+
       // Update performance metrics
       perfMonitor.metrics.successCount = successCount;
       perfMonitor.metrics.failureCount = failureCount;
@@ -106,6 +116,11 @@ export async function processParentChildResponse(
           const childUpdatesByTable: Record<string, any[]> = {};
           
           childUpdateRows.forEach(update => {
+
+            if (!update.tableName) {
+                console.error(`❌ Child update missing tableName property:`, update);
+                return;
+              } 
             const tableName = update.tableName;
             delete update.tableName; // Remove the table name before sending to DB
             
@@ -114,6 +129,12 @@ export async function processParentChildResponse(
             }
             childUpdatesByTable[tableName].push(update);
           });
+
+          console.log(`🔍 Child updates grouped by table: ${
+            Object.entries(childUpdatesByTable).map(([table, updates]) => 
+              `${table}: ${updates.length} updates`
+            ).join(', ')
+          }`);          
           
           // Process each child table
           for (const [tableName, updates] of Object.entries(childUpdatesByTable)) {
@@ -288,51 +309,86 @@ function processApiResponse(
 
       parentUpdateRows.push(parentUpdate);
 
-      // Process child records if available
-      if (childJobs && record.childRecords) {
-        childJobs.forEach(job => {
-          const childTableName = job.DBTableName;
-          const childRecords = record.childRecords[job.JobTypeName];
+// Update child records with the same error
+if (childJobs && record.childRecords) {
+    console.log(`🔍 SUCCESS PATH: Processing child records for parent RowId: ${record.RowId}, found ${childJobs.length} child job types`);
+    console.log(`Processing ${childJobs.length} child job types for record ${record.RowId} with error`);
+    childJobs.forEach(job => {
+        const childTableName = job.DBTableName;
+        const jobTypeName = job.JobTypeName;
+        
+        // More robust child record lookup
+        let childRecords;
+        try {
+          // Try to find using exact JobTypeName first
+          childRecords = record.childRecords[jobTypeName];
           
-          if (childRecords && Array.isArray(childRecords)) {
-            childRecords.forEach(childRecord => {
-              const childUpdate = {
-                RowId: childRecord.RowId,
-                BatchId: record.__batchId,
-                JobName: record.__jobType,
-                Status: "Completed",
-                ErrorMessage: null,
-                JobId: record.__jobId,
-                priority_id: null,
-                is_new: 0,
-                tableName: childTableName 
-              };
-              
-              // Extract child priority ID if available
-              if (job.priority_id && apiResponse.body) {
-                try {
-                  const responseBody = typeof apiResponse.body === "string"
-                    ? JSON.parse(apiResponse.body)
-                    : apiResponse.body;
-                  
-                  // Look for child records in the response
-                  const subformKey = `${job.ScreenName}_SUBFORM`;
-                  if (responseBody[subformKey] && Array.isArray(responseBody[subformKey])) {
-                    const subformData = responseBody[subformKey];
-                    if (subformData[0] && subformData[0][job.priority_id]) {
-                      childUpdate.priority_id = subformData[0][job.priority_id];
-                    }
-                  }
-                } catch (e) {
-                  console.warn(`Failed to parse child response for ${job.JobTypeName}`, e);
+          // If not found, try case-insensitive alternatives
+          if (!childRecords && typeof jobTypeName === 'string') {
+            // Try lowercase key
+            const lcKey = jobTypeName.toLowerCase();
+            if (record.childRecords[lcKey]) {
+              childRecords = record.childRecords[lcKey];
+              console.log(`Found child records using lowercase key: ${lcKey}`);
+            }
+            
+            // Try uppercase key
+            const ucKey = jobTypeName.toUpperCase();
+            if (!childRecords && record.childRecords[ucKey]) {
+              childRecords = record.childRecords[ucKey];
+              console.log(`Found child records using uppercase key: ${ucKey}`);
+            }
+            
+            // Try checking all keys case-insensitively
+            if (!childRecords) {
+              const keys = Object.keys(record.childRecords);
+              for (const key of keys) {
+                if (key.toLowerCase() === jobTypeName.toLowerCase()) {
+                  childRecords = record.childRecords[key];
+                  console.log(`Found child records using key case matching: ${key}`);
+                  break;
                 }
               }
-              
-              childUpdateRows.push(childUpdate);
-            });
+            }
           }
-        });
-      }
+        } catch (e) {
+          console.error(`Error looking up child records for job ${jobTypeName}:`, e);
+        }
+        
+        // Use optional chaining to avoid errors with undefined childRecords
+        const recordCount = childRecords?.length || 0;
+        console.log(`- For job ${jobTypeName} in table ${childTableName}: found ${recordCount} child records to update with error`);
+      
+        // Only process child records if we found any
+        if (childRecords && Array.isArray(childRecords) && childRecords.length > 0) {
+          childRecords.forEach(childRecord => {
+            // Ensure childRecord has a RowId
+            if (!childRecord.RowId) {
+              console.error(`Child record missing RowId for job ${jobTypeName}`);
+              return;
+            }
+            
+            // For successful records, there's no error message
+            const childUpdate = {
+              RowId: childRecord.RowId,
+              BatchId: record.__batchId,
+              JobName: record.__jobType,
+              Status: "Completed",
+              ErrorMessage: null,
+              JobId: record.__jobId,
+              priority_id: null,
+              is_new: 0,
+              tableName: childTableName
+            };
+            
+            childUpdateRows.push(childUpdate);
+            console.log(`Added child update for RowId ${childRecord.RowId} in table ${childTableName}`);
+          });
+        } else {
+          console.warn(`No valid child records found for job ${jobTypeName} - parent record RowId: ${record.RowId}`);
+        }
+    });
+  }
     } else {
       // Handle error case
       failureCount++;
@@ -356,13 +412,18 @@ function processApiResponse(
         errorMessage = apiResponse.body || "Failed to parse error response";
       }
       
+        // Ensure errorMessage is always a string for parent record
+        const safeParentErrorMessage = typeof errorMessage === 'string'
+        ? errorMessage
+        : errorMessage ? JSON.stringify(errorMessage) : "Unknown error";
+        
       // Update parent record with error - with all required columns
       parentUpdateRows.push({
         RowId: record.RowId,
         BatchId: record.__batchId,
         JobName: record.__jobType,
-        Status: "ERROR",
-        ErrorMessage: errorMessage,
+        Status: "Failed",
+        ErrorMessage: safeParentErrorMessage,
         JobId: record.__jobId,
         priority_id: null,
         is_new: 1
@@ -370,23 +431,70 @@ function processApiResponse(
       
       // Update child records with the same error
       if (childJobs && record.childRecords) {
+        console.log(`🔍 ERROR PATH: Processing child records for parent RowId: ${record.RowId}, found ${childJobs.length} child job types`);
+
+        // Log the keys available in childRecords for debugging
+        console.log(`🔍 Keys available in childRecords: ${JSON.stringify(Object.keys(record.childRecords))}`);
+  
         childJobs.forEach(job => {
-          const childTableName = job.DBTableName;
-          const childRecords = record.childRecords[job.JobTypeName];
-          
+            const childTableName = job.DBTableName;            
+            const jobTypeName = job.JobTypeName;
+            
+            console.log(`🔍 Looking for child records with job type: ${jobTypeName}`);
+
+            // Enhanced lookup with more logging
+            let childRecords;
+            const exactMatch = record.childRecords[jobTypeName];
+            const lowercaseMatch = record.childRecords[jobTypeName.toLowerCase()];
+            const uppercaseMatch = record.childRecords[jobTypeName.toUpperCase()];
+            
+            console.log(`🔍 Exact match found: ${!!exactMatch}, Lowercase match: ${!!lowercaseMatch}, Uppercase match: ${!!uppercaseMatch}`);
+            
+            // Try to find child records using broader approach
+            childRecords = exactMatch || lowercaseMatch || uppercaseMatch;
+            
+            // If still no match, try something more flexible
+            if (!childRecords) {
+                // Try looking for match by ScreenName or any partial key
+                for (const key of Object.keys(record.childRecords)) {
+                console.log(`🔍 Checking key: ${key} against jobTypeName: ${jobTypeName}`);
+                
+                // Check if the key contains the screen name
+                if (key.includes(job.ScreenName) || jobTypeName.includes(key) || key.includes(jobTypeName)) {
+                    console.log(`🔍 Found potential match with key: ${key}`);
+                    childRecords = record.childRecords[key];
+                    break;
+                }
+                }
+            }
+
+            // Use optional chaining to avoid errors with undefined childRecords
+            const recordCount = childRecords?.length || 0;
+            console.log(`- For job ${jobTypeName}: found ${recordCount} child records`);
+                  
           if (childRecords && Array.isArray(childRecords)) {
             childRecords.forEach(childRecord => {
-              childUpdateRows.push({
-                RowId: childRecord.RowId,
-                BatchId: record.__batchId,
-                JobName: record.__jobType,
-                Status: "ERROR",
-                ErrorMessage: errorMessage,
-                JobId: record.__jobId,
-                priority_id: null,
-                is_new: 1,
-                tableName: childTableName
-              });
+                // Ensure errorMessage is always a string
+                const safeErrorMessage = typeof errorMessage === 'string' 
+                ? errorMessage 
+                : errorMessage ? JSON.stringify(errorMessage) : "Unknown error";
+
+                const childUpdate = {
+                    RowId: childRecord.RowId,
+                    BatchId: record.__batchId,
+                    JobName: record.__jobType,
+                    Status: "Failed",
+                    ErrorMessage: safeErrorMessage,
+                    JobId: record.__jobId,
+                    priority_id: null,
+                    is_new: 1,
+                    tableName: childTableName
+                  };
+
+                // This line might be missing - verify it exists
+                childUpdateRows.push(childUpdate);
+                console.log(`🔍 Added child error update for RowId ${childRecord.RowId} in table ${childTableName}`);
+
             });
           }
         });
@@ -398,9 +506,9 @@ function processApiResponse(
         BatchId: record.__batchId,
         TableName: record.__tableName,
         RowId: record.RowId,
-        Error: errorMessage,
+        Error: safeParentErrorMessage,
         JobId: record.__jobId,
-        ErrorStatus: "ERROR"
+        ErrorStatus: "Failed"
       });
     }
   });
