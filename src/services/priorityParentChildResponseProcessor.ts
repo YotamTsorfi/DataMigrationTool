@@ -301,6 +301,7 @@ function processApiResponse(
           
           if (responseBody && responseBody[priorityIdField]) {
             parentUpdate.priority_id = responseBody[priorityIdField];
+            console.log(`Found parent priority_id: ${parentUpdate.priority_id} from field: ${priorityIdField}`);
           }
         } catch (e) {
           console.warn(`Failed to parse response body for record ${index}`, e);
@@ -472,13 +473,14 @@ if (childJobs && record.childRecords) {
             const recordCount = childRecords?.length || 0;
             console.log(`- For job ${jobTypeName}: found ${recordCount} child records`);
                   
-          if (childRecords && Array.isArray(childRecords)) {
-            childRecords.forEach(childRecord => {
+            if (childRecords && Array.isArray(childRecords)) {
+                childRecords.forEach(childRecord => {
                 // Ensure errorMessage is always a string
                 const safeErrorMessage = typeof errorMessage === 'string' 
                 ? errorMessage 
                 : errorMessage ? JSON.stringify(errorMessage) : "Unknown error";
 
+                // Create the childUpdate object FIRST
                 const childUpdate = {
                     RowId: childRecord.RowId,
                     BatchId: record.__batchId,
@@ -489,7 +491,23 @@ if (childJobs && record.childRecords) {
                     priority_id: null,
                     is_new: 1,
                     tableName: childTableName
-                  };
+                };
+
+              // THEN try to extract and set priority_id        
+                if (apiResponse.body && job.priority_id) {
+                try {
+                    const responseBody = typeof apiResponse.body === "string"
+                    ? JSON.parse(apiResponse.body)
+                    : apiResponse.body;
+                    
+                    if (responseBody && responseBody[job.priority_id]) {
+                    childUpdate.priority_id = responseBody[job.priority_id];
+                    console.log(`Found child priority_id: ${childUpdate.priority_id} from field: ${job.priority_id} for child RowId: ${childRecord.RowId}`);
+                    }
+                } catch (e) {
+                    console.warn(`Failed to parse response body for child record`, e);
+                }
+                }
 
                 // This line might be missing - verify it exists
                 childUpdateRows.push(childUpdate);

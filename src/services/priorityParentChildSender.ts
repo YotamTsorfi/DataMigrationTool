@@ -79,12 +79,18 @@ export async function sendParentChildBatch(
       RowId: record.RowId
     }));
 
+    // Create clean records for sending to API, keeping enrichedRecords for tracking
+    const cleanRecordsForApi = enrichedRecords.map(record => {
+      const { childRecords, RowId, ...cleanRecord } = record;
+      return cleanRecord;
+    });
+
     // מדידת זמן הבקשה
-    measureRequestPerformance(enrichedRecords, perfMonitor);
+    measureRequestPerformance(cleanRecordsForApi, perfMonitor);
 
     // בניית גוף הבקשה
     const boundary = generateBoundary();
-    const batchBody = buildBatchRequestBody(enrichedRecords, boundary);
+    const batchBody = buildBatchRequestBody(cleanRecordsForApi, boundary);
 
     // יצירת כותרות HTTP עם אימות
     const headers = createBatchHeaders(

@@ -27,9 +27,7 @@ export async function* streamParentChildData(
     batchSize: number,
     startRow: number,
     maxRows: number,
-    parentIdField: string,
     linkedField: string,
-    parentScreenName: string,
     childJobs: ChildJob[]
   ): AsyncGenerator<any> {
     let processedRows = 0;
@@ -65,37 +63,59 @@ export async function* streamParentChildData(
             // שימוש ישיר באובייקט המקורי
             const priorityObject = parsedParentData;
 
+            // Create a tracking structure to store child records by job type
+            const childRecordsByType: Record<string, any[]> = {};      
+
             // הוספת הילדים הרלוונטיים לכל אב בהתאם להגדרת HasSiblings
             for (const job of childJobs) {
-                const childRecords = childDataMap.get(job.JobTypeName)?.get(linkValue) || [];
-                const parsedChildData = childRecords.map(child => parseJsonData(child.Data));
+                 const childRecords = childDataMap.get(job.JobTypeName)?.get(linkValue) || [];
+
+                  // Preserve both parsed data AND RowId for each child record
+                  const parsedChildData = childRecords.map(child => {
+                      const parsed = parseJsonData(child.Data);
+                      return {
+                          ...parsed,
+                          RowId: child.RowId // Add RowId for tracking
+                      };
+                  });
+
+                // Store child records for tracking (by job type)
+                childRecordsByType[job.JobTypeName] = parsedChildData;
 
                 // שם המפתח נקבע לפי ScreenName + _SUBFORM
                 const subformKey = `${job.ScreenName}_SUBFORM`;
                 
                 if (job.HasSiblings) {
-                // אם יש אפשרות לילדים מרובים, משתמשים במערך
-                priorityObject[subformKey] = parsedChildData;
+                  // אם יש אפשרות לילדים מרובים, משתמשים במערך אבל מסירים את ה-RowId מכל רשומה
+                  priorityObject[subformKey] = parsedChildData.map(item => {
+                    const { RowId, ...childWithoutRowId } = item;
+                    return childWithoutRowId;
+                  });
                 } else {
-                // אם מדובר על ילד יחיד, משתמשים באובייקט
-                // במקרה שאין ילדים או יש יותר מילד אחד (מה שאמור להיות שגיאה במצב HasSiblings=false),
-                // נטפל בזה בצורה מסודרת:
-                if (parsedChildData.length === 0) {
-                    priorityObject[subformKey] = {}; // אובייקט ריק אם אין ילדים
-                } else if (parsedChildData.length === 1) {
-                    priorityObject[subformKey] = parsedChildData[0]; // לוקחים את הילד היחיד
-                } else {
-                    console.warn(`Expected only one child record for ${job.ScreenName} but found ${parsedChildData.length}`);
-                    priorityObject[subformKey] = parsedChildData[0]; // בכל מקרה לוקחים את הראשון
-                }
+                    // For single child case
+                    if (parsedChildData.length === 0) {
+                        priorityObject[subformKey] = {};
+                    } else if (parsedChildData.length === 1) {
+                        // Remove RowId from API payload but keep the rest
+                        const { RowId, ...childWithoutRowId } = parsedChildData[0];
+                        priorityObject[subformKey] = childWithoutRowId;
+                    } else {
+                        console.warn(`Expected only one child record for ${job.ScreenName} but found ${parsedChildData.length}`);
+                        const { RowId, ...childWithoutRowId } = parsedChildData[0];
+                        priorityObject[subformKey] = childWithoutRowId;
+                    }
                 }
             }    
             
             // Include the RowId in the object for tracking purposes
             const priorityObjectWithTracking = {
               ...priorityObject,
-              RowId: parent.RowId // Preserve RowId for error tracking
+              RowId: parent.RowId, // Preserve RowId for error tracking
+              childRecords: childRecordsByType  // Organized child records with RowIds
             };
+            
+            // Add console log to inspect if child RowIds are preserved
+            // console.log('Priority object with tracking:', JSON.stringify(priorityObjectWithTracking, null, 2));
             // Yield the enriched object
             yield priorityObjectWithTracking;
             

@@ -86,12 +86,9 @@ export interface ChildJob {
             batchSize,
             startRow,
             totalRecords,
-            parentIdField,
             linkedField,
-            parentScreenName,
             childJobs
           );
-
           //----
           // עיבוד הנתונים בזמן אמת כשהם זורמים מהדאטה בייס
           const batches: any[][] = [];
@@ -127,6 +124,7 @@ export interface ChildJob {
             // מדידת זמן שליחה
             perfMonitor.startRequest();
 
+            // שליחת המנות במקביל
             const batchResults = await sendParentChildBatchesInParallel(
               batches,
               10, // מספר השליחות המקביל
