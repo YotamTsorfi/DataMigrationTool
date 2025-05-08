@@ -180,7 +180,8 @@ class JobManager {
         // Update job status for parent-child processing
         await this.updateJobStatus(
           jobId,
-          totalFailures === 0 ? "Completed" : "Failed",
+          //totalFailures === 0 ? "Completed" : "Failed",
+          "Completed", // Always mark as completed for parent-child processing
           totalSuccess,
           totalFailures,
           totalFailures > 0 ? "Some records failed" : undefined
@@ -261,7 +262,8 @@ class JobManager {
 
         await this.updateJobStatus(
           jobId,
-          totalFailures === 0 ? "Completed" : "Failed",
+          // totalFailures === 0 ? "Completed" : "Failed",
+          "Completed", // Always mark as completed for standard processing
           totalSuccess,
           totalFailures,
           totalFailures > 0 ? "Some batches failed" : undefined

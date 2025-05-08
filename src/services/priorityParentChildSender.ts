@@ -99,8 +99,8 @@ export async function sendParentChildBatch(
     );
     perfMonitor.endBatchBuild();
 
-
-    //****   DEBUG    ****/
+    
+    /*   DEBUG - For logging purposes only
     // שמירת בקשת ה-HTTP המלאה לקובץ לוג - הוסף כאן
     const requestLogData = {
         url: `${config.priorityDEVBaseUrl}/$batch`,
@@ -122,9 +122,8 @@ export async function sendParentChildBatch(
       writeToLogFile(
         "request_body.log",
         batchBody
-      );
-    //****   DEBUG    ****/
-
+      );    
+    */  
 
     // מדידת זמן השליחה
     perfMonitor.startRequest();

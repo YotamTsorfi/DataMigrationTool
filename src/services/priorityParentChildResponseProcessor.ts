@@ -23,6 +23,18 @@ export interface ProcessResponseResult {
     totalDuration: string;
   };
 }
+
+//-------------------------------------------------------------------------
+/**
+ * Adjusts the date to the local timezone by removing the timezone offset.
+ * @param date - The date to adjust.
+ * @returns The adjusted date in local timezone.
+ */
+const adjustTimeZone = (date: Date): Date => {
+    const offset = date.getTimezoneOffset() * 60000; // offset in milliseconds
+    return new Date(date.getTime() - offset);
+  };
+
 //-------------------------------------------------------------------------
 /**
  * עיבוד תשובה מה-API עבור מבנה אב-ילדים
@@ -167,8 +179,8 @@ export async function processParentChildResponse(
         jobType,
         batchId,
         jobId,
-        new Date(perfMonitor.metrics.startTime),
-        new Date(perfMonitor.metrics.endTime),
+        adjustTimeZone(new Date(perfMonitor.metrics.startTime)),
+        adjustTimeZone(new Date(perfMonitor.metrics.endTime)), 
         enrichedRecords.length,
         perfMonitor.metrics.successCount,
         perfMonitor.metrics.failureCount,
@@ -484,6 +496,12 @@ if (childJobs && record.childRecords) {
         });
       }
       
+
+      const statusCode = apiResponse.status || 
+      (typeof apiResponse.body === 'string' && apiResponse.body.includes('"code"') 
+       ? JSON.parse(apiResponse.body).code 
+       : "Unknown");
+
       // Add error log entry
       errorRows.push({
         JobName: record.__jobType,
@@ -492,8 +510,10 @@ if (childJobs && record.childRecords) {
         RowId: record.RowId,
         Error: safeParentErrorMessage,
         JobId: record.__jobId,
-        ErrorStatus: "Failed"
+        ErrorStatus: statusCode.toString()  
       });
+
+
     }
   });
 

@@ -66,7 +66,8 @@ class ProgressTracker {
     progress.successCount = successCount;
     progress.failureCount = failureCount;
     progress.percentage = 100;
-    progress.status = failureCount > 0 ? "failed" : "completed";
+    // progress.status = failureCount > 0 ? "failed" : "completed";
+    progress.status = "completed";
     
     this.emitProgress(jobId);
     
