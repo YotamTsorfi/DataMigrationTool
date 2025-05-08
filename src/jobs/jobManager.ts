@@ -26,6 +26,12 @@ interface ChildJob {
   HasSiblings: boolean;
 }
 
+interface JobResult {
+  successCount?: number;
+  failureCount?: number;
+  success?: boolean;
+}
+
 type JobStatus = "Queued" | "Running" | "Completed" | "Failed";
 
 const adjustTimeZone = (date: Date): Date => {
@@ -83,37 +89,28 @@ class JobManager {
   }
 
   //   ----------------------------
+  
   async startJob(jobId: string, jobRequest: JobRequest): Promise<any> {
     const jobStartTime = Date.now();
     let results;
-    //console.log(`Job ${jobId} starting at: ${new Date().toISOString()}`);
-
+  
     console.log(`Job ${jobId} starting with request:`, {
       recordCount: jobRequest.recordCount,
       tableName: jobRequest.tableName,
       processingType: jobRequest.processingType || "default not set",
     });
-
-    const formatDateTime = (date: Date): string => {
-      const day = date.getDate().toString().padStart(2, "0");
-      const month = (date.getMonth() + 1).toString().padStart(2, "0");
-      const year = date.getFullYear();
-      const hours = date.getHours().toString().padStart(2, "0");
-      const minutes = date.getMinutes().toString().padStart(2, "0");
-      const seconds = date.getSeconds().toString().padStart(2, "0");
-      const milliseconds = date.getMilliseconds().toString().padStart(2, "0");
-
-      return `${day}-${month}-${year} ${hours}:${minutes}:${seconds}:${milliseconds}`;
-    };
-
-    console.log(`Job ${jobId} starting at: ${formatDateTime(new Date())}`);
-
+  
+    console.log(`Job ${jobId} starting at: ${adjustTimeZone(new Date())}`);
+  
+    // עדכון סטטוס העבודה ל-"מתבצעת"
     await this.updateJobStatus(jobId, "Running");
-
+  
+    // קביעת סוג העיבוד (batch או queue)
     const processingType =
       jobRequest.processingType || (await this.getDefaultProcessingType());
     console.log(`Job ${jobId} using processing type: ${processingType}`);
-
+  
+    // עדכון סוג העיבוד במסד הנתונים
     await DatabaseService.executeQuery(
       `UPDATE PriorityJobsHistory SET ProcessingType = @ProcessingType WHERE JobId = @JobId`,
       {
@@ -121,158 +118,142 @@ class JobManager {
         JobId: jobId,
       }
     );
-
-    // Check if we need parent-child processing
-    let isParentChildProcessing = false;
-
-    // Check if priorityLinkedField from job request has a value
-    // If so, send it to the processing function
-    if (jobRequest.priorityLinkedField) {
-      // console.log(
-      //   `Job ${jobId} has priorityLinkedField: ${jobRequest.priorityLinkedField}`
-      // );
-      // console.log(
-      //   `Job ${jobId} has priorityJobTypeId  : ${jobRequest.priorityJobTypeId}`
-      // );
-
-      // Get child jobs in a single query
-      const childJobs = (await DatabaseService.executeQuery(
-        `SELECT ChildJobeId, JobTypeName, DBTableName, ScreenName, priority_id, HasSiblings 
-        FROM PriorityChildJob 
-        WHERE refParentJobId = @JobTypeId`,
-        {
-          JobTypeId: jobRequest.priorityJobTypeId,
-        }
-      )) as ChildJob[];
-
-      // Use the length of the returned array for the count
-      const childJobCount = childJobs.length;
-      // console.log(`Job ${jobId} has ${childJobCount} child jobs`);
-
-      // If we have child jobs and we're using batch processing, use the parent-child processor
-      if (childJobCount > 0 && processingType === "batch") {
-        console.log(`Job ${jobId} using parent-child batch processing`);
-        isParentChildProcessing = true;
-
-        // Call the parent-child processor with the already retrieved child job details
-        results = await processParentChildBatches(
-          jobRequest.recordCount,
-          jobRequest.startRow,
-          jobRequest.tableName,
-          jobRequest.priorityScreenName,
-          jobRequest.jobType,
-          jobId,
-          jobRequest.priorityIdField,
-          jobRequest.priorityLinkedField,
-          childJobs
-        );
-
-        // Calculate success and failure for parent-child processing
-        const totalSuccess = results.reduce(
-          (acc, result) => acc + (result.successCount || 0),
-          0
-        );
-        const totalFailures = results.reduce(
-          (acc, result) => acc + (result.failureCount || 0),
-          0
-        );
-
-        // Update job status for parent-child processing
-        await this.updateJobStatus(
-          jobId,
-          //totalFailures === 0 ? "Completed" : "Failed",
-          "Completed", // Always mark as completed for parent-child processing
-          totalSuccess,
-          totalFailures,
-          totalFailures > 0 ? "Some records failed" : undefined
-        );
-
-        // Mark job as complete in progress tracker
-        ProgressTracker.completeJob(jobId, totalSuccess, totalFailures);
-      }
-
-      // Only run standard processing if parent-child processing wasn't used
-      if (!isParentChildProcessing) {
-        console.log(`Job ${jobId} starting ${processingType} processing`);
-        console.log(
-          `Job ${jobId} status updated to Running at: ${new Date().toISOString()}`
-        );
-
-        // Initialize progress tracking
-        ProgressTracker.initJob(jobId, jobRequest.recordCount);
-
-        const batchStartTime = Date.now();
-
-        console.log(
-          `Job ${jobId} starting batch processing at: ${new Date().toISOString()}`
-        );
-
-        if (processingType === "queue") {
-          results = await processWithQueues(
+  
+    try {
+      // בדיקה האם מדובר בעבודה עם קשרי הורה-ילד
+      if (jobRequest.priorityLinkedField) {
+        console.log(`Job ${jobId} has parent-child relationship with linked field: ${jobRequest.priorityLinkedField}`);
+  
+        // חילוץ עבודות ילד ממסד הנתונים
+        const childJobs = (await DatabaseService.executeQuery(
+          `SELECT ChildJobeId, JobTypeName, DBTableName, ScreenName, priority_id, HasSiblings 
+           FROM PriorityChildJob 
+           WHERE refParentJobId = @JobTypeId`,
+          {
+            JobTypeId: jobRequest.priorityJobTypeId,
+          }
+        )) as ChildJob[];
+  
+        const childJobCount = childJobs.length;
+        console.log(`Job ${jobId} found ${childJobCount} child jobs`);
+  
+        // אם יש עבודות ילד ומדובר בעיבוד מסוג batch, הפעלת מעבד הורה-ילד
+        if (childJobCount > 0 && processingType === "batch") {
+          console.log(`Job ${jobId} executing parent-child batch processing`);
+          
+          results = await processParentChildBatches(
             jobRequest.recordCount,
             jobRequest.startRow,
             jobRequest.tableName,
             jobRequest.priorityScreenName,
             jobRequest.jobType,
             jobId,
-            jobRequest.priorityIdField
+            jobRequest.priorityIdField,
+            jobRequest.priorityLinkedField,
+            childJobs
           );
         } else {
-          // Default to batch processing
-          results = await processBatches(
-            jobRequest.recordCount,
-            jobRequest.startRow,
-            jobRequest.tableName,
-            jobRequest.priorityScreenName,
-            jobRequest.jobType,
-            jobId,
-            jobRequest.priorityIdField
-          );
+          // אם אין עבודות ילד או לא מדובר בעיבוד מסוג batch, ביצוע עיבוד רגיל
+          console.log(`Job ${jobId} has parent-child relationship but using standard processing (${processingType})`);
+          results = await this.executeStandardProcessing(jobId, jobRequest, processingType);
         }
-
-        const batchEndTime = Date.now();
-        const batchDurationSec = (
-          (batchEndTime - batchStartTime) /
-          1000
-        ).toFixed(2);
-        console.log(
-          `Job ${jobId} completed batch processing in ${batchDurationSec} seconds at: ${formatDateTime(new Date())}`
-        );
-
-        const totalSuccess = results.reduce(
-          (acc, result) =>
-            acc + (result.successCount || (result.success ? 1 : 0)),
-          0
-        );
-        const totalFailures = results.reduce(
-          (acc, result) =>
-            acc + (result.failureCount || (result.success ? 0 : 1)),
-          0
-        );
-
-        // Mark job as complete in progress tracker
-        ProgressTracker.completeJob(jobId, totalSuccess, totalFailures);
-
-        const jobEndTime = Date.now();
-        const jobDurationSec = ((jobEndTime - jobStartTime) / 1000).toFixed(2);
-
-        console.log(
-          `Job ${jobId} completed in ${jobDurationSec} seconds. Overall results: Success: ${totalSuccess}, Failures: ${totalFailures}`
-        );
-
-        await this.updateJobStatus(
-          jobId,
-          // totalFailures === 0 ? "Completed" : "Failed",
-          "Completed", // Always mark as completed for standard processing
-          totalSuccess,
-          totalFailures,
-          totalFailures > 0 ? "Some batches failed" : undefined
-        );
-
-        return results;
+      } else {
+        // אין קשרי הורה-ילד, ביצוע עיבוד רגיל
+        console.log(`Job ${jobId} using standard processing (${processingType})`);
+        results = await this.executeStandardProcessing(jobId, jobRequest, processingType);
       }
+  
+      // חישוב סטטיסטיקות הצלחה וכישלון
+      const totalSuccess = results.reduce(
+        (acc: number, result: JobResult) => acc + (result.successCount || (result.success ? 1 : 0)),
+        0
+      );
+      const totalFailures = results.reduce(
+        (acc: number, result: JobResult) => acc + (result.failureCount || (result.success ? 0 : 1)),
+        0
+      );
+  
+      // סיום המעקב אחר התקדמות העבודה
+      ProgressTracker.completeJob(jobId, totalSuccess, totalFailures);
+  
+      // עדכון סטטוס העבודה ל-"הושלמה"
+      await this.updateJobStatus(
+        jobId,
+        "Completed", 
+        totalSuccess,
+        totalFailures,
+        totalFailures > 0 ? "Some records failed" : undefined
+      );
+  
+      // הדפסת סטטיסטיקות ביצועים
+      const jobEndTime = Date.now();
+      const jobDurationSec = ((jobEndTime - jobStartTime) / 1000).toFixed(2);
+      console.log(
+        `Job ${jobId} completed in ${jobDurationSec} seconds. Results: Success: ${totalSuccess}, Failures: ${totalFailures}`
+      );
+  
+      return results;
+      
+    } catch (error) {
+      // טיפול בשגיאות
+      console.error(`Job ${jobId} failed with error:`, error);
+      
+      // עדכון סטטוס העבודה ל-"נכשלה"
+      await this.updateJobStatus(
+        jobId,
+        "Failed",
+        0,
+        jobRequest.recordCount,
+        error instanceof Error ? error.message : 'Unknown error'
+      );
+      
+      throw error;
     }
   }
+  
+  // פונקציית עזר לביצוע עיבוד רגיל (הוצאתי לפונקציה נפרדת למען הסדר)
+  private async executeStandardProcessing(jobId: string, jobRequest: JobRequest, processingType: string): Promise<any> {
+    console.log(`Job ${jobId} starting ${processingType} processing`);
+    
+    // אתחול מעקב התקדמות
+    ProgressTracker.initJob(jobId, jobRequest.recordCount);
+    
+    const batchStartTime = Date.now();
+    console.log(`Job ${jobId} starting processing at: ${new Date().toISOString()}`);
+    
+    let results;
+    
+    if (processingType === "queue") {
+      // עיבוד עם תורים
+      results = await processWithQueues(
+        jobRequest.recordCount,
+        jobRequest.startRow,
+        jobRequest.tableName,
+        jobRequest.priorityScreenName,
+        jobRequest.jobType,
+        jobId,
+        jobRequest.priorityIdField
+      );
+    } else {
+      // עיבוד רגיל במנות (ברירת המחדל)
+      results = await processBatches(
+        jobRequest.recordCount,
+        jobRequest.startRow,
+        jobRequest.tableName,
+        jobRequest.priorityScreenName,
+        jobRequest.jobType,
+        jobId,
+        jobRequest.priorityIdField
+      );
+    }
+    
+    const batchEndTime = Date.now();
+    const batchDurationSec = ((batchEndTime - batchStartTime) / 1000).toFixed(2);
+    console.log(`Job ${jobId} completed processing in ${batchDurationSec} seconds at: ${adjustTimeZone(new Date())}`);
+    
+    return results;
+  }
+
   //   ----------------------------
   async startMultipleJobs(jobRequests: JobRequest[]): Promise<any[]> {
     const results = [];
