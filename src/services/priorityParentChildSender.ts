@@ -13,7 +13,7 @@ import {
 } from "../services/requestSender";
 import { processParentChildResponse } from "./priorityParentChildResponseProcessor";
 import { ChildJob } from "../jobs/jobParentAndChilds";
-import { writeToLogFile } from "../config/logger";
+// import { writeToLogFile } from "../config/logger";
 // תוצאת שליחה של מנה (Batch)
 export interface BatchSendResult {
   success: boolean;

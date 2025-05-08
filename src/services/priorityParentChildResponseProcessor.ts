@@ -1,5 +1,5 @@
 import PerformanceMonitor from "../utils/performanceMonitor";
-import { writeToLogFile } from "../config/logger";
+// import { writeToLogFile } from "../config/logger";
 import { measureResponsePerformance } from "../services/requestSender";
 import {
   performBulkUpdateWithService,
