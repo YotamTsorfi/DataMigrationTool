@@ -94,11 +94,11 @@ const BatchProcessor: React.FC = () => {
       (job) => job.JobTypeName === e.target.value
     );
     if (selectedJob) {
-      setTableName(selectedJob.DBTableName);
-      setPriorityScreenName(selectedJob.ScreenName);
-      setPriorityIdField(selectedJob.priority_id);
-      setPriorityLinkedField(selectedJob.linkedField);
-      setPriorityJobTypeId(selectedJob.JobTypeId);
+      setTableName(selectedJob.DBTableName || "");
+      setPriorityScreenName(selectedJob.ScreenName || "");
+      setPriorityIdField(selectedJob.priority_id || "");      
+      setPriorityLinkedField(selectedJob.linkedField || "");
+      setPriorityJobTypeId(selectedJob.JobTypeId || 0);
     } else {
       setTableName("");
       setPriorityScreenName("");
