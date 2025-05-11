@@ -82,7 +82,7 @@ async function processParentChildBatches(
     const perfMonitor = new PerformanceMonitor();
     perfMonitor.startDbFetch();
     
-    console.log(`Fetching data from ${parentTableName} with linked field ${linkedField}`);
+    // console.log(`Fetching data from ${parentTableName} with linked field ${linkedField}`);
     const dataStream = streamParentChildData(
       parentTableName,
       batchSize,
@@ -102,7 +102,7 @@ async function processParentChildBatches(
       let groupRecordCount = 0;
       const maxRecordsPerGroup = maxBatchSizeForApi * maxConcurrentBatches;
       
-      console.log(`Processing records ${currentRow} to ${Math.min(currentRow + maxRecordsPerGroup, totalRecords)}`);
+      // console.log(`Processing records ${currentRow} to ${Math.min(currentRow + maxRecordsPerGroup, totalRecords)}`);
       
       // Build a group of batches (max 10 batches of 100 records each = 1000 records)
       for await (const record of dataStream) {
@@ -139,7 +139,7 @@ async function processParentChildBatches(
       
       // Prepare child table names for response processor
       const childTableNames = childJobs.map(job => job.DBTableName);
-      console.log(`Processing group of ${batchGroup.length} batches with total ${groupRecordCount} records`);
+      // console.log(`Processing group of ${batchGroup.length} batches with total ${groupRecordCount} records`);
       
       try {
         // Send batches in parallel (max 10 concurrently)
@@ -181,7 +181,7 @@ async function processParentChildBatches(
         }
         
         results.push(...batchResults);
-        console.log(`Batch group completed: ${batchSuccessCount} successful, ${batchFailureCount} failed`);
+        // console.log(`Batch group completed: ${batchSuccessCount} successful, ${batchFailureCount} failed`);
       } catch (error) {
         // Handle batch group-level errors
         console.error(`Error processing batch group:`, error);
@@ -228,7 +228,7 @@ async function processParentChildBatches(
       
       // Log progress for large jobs
       if (processedRecords % 10000 === 0 || processedRecords >= totalRecords) {
-        console.log(`Progress: ${processedRecords}/${totalRecords} records processed (${Math.floor(processedRecords/totalRecords*100)}%)`);
+        // console.log(`Progress: ${processedRecords}/${totalRecords} records processed (${Math.floor(processedRecords/totalRecords*100)}%)`);
       }
     }
 
@@ -238,12 +238,12 @@ async function processParentChildBatches(
     const metrics = overallPerformance.getFormattedMetrics();
     
     // Log job completion once at the END
-    console.log("Parent-child job completed");
-    console.log(`Total records processed: ${processedRecords}`);
-    console.log(`Total successful records: ${totalSuccessCount}`);
-    console.log(`Total failed records: ${totalFailureCount}`);
-    console.log(`Total duration: ${metrics.totalDuration}`);
-    console.log(`Average time per record: ${metrics.averageTimePerRecord}`);
+    // console.log("Parent-child job completed");
+    // console.log(`Total records processed: ${processedRecords}`);
+    // console.log(`Total successful records: ${totalSuccessCount}`);
+    // console.log(`Total failed records: ${totalFailureCount}`);
+    // console.log(`Total duration: ${metrics.totalDuration}`);
+    // console.log(`Average time per record: ${metrics.averageTimePerRecord}`);
 
     ProgressTracker.completeJob(jobId, totalSuccessCount, totalFailureCount);
     return results;

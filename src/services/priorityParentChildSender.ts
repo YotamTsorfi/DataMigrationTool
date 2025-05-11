@@ -98,33 +98,7 @@ export async function sendParentChildBatch(
       `Basic ${Buffer.from(`${config.priorityPAT}:${config.priorityPassword}`).toString("base64")}`
     );
     perfMonitor.endBatchBuild();
-
     
-    /*   DEBUG - For logging purposes only
-    // שמירת בקשת ה-HTTP המלאה לקובץ לוג - הוסף כאן
-    const requestLogData = {
-        url: `${config.priorityDEVBaseUrl}/$batch`,
-        method: "POST",
-        headers: headers,
-        boundary: boundary,
-        batchId: batchId,
-        timestamp: new Date().toISOString(),
-        recordCount: records.length
-      };
-  
-      // שמירת הבקשה המלאה לקובץ לוג
-      writeToLogFile(
-        "request_debug.log", 
-        JSON.stringify(requestLogData)
-      );
-  
-      // שמירת גוף הבקשה המלא לקובץ נפרד
-      writeToLogFile(
-        "request_body.log",
-        batchBody
-      );    
-    */  
-
     // מדידת זמן השליחה
     perfMonitor.startRequest();
     
@@ -136,15 +110,17 @@ export async function sendParentChildBatch(
     } catch (error) {
       perfMonitor.logError(error);
       console.error("Error sending parent-child batch request:", error);
-      return {
-        success: false,
-        batchId: batchId,
-        error: error instanceof Error ? error.message : "Unknown error",
-        message: "Failed to communicate with Priority API",
-        rowsCount: records.length,
-        successCount: 0,
-        failureCount: records.length,
+      
+      // Create a fake response structure to ensure processing continues
+      response = {
+        status: 500,
+        data: {
+          error: { message: error instanceof Error ? error.message : String(error) }
+        }
       };
+      
+      // Still continue with response processing to ensure database updates happen
+      console.log("Created fallback response structure to continue with database updates");
     }
         
     /**
@@ -215,12 +191,12 @@ export async function sendParentChildBatchesInParallel(
   const effectiveConcurrency = Math.min(concurrency, 10); // Never exceed 10 concurrent batches
   const limit = pLimit(effectiveConcurrency);
   
-  console.log(`Sending ${batches.length} batches with max concurrency of ${effectiveConcurrency}`);
+  // console.log(`Sending ${batches.length} batches with max concurrency of ${effectiveConcurrency}`);
   
   // Send all batches in parallel with concurrency limit
   const sendPromises = batches.map((batch, index) => 
     limit(async () => {
-      console.log(`Starting batch ${index + 1}/${batches.length} with ${batch.length} records`);
+      // console.log(`Starting batch ${index + 1}/${batches.length} with ${batch.length} records`);
       const result = await sendParentChildBatch(
         batch, 
         jobType, 
@@ -231,7 +207,7 @@ export async function sendParentChildBatchesInParallel(
         childTableNames,
         childJobs
       );
-      console.log(`Completed batch ${index + 1}/${batches.length}`);
+      // console.log(`Completed batch ${index + 1}/${batches.length}`);
       return result;
     })
   );
@@ -244,7 +220,7 @@ export async function sendParentChildBatchesInParallel(
   const successfulRecords = results.reduce((sum, result) => sum + result.successCount, 0);
   const failedRecords = results.reduce((sum, result) => sum + result.failureCount, 0);
   
-  console.log(`Completed sending ${batches.length} batches: ${successfulRecords} successful, ${failedRecords} failed out of ${totalRecords} total records`);
+  // console.log(`Completed sending ${batches.length} batches: ${successfulRecords} successful, ${failedRecords} failed out of ${totalRecords} total records`);
   
   // Help garbage collection
   batches.forEach(batch => {

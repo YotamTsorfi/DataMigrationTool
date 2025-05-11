@@ -54,6 +54,35 @@ export async function fetchDataChunk(
 }
 //--------------------------------------------------------------------------------
 /**
+ * Sanitizes update data to ensure SQL compatibility
+ * @param updates Array of update objects
+ * @returns Sanitized update array
+ */
+export function sanitizeForSqlUpdate(updates: any[]): any[] {
+  return updates.map(update => {
+    // Create a new object to avoid modifying the original
+    const sanitized = { ...update };
+    
+    // Ensure priority_id is either a string or null (never undefined)
+    if (sanitized.priority_id === undefined) {
+      sanitized.priority_id = null;
+    } else if (sanitized.priority_id !== null) {
+      sanitized.priority_id = String(sanitized.priority_id);
+    }
+    
+    // Ensure ErrorMessage is either a string or null
+    if (sanitized.ErrorMessage !== null && sanitized.ErrorMessage !== undefined) {
+      sanitized.ErrorMessage = String(sanitized.ErrorMessage);
+    } else {
+      sanitized.ErrorMessage = null;
+    }
+    
+    return sanitized;
+  });
+}
+
+//--------------------------------------------------------------------------------
+/**
  * Performs bulk update of processed rows
  */
 export async function performBulkUpdateWithService(
@@ -102,6 +131,9 @@ export async function performBulkUpdateWithService(
   let successful = true;
 
   try {
+    // Sanitize data before update
+    const sanitizedRows = sanitizeForSqlUpdate(updates);
+
     // Execute bulk update operation - no need to check for columns here
     // as the stored procedure now handles the priority_id field check
     const result = await DatabaseService.executeBulkOperation(
@@ -109,7 +141,7 @@ export async function performBulkUpdateWithService(
       { TableName: tableName },
       "Updates",
       "dbo.BatchUpdateTableType",
-      updates,
+      sanitizedRows,
       batchSize
     );
 

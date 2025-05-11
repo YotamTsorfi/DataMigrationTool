@@ -108,7 +108,7 @@ class JobManager {
     // קביעת סוג העיבוד (batch או queue)
     const processingType =
       jobRequest.processingType || (await this.getDefaultProcessingType());
-    console.log(`Job ${jobId} using processing type: ${processingType}`);
+    // console.log(`Job ${jobId} using processing type: ${processingType}`);
   
     // עדכון סוג העיבוד במסד הנתונים
     await DatabaseService.executeQuery(
@@ -122,7 +122,7 @@ class JobManager {
     try {
       // בדיקה האם מדובר בעבודה עם קשרי הורה-ילד
       if (jobRequest.priorityLinkedField) {
-        console.log(`Job ${jobId} has parent-child relationship with linked field: ${jobRequest.priorityLinkedField}`);
+        // console.log(`Job ${jobId} has parent-child relationship with linked field: ${jobRequest.priorityLinkedField}`);
   
         // חילוץ עבודות ילד ממסד הנתונים
         const childJobs = (await DatabaseService.executeQuery(
@@ -135,11 +135,11 @@ class JobManager {
         )) as ChildJob[];
   
         const childJobCount = childJobs.length;
-        console.log(`Job ${jobId} found ${childJobCount} child jobs`);
+        // console.log(`Job ${jobId} found ${childJobCount} child jobs`);
   
         // אם יש עבודות ילד ומדובר בעיבוד מסוג batch, הפעלת מעבד הורה-ילד
         if (childJobCount > 0 && processingType === "batch") {
-          console.log(`Job ${jobId} executing parent-child batch processing`);
+          // console.log(`Job ${jobId} executing parent-child batch processing`);
           
           results = await processParentChildBatches(
             jobRequest.recordCount,

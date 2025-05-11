@@ -75,7 +75,9 @@ export async function* streamParentChildData(
                       const parsed = parseJsonData(child.Data);
                       return {
                           ...parsed,
-                          RowId: child.RowId // Add RowId for tracking
+                          RowId: child.RowId, // Add RowId for tracking
+                          __tableName: job.DBTableName, // Add tableName for consistency
+                          __jobTypeName: job.JobTypeName // Add job type name for better debugging
                       };
                   });
 
@@ -88,8 +90,8 @@ export async function* streamParentChildData(
                 if (job.HasSiblings) {
                   // אם יש אפשרות לילדים מרובים, משתמשים במערך אבל מסירים את ה-RowId מכל רשומה
                   priorityObject[subformKey] = parsedChildData.map(item => {
-                    const { RowId, ...childWithoutRowId } = item;
-                    return childWithoutRowId;
+                    const { RowId, __tableName, __jobTypeName, ...childWithoutMetadata } = item;
+                    return childWithoutMetadata;
                   });
                 } else {
                     // For single child case
@@ -97,12 +99,12 @@ export async function* streamParentChildData(
                         priorityObject[subformKey] = {};
                     } else if (parsedChildData.length === 1) {
                         // Remove RowId from API payload but keep the rest
-                        const { RowId, ...childWithoutRowId } = parsedChildData[0];
-                        priorityObject[subformKey] = childWithoutRowId;
+                        const { RowId, __tableName, __jobTypeName, ...childWithoutMetadata } = parsedChildData[0];
+                        priorityObject[subformKey] = childWithoutMetadata;
                     } else {
                         console.warn(`Expected only one child record for ${job.ScreenName} but found ${parsedChildData.length}`);
-                        const { RowId, ...childWithoutRowId } = parsedChildData[0];
-                        priorityObject[subformKey] = childWithoutRowId;
+                        const { RowId, __tableName, __jobTypeName, ...childWithoutMetadata } = parsedChildData[0];
+                        priorityObject[subformKey] = childWithoutMetadata;
                     }
                 }
             }    
