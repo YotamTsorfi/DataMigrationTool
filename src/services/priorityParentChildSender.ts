@@ -211,16 +211,17 @@ export async function sendParentChildBatchesInParallel(
   childTableNames?: string[],
   childJobs?: ChildJob[] 
 ): Promise<BatchSendResult[]> {
-  // הגבלת מספר השליחות המקבילות
-  const limit = pLimit(concurrency);
+  // Explicitly ensure concurrency is capped
+  const effectiveConcurrency = Math.min(concurrency, 10); // Never exceed 10 concurrent batches
+  const limit = pLimit(effectiveConcurrency);
   
-  //console.log(`Sending ${batches.length} batches with max concurrency of ${concurrency}`);
+  console.log(`Sending ${batches.length} batches with max concurrency of ${effectiveConcurrency}`);
   
-  // שליחת כל המנות במקביל עם הגבלת מקבוליות
+  // Send all batches in parallel with concurrency limit
   const sendPromises = batches.map((batch, index) => 
-    limit(() => {
-      //console.log(`Starting batch ${index + 1}/${batches.length} with ${batch.length} records`);
-      return sendParentChildBatch(
+    limit(async () => {
+      console.log(`Starting batch ${index + 1}/${batches.length} with ${batch.length} records`);
+      const result = await sendParentChildBatch(
         batch, 
         jobType, 
         tableName, 
@@ -230,18 +231,27 @@ export async function sendParentChildBatchesInParallel(
         childTableNames,
         childJobs
       );
+      console.log(`Completed batch ${index + 1}/${batches.length}`);
+      return result;
     })
   );
   
-  // המתנה לסיום כל השליחות
+  // Wait for all batches to complete
   const results = await Promise.all(sendPromises);
   
-  // סיכום התוצאות
+  // Summarize results
   const totalRecords = batches.reduce((sum, batch) => sum + batch.length, 0);
   const successfulRecords = results.reduce((sum, result) => sum + result.successCount, 0);
   const failedRecords = results.reduce((sum, result) => sum + result.failureCount, 0);
   
-  //console.log(`Completed sending ${batches.length} batches: ${successfulRecords} successful, ${failedRecords} failed out of ${totalRecords} total records`);
+  console.log(`Completed sending ${batches.length} batches: ${successfulRecords} successful, ${failedRecords} failed out of ${totalRecords} total records`);
+  
+  // Help garbage collection
+  batches.forEach(batch => {
+    if (batch && Array.isArray(batch)) {
+      batch.length = 0;
+    }
+  });
   
   return results;
 }

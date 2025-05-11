@@ -48,7 +48,7 @@ export function priorityAuthMiddleware(
         "Content-Type": "multipart/mixed",
         "OData-Version": "4.0",
       },
-      timeout: 30000,
+      timeout: 60000,
     });
 
     // add interceptors for request logging

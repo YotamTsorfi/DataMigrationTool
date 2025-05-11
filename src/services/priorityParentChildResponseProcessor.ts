@@ -49,91 +49,171 @@ const adjustTimeZone = (date: Date): Date => {
  * @param childTableNames - שמות טבלאות הילדים
  */
 export async function processParentChildResponse(
-    response: any,
-    enrichedRecords: any[],
-    perfMonitor: PerformanceMonitor,
-    parentTable: string,
-    batchId: string,
-    jobType: string,
-    jobId: string,
-    priorityIdField?: string,
-    childTableNames?: string[],
-    childJobs?: ChildJob[]
-  ): Promise<ProcessResponseResult> {
-    try {
-      // Measure response performance
-      measureResponsePerformance(response, perfMonitor);
+  response: any,
+  enrichedRecords: any[],
+  perfMonitor: PerformanceMonitor,
+  parentTable: string,
+  batchId: string,
+  jobType: string,
+  jobId: string,
+  priorityIdField?: string,
+  childTableNames?: string[],
+  childJobs?: ChildJob[]
+): Promise<ProcessResponseResult> {
+  // Add diagnostic logging for troubleshooting
+  console.log(`Processing response for ${enrichedRecords.length} records from ${parentTable}`);
+  console.log(`Response status: ${response?.status || 'unknown'}, has data: ${!!response?.data}`);
   
-      // Process API response
-      const {
-        parentUpdateRows,
-        childUpdateRows,
-        errorRows,
-        successCount,
-        failureCount,
-        lastProcessedIndex,
-        sentToPriority
-      } = processApiResponse(response, enrichedRecords, priorityIdField, childJobs);
+  try {
+    // Start measuring DB update time
+    const dbUpdateStart = Date.now();
+    
+    // Measure response performance
+    measureResponsePerformance(response, perfMonitor);
 
-      // Update performance metrics
-      perfMonitor.metrics.successCount = successCount;
-      perfMonitor.metrics.failureCount = failureCount;
-      perfMonitor.metrics.lastProcessedIndex = lastProcessedIndex;
-  
-      // Database update tracking
-      let totalDbUpdateTime = 0;
-      let batchStatus = sentToPriority ? "Completed" : "Failed";
-      let hadDeadlocks = false;
-  
-      // Update parent records
-      if (parentUpdateRows.length > 0) {
-        try {
-          const result = await performBulkUpdateWithService(
-            parentTable,
-            parentUpdateRows,
-            perfMonitor,
-            undefined,
-            3, // number of retries
-            sentToPriority
-          );
-  
-          totalDbUpdateTime += result.updateTime;
-          hadDeadlocks = result.hadDeadlocks;
-  
-          if (hadDeadlocks && result.successful && sentToPriority) {
-            batchStatus = "Completed";
-            console.log(`Batch ${batchId} had deadlocks during parent DB update but completed successfully`);
-          }
-        } catch (dbError) {
-          // Error handling as before
-          console.error("Error during parent database update:", dbError);
-          // Handle errors, deadlocks, etc.
-        }
-      }
-  
-      // Update child records - group by table name for efficiency
-      if (childUpdateRows.length > 0) {
-        try {
-          // Group child updates by table name
-          const childUpdatesByTable: Record<string, any[]> = {};
-          
-          childUpdateRows.forEach(update => {
+    // IMPORTANT: Check if the response has a valid structure or contains errors
+    const sentToPriority = !!(response && response.data);
+    let apiErrorMessage = null;
+    
+    if (response?.status >= 400 || (response?.data?.error)) {
+      apiErrorMessage = response?.data?.error?.message || `API Error: Status ${response?.status}`;
+      console.warn(`API returned error status ${response?.status}, but continuing with database updates`);
+    }
+    
+    // Process API response - even if there are errors
+    const {
+      parentUpdateRows,
+      childUpdateRows,
+      errorRows,
+      successCount,
+      failureCount,
+      lastProcessedIndex,
+      sentToPriority: responseSuccess
+    } = processApiResponse(response, enrichedRecords, priorityIdField, childJobs);
 
-            if (!update.tableName) {
-                console.error(`❌ Child update missing tableName property:`, update);
-                return;
-              } 
-            const tableName = update.tableName;
-            delete update.tableName; // Remove the table name before sending to DB
+    // IMPORTANT: If API failed but we didn't capture failures in processing,
+    // make sure we mark all records as failed
+    if (apiErrorMessage && failureCount === 0) {
+      console.log(`API returned error but no failures detected. Marking all ${enrichedRecords.length} records as failed`);
+      
+      // Force all parent records to be updated as failed
+      parentUpdateRows.length = 0; // Clear any existing updates
+      
+      enrichedRecords.forEach(record => {
+        parentUpdateRows.push({
+          RowId: record.RowId,
+          BatchId: record.__batchId,
+          JobName: record.__jobType,
+          Status: "Failed",
+          ErrorMessage: apiErrorMessage,
+          JobId: record.__jobId,
+          priority_id: null,
+          is_new: 1
+        });
+        
+        // Add error record
+        errorRows.push({
+          JobName: record.__jobType,
+          BatchId: record.__batchId,
+          TableName: record.__tableName,
+          RowId: record.RowId,
+          Error: apiErrorMessage,
+          JobId: record.__jobId,
+          ErrorStatus: response?.status?.toString() || "400"
+        });
+        
+        // Process child records if they exist
+        if (childJobs && record.childRecords) {
+          childJobs.forEach(job => {
+            const childTableName = job.DBTableName;
+            const jobTypeName = job.JobTypeName;
             
-            if (!childUpdatesByTable[tableName]) {
-              childUpdatesByTable[tableName] = [];
+            // Try to get child records with flexible lookup
+            const childRecords = getChildRecords(record, jobTypeName);
+            
+            if (childRecords && Array.isArray(childRecords) && childRecords.length > 0) {
+              childRecords.forEach(childRecord => {
+                childUpdateRows.push({
+                  RowId: childRecord.RowId,
+                  BatchId: record.__batchId,
+                  JobName: record.__jobType,
+                  Status: "Failed",
+                  ErrorMessage: apiErrorMessage,
+                  JobId: record.__jobId,
+                  priority_id: null,
+                  is_new: 1,
+                  tableName: childTableName
+                });
+              });
             }
-            childUpdatesByTable[tableName].push(update);
           });
+        }
+      });
+    }
+
+    // Update performance metrics
+    perfMonitor.metrics.successCount = successCount;
+    perfMonitor.metrics.failureCount = enrichedRecords.length - successCount; // Ensure we count all failures
+    perfMonitor.metrics.lastProcessedIndex = lastProcessedIndex;
+
+    // Database update tracking
+    let totalDbUpdateTime = 0;
+    let batchStatus = responseSuccess ? "Completed" : "Failed";
+    let hadDeadlocks = false;
+
+    // Always update parent records - even if we have errors
+    if (parentUpdateRows.length > 0) {
+      try {
+        console.log(`Updating ${parentUpdateRows.length} parent records in table ${parentTable}`);
+        const result = await performBulkUpdateWithService(
+          parentTable,
+          parentUpdateRows,
+          perfMonitor,
+          undefined,
+          3, // number of retries
+          sentToPriority
+        );
+
+        totalDbUpdateTime += result.updateTime;
+        hadDeadlocks = result.hadDeadlocks;
+
+        if (hadDeadlocks && result.successful && sentToPriority) {
+          console.log(`Batch ${batchId} had deadlocks during parent DB update but completed successfully`);
+        }
+      } catch (dbError) {
+        console.error("Error during parent database update:", dbError);
+        // Continue with child updates despite error in parent updates
+      }
+    } else {
+      console.warn(`No parent updates to process for batch ${batchId}`);
+    }
+
+    // Update child records - always attempt this even if parent updates failed
+    if (childUpdateRows.length > 0) {
+      try {
+        // Group child updates by table name for efficiency
+        const childUpdatesByTable: Record<string, any[]> = {};
+        
+        childUpdateRows.forEach(update => {
+          if (!update.tableName) {
+              console.error(`❌ Child update missing tableName property:`, update);
+              return;
+          } 
+          const tableName = update.tableName;
+          delete update.tableName; // Remove the table name before sending to DB
           
-          // Process each child table
-          for (const [tableName, updates] of Object.entries(childUpdatesByTable)) {            
+          if (!childUpdatesByTable[tableName]) {
+            childUpdatesByTable[tableName] = [];
+          }
+          childUpdatesByTable[tableName].push(update);
+        });
+        
+        // Process each child table
+        console.log(`Updating child records in ${Object.keys(childUpdatesByTable).length} tables`);
+        for (const [tableName, updates] of Object.entries(childUpdatesByTable)) {
+          console.log(`Updating ${updates.length} records in child table ${tableName}`);
+          
+          try {
             const childResult = await performBulkUpdateWithService(
               tableName,
               updates,
@@ -145,87 +225,242 @@ export async function processParentChildResponse(
             
             totalDbUpdateTime += childResult.updateTime;
             if (childResult.hadDeadlocks) hadDeadlocks = true;
+          } catch (tableError) {
+            console.error(`Error updating child table ${tableName}:`, tableError);
+            // Continue with other tables despite error
           }
-        } catch (childDbError) {
-          console.error("Error during child database update:", childDbError);
-          // Handle errors, deadlocks, etc.
         }
+      } catch (childDbError) {
+        console.error("Error during child database update:", childDbError);
+        // Continue with error logging despite errors in child updates
       }
-  
-      // Insert error logs
-      if (errorRows.length > 0) {
-        try {
-          const errorResult = await performBulkErrorInsertWithService(
-            errorRows,
-            perfMonitor
-          );
-          totalDbUpdateTime += errorResult.updateTime;
-        } catch (errorInsertError) {
-          console.error("Failed to insert error logs:", errorInsertError);
-        }
+    } else {
+      console.log(`No child updates to process for batch ${batchId}`);
+    }
+
+    // Insert error logs - always do this, especially important with API errors
+    if (errorRows.length > 0) {
+      try {
+        console.log(`Inserting ${errorRows.length} error records`);
+        const errorResult = await performBulkErrorInsertWithService(
+          errorRows,
+          perfMonitor
+        );
+        totalDbUpdateTime += errorResult.updateTime;
+      } catch (errorInsertError) {
+        console.error("Failed to insert error logs:", errorInsertError);
       }
-  
-      // Ensure DB update time is recorded
-      if (totalDbUpdateTime > 0 && !perfMonitor.metrics.dbUpdateTime) {
-        perfMonitor.setDbUpdateTime(totalDbUpdateTime);
-      }
-  
-      // Complete the operation and get metrics
-      perfMonitor.endOperation();
-      const formattedMetrics = perfMonitor.getFormattedMetrics();
-  
-      // Record batch processing results
-      await recordBatchProcessing(
-        jobType,
-        batchId,
+    }
+
+    // Ensure DB update time is recorded
+    if (totalDbUpdateTime > 0 && !perfMonitor.metrics.dbUpdateTime) {
+      perfMonitor.setDbUpdateTime(totalDbUpdateTime);
+    }
+
+    // Complete the operation and get metrics
+    perfMonitor.endOperation();
+    const formattedMetrics = perfMonitor.getFormattedMetrics();
+
+    // Record batch processing results
+    await recordBatchProcessing(
+      jobType,
+      batchId,
+      jobId,
+      adjustTimeZone(new Date(perfMonitor.metrics.startTime)),
+      adjustTimeZone(new Date(perfMonitor.metrics.endTime)), 
+      enrichedRecords.length,
+      perfMonitor.metrics.successCount,
+      perfMonitor.metrics.failureCount,
+      perfMonitor.metrics.lastProcessedIndex,
+      batchStatus,
+      hadDeadlocks ? "DB update had deadlocks but completed successfully" : null,
+      parentTable
+    );
+
+    console.log(`Batch ${batchId} processing completed: ${successCount} successful, ${perfMonitor.metrics.failureCount} failed`);
+    
+    // Return success result
+    return {
+      success: true,
+      message: "Batch processed successfully",
+      successCount: perfMonitor.metrics.successCount,
+      failureCount: perfMonitor.metrics.failureCount,
+      responseCount: response?.data?.responses?.length || 0,
+      averageTimePerRecord: formattedMetrics.averageTimePerRecord,
+      performanceMetrics: {
+        dbFetchTime: formattedMetrics.dbFetchTime,
+        dbUpdateTime: formattedMetrics.dbUpdateTime,
+        batchBuildTime: formattedMetrics.batchBuildTime,
+        requestTime: formattedMetrics.requestTime,
+        totalDuration: formattedMetrics.totalDuration,
+      },
+    };
+  } catch (error) {
+    console.error("Error processing parent-child response:", error);
+    
+    // IMPORTANT: Force database updates even when the processor itself fails
+    try {
+      await forceErrorDatabaseUpdates(
+        enrichedRecords,
+        error,
+        parentTable,
         jobId,
-        adjustTimeZone(new Date(perfMonitor.metrics.startTime)),
-        adjustTimeZone(new Date(perfMonitor.metrics.endTime)), 
-        enrichedRecords.length,
-        perfMonitor.metrics.successCount,
-        perfMonitor.metrics.failureCount,
-        perfMonitor.metrics.lastProcessedIndex,
-        batchStatus,
-        hadDeadlocks ? "DB update had deadlocks but completed successfully" : null,
-        parentTable
+        batchId,
+        childJobs
       );
+    } catch (forceUpdateError) {
+      console.error("Failed to force error updates:", forceUpdateError);
+    }
+    
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "Unknown error in response processing",
+      successCount: 0,
+      failureCount: enrichedRecords.length,
+      averageTimePerRecord: "N/A",
+      performanceMetrics: {
+        dbFetchTime: "N/A",
+        dbUpdateTime: "N/A",
+        batchBuildTime: "N/A",
+        requestTime: "N/A",
+        totalDuration: "N/A",
+      },
+    };
+  }
+}
+
+// Helper function to get child records with flexible lookup
+function getChildRecords(record: any, jobTypeName: string): any[] | undefined {
+if (!record.childRecords) return undefined;
+
+// Try exact match
+if (record.childRecords[jobTypeName]) {
+  return record.childRecords[jobTypeName];
+}
+
+// Try case-insensitive match
+const lcKey = jobTypeName.toLowerCase();
+const ucKey = jobTypeName.toUpperCase();
+
+if (record.childRecords[lcKey]) {
+  return record.childRecords[lcKey];
+}
+
+if (record.childRecords[ucKey]) {
+  return record.childRecords[ucKey];
+}
+
+// Try partial matches
+for (const key of Object.keys(record.childRecords)) {
+  if (key.includes(jobTypeName) || jobTypeName.includes(key)) {
+    return record.childRecords[key];
+  }
+}
+
+return undefined;
+}
+
+// Helper function to force database updates when processor fails
+async function forceErrorDatabaseUpdates(
+records: any[],
+error: any,
+parentTable: string,
+jobId: string,
+batchId: string,
+childJobs?: ChildJob[]
+): Promise<void> {
+console.log(`Forcing database updates for ${records.length} records due to processor error`);
+
+const errorMessage = error instanceof Error ? error.message : String(error);
+
+// Create parent updates
+const parentUpdates = records.map(record => ({
+  RowId: record.RowId,
+  BatchId: record.__batchId || batchId,
+  JobName: record.__jobType,
+  Status: "Failed",
+  ErrorMessage: errorMessage,
+  JobId: jobId,
+  priority_id: null,
+  is_new: 1
+}));
+
+// Create error logs
+const errorLogs = records.map(record => ({
+  JobName: record.__jobType,
+  BatchId: record.__batchId || batchId,
+  TableName: record.__tableName || parentTable,
+  RowId: record.RowId,
+  Error: errorMessage,
+  JobId: jobId,
+  ErrorStatus: "PROCESSOR_ERROR"
+}));
+
+// Create child updates if applicable
+const childUpdates: any[] = [];
+
+if (childJobs && childJobs.length > 0) {
+  records.forEach(record => {
+    if (record.childRecords) {
+      childJobs.forEach(job => {
+        const childRecords = getChildRecords(record, job.JobTypeName);
+        
+        if (childRecords && Array.isArray(childRecords)) {
+          childRecords.forEach(childRecord => {
+            childUpdates.push({
+              RowId: childRecord.RowId,
+              BatchId: record.__batchId || batchId,
+              JobName: record.__jobType,
+              Status: "Failed",
+              ErrorMessage: errorMessage,
+              JobId: jobId,
+              priority_id: null,
+              is_new: 1,
+              tableName: job.DBTableName
+            });
+          });
+        }
+      });
+    }
+  });
+}
+
+// Perform database updates
+try {
+  if (parentUpdates.length > 0) {
+    await performBulkUpdateWithService(parentTable, parentUpdates);
+    console.log(`Updated ${parentUpdates.length} parent records with error status`);
+  }
   
-      // Return success result
-      return {
-        success: true,
-        message: "Batch processed successfully",
-        successCount: perfMonitor.metrics.successCount,
-        failureCount: perfMonitor.metrics.failureCount,
-        responseCount: response.data?.responses?.length || 0,
-        averageTimePerRecord: formattedMetrics.averageTimePerRecord,
-        performanceMetrics: {
-          dbFetchTime: formattedMetrics.dbFetchTime,
-          dbUpdateTime: formattedMetrics.dbUpdateTime,
-          batchBuildTime: formattedMetrics.batchBuildTime,
-          requestTime: formattedMetrics.requestTime,
-          totalDuration: formattedMetrics.totalDuration,
-        },
-      };
-    } catch (error) {
-      // Error handling as before
-      console.error("Error processing parent-child response:", error);
-      return {
-        // Error result object
-        success: false,
-        message: error instanceof Error ? error.message : "Unknown error in response processing",
-        successCount: 0,
-        failureCount: enrichedRecords.length,
-        averageTimePerRecord: "N/A",
-        performanceMetrics: {
-          dbFetchTime: "N/A",
-          dbUpdateTime: "N/A",
-          batchBuildTime: "N/A",
-          requestTime: "N/A",
-          totalDuration: "N/A",
-        },
-      };
+  if (errorLogs.length > 0) {
+    await performBulkErrorInsertWithService(errorLogs);
+    console.log(`Inserted ${errorLogs.length} error logs`);
+  }
+  
+  if (childUpdates.length > 0) {
+    // Group by table name
+    const childUpdatesByTable: Record<string, any[]> = {};
+    
+    childUpdates.forEach(update => {
+      const tableName = update.tableName;
+      delete update.tableName;
+      
+      if (!childUpdatesByTable[tableName]) {
+        childUpdatesByTable[tableName] = [];
+      }
+      childUpdatesByTable[tableName].push(update);
+    });
+    
+    // Update each child table
+    for (const [tableName, updates] of Object.entries(childUpdatesByTable)) {
+      await performBulkUpdateWithService(tableName, updates);
+      console.log(`Updated ${updates.length} records in child table ${tableName}`);
     }
   }
+} catch (dbError) {
+  console.error("Failed to update database with error information:", dbError);
+}
+}
 
 //-------------------------------------------------------------------------
 /**
