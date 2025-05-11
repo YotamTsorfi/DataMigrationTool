@@ -251,7 +251,7 @@ export async function processParentChildResponse(
     // Insert error logs - always do this, especially important with API errors
     if (errorRows.length > 0) {
       try {
-        console.log(`Inserting ${errorRows.length} error records`);
+        // console.log(`Inserting ${errorRows.length} error records`);
         const errorResult = await performBulkErrorInsertWithService(
           errorRows,
           perfMonitor

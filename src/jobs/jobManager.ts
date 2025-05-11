@@ -165,11 +165,18 @@ class JobManager {
   
       // חישוב סטטיסטיקות הצלחה וכישלון
       const totalSuccess = results.reduce(
-        (acc: number, result: JobResult) => acc + (result.successCount || (result.success ? 1 : 0)),
+        (acc: number, result: JobResult) => {
+          // Use only explicit successCount and avoid fallback to result.success
+          return acc + (typeof result.successCount === 'number' ? result.successCount : 0);
+        },
         0
       );
+      
       const totalFailures = results.reduce(
-        (acc: number, result: JobResult) => acc + (result.failureCount || (result.success ? 0 : 1)),
+        (acc: number, result: JobResult) => {
+          // Use only explicit failureCount and avoid fallback to !result.success
+          return acc + (typeof result.failureCount === 'number' ? result.failureCount : 0);
+        },
         0
       );
   
