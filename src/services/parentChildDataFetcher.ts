@@ -182,14 +182,13 @@ async function fetchEligibleParentRecords(
     try {
       // console.log(`Starting to fetch parent records from ${tableName}`);
       const query = `
-        SELECT RowId, Data, ${linkedField}
+        SELECT TOP (${limit}) RowId, Data, ${linkedField}
         FROM ${tableName}
         WHERE is_eligible = 1
         AND is_new = 1
         AND Status IS NULL
+        AND RowId >= ${offset}
         ORDER BY RowId ASC
-        OFFSET ${offset} ROWS
-        FETCH NEXT ${limit} ROWS ONLY
       `;
     
       // console.log(`Fetching parent records from ${tableName} with offset ${offset}, limit ${limit}`);

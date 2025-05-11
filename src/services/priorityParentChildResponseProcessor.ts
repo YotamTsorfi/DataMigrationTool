@@ -91,6 +91,12 @@ export async function processParentChildResponse(
       sentToPriority: responseSuccess
     } = processApiResponse(response, enrichedRecords, priorityIdField, childJobs);
 
+    // Update performance metrics - THIS IS THE FIX
+    perfMonitor.metrics.successCount = successCount;
+    // Use the actual failure count instead of calculating it
+    perfMonitor.metrics.failureCount = failureCount;
+    perfMonitor.metrics.lastProcessedIndex = lastProcessedIndex;
+
     // IMPORTANT: If API failed but we didn't capture failures in processing,
     // make sure we mark all records as failed
     if (apiErrorMessage && failureCount === 0) {
@@ -149,6 +155,10 @@ export async function processParentChildResponse(
           });
         }
       });
+      
+      // Update success and failure counts - THIS IS ALSO A FIX
+      perfMonitor.metrics.successCount = 0;
+      perfMonitor.metrics.failureCount = enrichedRecords.length;
     }
 
     // Update performance metrics
