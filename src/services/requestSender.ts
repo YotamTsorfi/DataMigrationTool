@@ -8,13 +8,15 @@ import { formatAxiosError, createCleanError } from "../utils/errorHandler";
 // Create reusable HTTP/HTTPS agents with keep-alive enabled
 const httpAgent = new http.Agent({
   keepAlive: true,
-  maxSockets: 50,
+  // maxSockets: 50,
+  maxSockets: 200,
   keepAliveMsecs: 30000, // Keep connections alive for 30 seconds
 });
 
 const httpsAgent = new https.Agent({
   keepAlive: true,
-  maxSockets: 50,
+  // maxSockets: 50,
+  maxSockets: 200,
   keepAliveMsecs: 30000,
 });
 
@@ -25,7 +27,7 @@ export async function sendBatchRequest(
   batchBody: string,
   headers: Record<string, string>
 ): Promise<any> {
-  const maxRetries = 3;
+  const maxRetries = 5; // Maximum number of retries for network errors and 5xx server errors
   let retryCount = 0;
   let lastError: any;
 
@@ -37,7 +39,7 @@ export async function sendBatchRequest(
         batchBody,
         {
           headers,
-          timeout: 120000, //60000 = 60 seconds timeout
+          timeout: 120000, //Was 60000 = 60 seconds timeout
           httpAgent,
           httpsAgent,
         }

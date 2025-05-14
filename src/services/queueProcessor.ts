@@ -12,13 +12,15 @@ import { recordBatchProcessing } from "./dataService";
 // Create reusable HTTP/HTTPS agents with keep-alive enabled
 const httpAgent = new http.Agent({
   keepAlive: true,
-  maxSockets: 50,
+  // maxSockets: 50,
+  maxSockets: 200,
   keepAliveMsecs: 30000, // Keep connections alive for 30 seconds
 });
 
 const httpsAgent = new https.Agent({
   keepAlive: true,
-  maxSockets: 50,
+  // maxSockets: 50,
+  maxSockets: 200,
   keepAliveMsecs: 30000,
 });
 

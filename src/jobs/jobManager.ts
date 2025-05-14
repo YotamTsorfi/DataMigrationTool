@@ -4,6 +4,7 @@ import { processBatches } from "../jobs/job";
 import ProgressTracker from "../utils/progressTracker";
 import { processWithQueues } from "../jobs/queueJob";
 import { processParentChildBatches } from "../jobs/jobParentAndChilds";
+import { ErrorBufferService } from "../utils/errorBufferService";
 
 interface JobRequest {
   recordCount: number;
@@ -139,7 +140,14 @@ class JobManager {
   
         // אם יש עבודות ילד ומדובר בעיבוד מסוג batch, הפעלת מעבד הורה-ילד
         if (childJobCount > 0 && processingType === "batch") {
-          // console.log(`Job ${jobId} executing parent-child batch processing`);
+          console.log(`Job ${jobId} executing parent-child batch processing`);
+          
+          // Configure error buffer for larger batch size for parent-child processing
+          ErrorBufferService.getInstance().configure({
+            flushSize: 1000, // Larger batch size for parent-child operations
+            minFlushSize: 200, // Higher minimum to prevent small flushes
+            flushInterval: 60000 // Longer interval for parent-child operations
+          });
           
           results = await processParentChildBatches(
             jobRequest.recordCount,
@@ -152,6 +160,13 @@ class JobManager {
             jobRequest.priorityLinkedField,
             childJobs
           );
+          
+          // Reset error buffer configuration to default after parent-child processing
+          ErrorBufferService.getInstance().configure({
+            flushSize: 500,
+            minFlushSize: 100,
+            flushInterval: 30000
+          });
         } else {
           // אם אין עבודות ילד או לא מדובר בעיבוד מסוג batch, ביצוע עיבוד רגיל
           console.log(`Job ${jobId} has parent-child relationship but using standard processing (${processingType})`);
@@ -163,6 +178,9 @@ class JobManager {
         results = await this.executeStandardProcessing(jobId, jobRequest, processingType);
       }
   
+      // Ensure all buffered errors are flushed before completing the job
+      await ErrorBufferService.getInstance().flushAll();
+
       // חישוב סטטיסטיקות הצלחה וכישלון
       const totalSuccess = results.reduce(
         (acc: number, result: JobResult) => {
@@ -205,6 +223,13 @@ class JobManager {
       // טיפול בשגיאות
       console.error(`Job ${jobId} failed with error:`, error);
       
+      // Ensure errors are flushed even on job failure
+      try {
+        await ErrorBufferService.getInstance().flushAll();
+      } catch (flushError) {
+        console.error("Error flushing error buffer:", flushError);
+      }
+
       // עדכון סטטוס העבודה ל-"נכשלה"
       await this.updateJobStatus(
         jobId,

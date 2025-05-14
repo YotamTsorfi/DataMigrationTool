@@ -1,31 +1,16 @@
--- קודם מוחקים את הפרוצדורה (כי היא תלויה בטבלת הסוג)
-IF EXISTS (SELECT * FROM sys.procedures WHERE name = 'BulkUpdateRows')
-    DROP PROCEDURE dbo.BulkUpdateRows;
+USE [CarmeltonDB_STG]
 GO
 
--- אחר כך מוחקים את טבלת הסוג
-IF EXISTS (SELECT * FROM sys.types WHERE name = 'BatchUpdateTableType')
-    DROP TYPE dbo.BatchUpdateTableType;
+/****** Object:  StoredProcedure [dbo].[BulkUpdateRows]    Script Date: 10/05/2025 08:54:19 ******/
+SET ANSI_NULLS ON
 GO
 
--- ואז יוצרים את טבלת הסוג
--- יוצרים את טבלת הסוג מחדש עם השדה is_new
-CREATE TYPE dbo.BatchUpdateTableType AS TABLE(
-    [RowId] [int] NULL,
-    [BatchId] [uniqueidentifier] NULL,
-    [JobName] [nvarchar](255) NULL,
-    [Status] [nvarchar](100) NULL,
-    [ErrorMessage] [nvarchar](max) NULL,
-    [JobId] [uniqueidentifier] NULL,
-    [priority_id] [nvarchar](50) NULL,
-    [is_new] [bit] NULL
-);
+SET QUOTED_IDENTIFIER ON
 GO
-
 
 
 -- יצירת הפרוצדורה המעודכנת
-CREATE OR ALTER PROCEDURE dbo.BulkUpdateRows
+CREATE   PROCEDURE [dbo].[BulkUpdateRows]
     @TableName NVARCHAR(255),
     @Updates dbo.BatchUpdateTableType READONLY
 AS
@@ -85,3 +70,5 @@ BEGIN
     EXEC sp_executesql @sql, N'@Updates dbo.BatchUpdateTableType READONLY', @Updates;
 END;
 GO
+
+

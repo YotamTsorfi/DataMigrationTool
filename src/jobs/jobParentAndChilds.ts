@@ -4,6 +4,7 @@ import { sendParentChildBatchesInParallel } from '../services/priorityParentChil
 import ProgressTracker from "../utils/progressTracker";
 import PerformanceMonitor from "../utils/performanceMonitor";
 import { performBulkUpdateWithService, performBulkErrorInsertWithService } from "../services/dataService";
+import { ErrorBufferService } from "../utils/errorBufferService";
 
 // import { writeToLogFile } from "../config/logger";
 export interface ChildJob {
@@ -72,6 +73,13 @@ async function processParentChildBatches(
   
   // Fixed for processing 10 batches in parallel
   const maxConcurrentBatches = 10;
+
+  // Configure error buffer for more efficient error logging
+  const errorBuffer = ErrorBufferService.getInstance();
+  errorBuffer.configure({ 
+    flushSize: Math.max(5000, maxBatchSizeForApi * 10), // Set appropriate buffer size
+    flushInterval: 5000  // Flush at least every 5 seconds
+  });
   
   // Add error tracking
   let consecutiveFailedBatches = 0;
@@ -232,6 +240,9 @@ async function processParentChildBatches(
       }
     }
 
+    // Make sure to flush any remaining errors before completing
+    await errorBuffer.flushAll();
+
     // Complete the job with overall statistics
     perfMonitor.endDbFetch();
     overallPerformance.endOperation();
@@ -249,6 +260,14 @@ async function processParentChildBatches(
     return results;
   } catch (error) {
     console.error(`Fatal error in processParentChildBatches:`, error);
+    
+    // Ensure all buffered errors are flushed even when the job fails
+    try {
+      await errorBuffer.flushAll();
+    } catch (flushError) {
+      console.error("Error flushing error buffer:", flushError);
+    }
+    
     ProgressTracker.completeJob(jobId, totalSuccessCount, totalFailureCount + (totalRecords - processedRecords));
     
     results.push({
@@ -303,9 +322,9 @@ async function forceErrorRecordUpdates(records: any[], jobId: string, error: any
     }
     
     if (errorRows.length > 0) {
-      // Use the dataService function for error logging
-      await performBulkErrorInsertWithService(errorRows);
-      console.log(`Logged ${errorRows.length} error records`);
+      // Use the error buffer service instead of direct inserts
+      ErrorBufferService.getInstance().addErrors(errorRows);
+      console.log(`Buffered ${errorRows.length} error records`);
     }
     
     // Add support for child records

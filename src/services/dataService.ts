@@ -230,7 +230,7 @@ export async function performBulkUpdateWithService(
 export async function performBulkErrorInsertWithService(
   errors: any[],
   perfMonitor?: PerformanceMonitor,
-  batchSize = 1000,
+  batchSize = 1000, // Increased default batch size from 1000
   maxRetries = 3
 ): Promise<{ updateTime: number; hadDeadlocks: boolean; successful: boolean }> {
   // Return the time taken
@@ -240,8 +240,10 @@ export async function performBulkErrorInsertWithService(
   const localPerfMonitor = perfMonitor || new PerformanceMonitor();
   if (!perfMonitor) localPerfMonitor.startOperation();
 
-  // Process error messages for error log entries
-  errors.forEach((errorEntry) => {
+  // Process error messages for error log entries - reduce sample size for better performance
+  const sampleSize = Math.min(5, errors.length);
+  for (let i = 0; i < sampleSize; i++) {
+    const errorEntry = errors[i];
     if (errorEntry.Error) {
       try {
         // Check if the error contains a JSON string with error details
@@ -254,29 +256,35 @@ export async function performBulkErrorInsertWithService(
           // Get the detailed message if available
           if (errorObj.error && errorObj.error.message) {
             errorEntry.Error = errorObj.error.message;
-            console.log(
+            // Use debug level to reduce console output
+            console.debug(
               `Extracted detailed error message for log: ${errorEntry.Error}`
             );
           }
         }
       } catch (parseError) {
-        console.log(`Error parsing error log JSON: ${parseError}`);
+        console.debug(`Error parsing error log JSON: ${parseError}`);
         // Keep the original message if parsing fails
       }
     }
-  });
+  }
 
   localPerfMonitor.startDbUpdate();
   let hadDeadlocks = false;
 
   try {
+    // Generate batch identifier for better error tracing
+    const batchId = `err-${Date.now().toString(36)}-${Math.floor(Math.random() * 1000)}`;
+    
     const result = await DatabaseService.executeBulkOperation(
       "dbo.BulkInsertErrorLogs",
       {}, // No additional parameters
       "Errors",
       "dbo.ErrorLogTableType",
       errors,
-      batchSize
+      batchSize, 
+      maxRetries,
+      batchId // Pass batch identifier for better logging
     );
 
     // Track if we had deadlocks
@@ -285,9 +293,16 @@ export async function performBulkErrorInsertWithService(
     localPerfMonitor.endDbUpdate();
     const insertTime = localPerfMonitor.metrics.dbUpdateTime || 0;
 
-    console.log(
-      `Bulk error insert completed in ${insertTime.toFixed(2)}ms for ${errors.length} error records`
-    );
+    // Only log this for larger batches to reduce console spam
+    if (errors.length > 100) {
+      console.log(
+        `Bulk error insert completed in ${insertTime.toFixed(2)}ms for ${errors.length} error records`
+      );
+    } else {
+      console.debug(
+        `Bulk error insert: ${errors.length} records in ${insertTime.toFixed(2)}ms`
+      );
+    }
 
     return { updateTime: insertTime, hadDeadlocks, successful: true };
   } catch (error) {

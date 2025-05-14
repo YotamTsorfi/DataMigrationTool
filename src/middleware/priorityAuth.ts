@@ -30,7 +30,7 @@ export function priorityAuthMiddleware(
         "OData-Version": "4.0",
         Accept: "application/json",
       },
-      timeout: 60000, // 60 seconds
+      timeout: 120000, // 60 seconds
       proxy: false,
       maxRedirects: 5,
       validateStatus: function (status) {
@@ -48,7 +48,7 @@ export function priorityAuthMiddleware(
         "Content-Type": "multipart/mixed",
         "OData-Version": "4.0",
       },
-      timeout: 60000,
+      timeout: 120000,
     });
 
     // add interceptors for request logging

@@ -23,6 +23,7 @@ import {
   measureRequestPerformance,
   measureResponsePerformance,
 } from "../services/requestSender";
+import { ErrorBufferService } from "../utils/errorBufferService";
 
 interface BatchCreateRowsResult {
   success: boolean;
@@ -190,15 +191,13 @@ async function processBatch(
       }
     }
 
+    // Update error handling to use buffer instead of immediate insert
     if (errorRows.length > 0) {
       try {
-        const errorResult = await performBulkErrorInsertWithService(
-          errorRows,
-          perfMonitor
-        );
-        totalDbUpdateTime += errorResult.updateTime;
-      } catch (errorInsertError) {
-        console.error("Failed to insert error logs:", errorInsertError);
+        // Add errors to buffer instead of immediately inserting
+        ErrorBufferService.getInstance().addErrors(errorRows);
+      } catch (errorBufferError) {
+        console.error("Failed to buffer error logs:", errorBufferError);
       }
     }
 
@@ -256,8 +255,11 @@ async function processBatch(
       message: "Batch created successfully",
       rowsCount: rows.length,
       responseStats: {
-        successCount: sentToPriority ? rows.length : 0,
-        failureCount: sentToPriority ? 0 : rows.length,
+        // successCount: sentToPriority ? rows.length : 0,
+        // failureCount: sentToPriority ? 0 : rows.length,
+        // responseCount: response.data?.responses?.length || 0,
+        successCount: successCount,
+        failureCount: failureCount,
         responseCount: response.data?.responses?.length || 0,
       },
       requestSize: perfMonitor.metrics.requestSize,
@@ -302,6 +304,13 @@ async function processBatches(
   const MAX_DELAY = config.MAX_DELAY || 500; // Maximum delay in milliseconds
   const limit = pLimit(CONCURRENT_BATCHES);
 
+  // Configure error buffer service with appropriate size based on configuration
+  const errorBuffer = ErrorBufferService.getInstance();
+  errorBuffer.configure({ 
+    flushSize: Math.max(5000, BATCH_SIZE * 10),  // Appropriate buffer size based on batch size
+    flushInterval: 5000  // Flush at least every 5 seconds if not triggered by size
+  });
+
   // const memoryMonitor = setInterval(() => {
   //   const memoryUsage = process.memoryUsage();
   //   if (memoryUsage.heapUsed / memoryUsage.heapTotal > 0.9) {
@@ -325,121 +334,137 @@ async function processBatches(
   let processedCount = 0;
   let lastRowId = startRow - 1;
 
-  while (processedCount < recordCount) {
-    const chunkSize = Math.min(CHUNK_SIZE, recordCount - processedCount);
+  try {
+    while (processedCount < recordCount) {
+      const chunkSize = Math.min(CHUNK_SIZE, recordCount - processedCount);
 
-    // Measure DB fetch time - Now properly measured for the chunk
-    const perfMonitor = new PerformanceMonitor();
-    perfMonitor.startDbFetch();
+      // Measure DB fetch time - Now properly measured for the chunk
+      const perfMonitor = new PerformanceMonitor();
+      perfMonitor.startDbFetch();
 
-    // Fetch data chunk from database
-    const rows = await fetchDataChunk(tableName, lastRowId, chunkSize);
-    perfMonitor.endDbFetch();
+      // Fetch data chunk from database
+      const rows = await fetchDataChunk(tableName, lastRowId, chunkSize);
+      perfMonitor.endDbFetch();
 
-    // console.log(
-    //   `Fetched ${rows.length} rows from database in ${perfMonitor.metrics.dbFetchTime?.toFixed(2)}ms`
-    // );
+      // console.log(
+      //   `Fetched ${rows.length} rows from database in ${perfMonitor.metrics.dbFetchTime?.toFixed(2)}ms`
+      // );
 
-    if (rows.length === 0) break;
+      if (rows.length === 0) break;
 
-    const batchPromises = [];
-    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-      const batch = rows.slice(i, i + BATCH_SIZE);
-      const batchId = uuidv4();
-      batchPromises.push(
-        limit(() =>
-          processBatch(
-            batch,
-            batchId,
-            jobType,
-            tableName,
-            priorityScreenName,
-            jobId,
-            perfMonitor.metrics.dbFetchTime,
-            priorityIdField
+      const batchPromises = [];
+      for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+        const batch = rows.slice(i, i + BATCH_SIZE);
+        const batchId = uuidv4();
+        batchPromises.push(
+          limit(() =>
+            processBatch(
+              batch,
+              batchId,
+              jobType,
+              tableName,
+              priorityScreenName,
+              jobId,
+              perfMonitor.metrics.dbFetchTime,
+              priorityIdField
+            )
           )
-        )
-      );
-    }
+        );
+      }
 
-    let currentDelay = DELAY_BETWEEN_BATCHES;
-    for (const batchPromise of batchPromises) {
-      try {
-        const startTime = Date.now();
-        const result = await batchPromise;
-        const processingTime = Date.now() - startTime;
+      let currentDelay = DELAY_BETWEEN_BATCHES;
+      for (const batchPromise of batchPromises) {
+        try {
+          const startTime = Date.now();
+          const result = await batchPromise;
+          const processingTime = Date.now() - startTime;
 
-        // Store only essential information from the result
-        results.push({
-          success: result.success,
-          rowsCount: result.rowsCount || 0,
-          successCount: result.responseStats?.successCount || 0,
-          failureCount: result.responseStats?.failureCount || 0,
-          duration: result.duration,
-        });
+          // Store only essential information from the result
+          results.push({
+            success: result.success,
+            rowsCount: result.rowsCount || 0,
+            successCount: result.responseStats?.successCount || 0,
+            failureCount: result.responseStats?.failureCount || 0,
+            duration: result.duration,
+          });
 
-        // Update progress metrics after each batch completes
-        if (result.success) {
+          // Update progress metrics after each batch completes
+          // if (result.success) {
+          //   totalProcessedRecords += result.rowsCount || 0;
+          //   totalSuccessCount += result.responseStats?.successCount || 0;
+          //   totalFailureCount += result.responseStats?.failureCount || 0;
+          // }
           totalProcessedRecords += result.rowsCount || 0;
           totalSuccessCount += result.responseStats?.successCount || 0;
           totalFailureCount += result.responseStats?.failureCount || 0;
-        }
 
-        // Help garbage collector by clearing references to the full result
-        Object.keys(result).forEach((key) => {
-          if (key !== "success" && key !== "error") {
-            result[key] = null;
+          // Help garbage collector by clearing references to the full result
+          Object.keys(result).forEach((key) => {
+            if (key !== "success" && key !== "error") {
+              result[key] = null;
+            }
+          });
+
+          // Adjust delay based on processing time
+          if (processingTime > currentDelay) {
+            currentDelay = Math.min(currentDelay * 1.5, MAX_DELAY); // Slow down
+          } else if (processingTime < currentDelay / 2) {
+            currentDelay = Math.max(currentDelay * 0.8, MIN_DELAY); // Speed up
           }
-        });
+        } catch (error) {
+          console.error("Batch processing failed:", error);          
+          // Add the failed result with error details
+          const failedBatchSize = BATCH_SIZE; 
+          results.push({
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown batch error",
+            rowsCount: failedBatchSize,
+          });
 
-        // Adjust delay based on processing time
-        if (processingTime > currentDelay) {
-          currentDelay = Math.min(currentDelay * 1.5, MAX_DELAY); // Slow down
-        } else if (processingTime < currentDelay / 2) {
-          currentDelay = Math.max(currentDelay * 0.8, MIN_DELAY); // Speed up
+          // Continue with next batch instead of failing the entire job
+          // totalFailureCount += BATCH_SIZE; // Estimate failure count
+          // Update both processedRecords and failures
+          totalProcessedRecords += failedBatchSize;
+          totalFailureCount += failedBatchSize;
         }
-      } catch (error) {
-        console.error("Batch processing failed:", error);
-        // Add the failed result with error details
-        results.push({
-          success: false,
-          error: error instanceof Error ? error.message : "Unknown batch error",
-          rowsCount: 0,
-        });
 
-        // Continue with next batch instead of failing the entire job
-        totalFailureCount += BATCH_SIZE; // Estimate failure count
+        // Update progress tracker (moved outside try/catch to ensure it always runs)
+        ProgressTracker.updateProgress(
+          jobId,
+          totalProcessedRecords,
+          totalSuccessCount,
+          totalFailureCount
+        );
+
+        await new Promise((resolve) => setTimeout(resolve, currentDelay));
       }
 
-      // Update progress tracker (moved outside try/catch to ensure it always runs)
-      ProgressTracker.updateProgress(
-        jobId,
-        totalProcessedRecords,
-        totalSuccessCount,
-        totalFailureCount
-      );
+      lastRowId = (rows[rows.length - 1] as { RowId: number }).RowId;
+      processedCount += rows.length;
 
-      await new Promise((resolve) => setTimeout(resolve, currentDelay));
+      // Clear row data to help garbage collection
+      rows.length = 0;
     }
 
-    lastRowId = (rows[rows.length - 1] as { RowId: number }).RowId;
-    processedCount += rows.length;
+    // Make sure to flush any remaining errors before completing the job
+    await errorBuffer.flushAll();
 
-    // Clear row data to help garbage collection
-    rows.length = 0;
+    // Mark job as complete when all batches are done
+    ProgressTracker.completeJob(jobId, totalSuccessCount, totalFailureCount);
+
+    // Return lightweight results
+    return results.map((result) => ({
+      success: result.success,
+      rowsCount: result.rowsCount,
+      successCount: result.successCount,
+      failureCount: result.failureCount,
+      duration: result.duration,
+    }));
+  } catch (error) {
+    // Ensure all errors are flushed even if job fails
+    await errorBuffer.flushAll();
+    throw error;
   }
-
-  // Mark job as complete when all batches are done
-  ProgressTracker.completeJob(jobId, totalSuccessCount, totalFailureCount);
-
-  // Return lightweight results
-  return results.map((result) => ({
-    success: result.success,
-    rowsCount: result.rowsCount,
-    successCount: result.successCount,
-    failureCount: result.failureCount,
-    duration: result.duration,
-  }));
 }
 
 export { processBatch, processBatches };
