@@ -68,7 +68,30 @@ export async function* streamParentChildData(
 
             // הוספת הילדים הרלוונטיים לכל אב בהתאם להגדרת HasSiblings
             for (const job of childJobs) {
-                 const childRecords = childDataMap.get(job.JobTypeName)?.get(linkValue) || [];
+                 const childRecords = childDataMap.get(job.DBTableName)?.get(linkValue) || [];
+
+                  // שמירת נתוני ילדים מקוריים לצרכי מעקב
+                  childRecordsByType[job.JobTypeName] = [];
+
+                  if (childRecords.length === 0) {
+                      // אין ילדים לסוג זה - נמשיך לסוג הבא בלי להוסיף שדה ריק!
+                      continue;
+                  }
+
+                  // if (childRecords.length === 0) {
+                  //   // אין ילדים לסוג זה - נמשיך לסוג הבא
+                  //   childRecordsByType[job.DBTableName] = [];
+
+                  //   // במקרה שאין ילדים, נוסיף מבנה ריק למסך המתאים
+                  //   const subformKey = `${job.ScreenName}_SUBFORM`;
+                  //   if (job.HasSiblings) {
+                  //     priorityObject[subformKey] = [];
+                  //   } else {
+                  //     priorityObject[subformKey] = {};
+                  //   }
+
+                  //   continue;
+                  // }
 
                   // Preserve both parsed data AND RowId for each child record
                   const parsedChildData = childRecords.map(child => {
@@ -87,26 +110,27 @@ export async function* streamParentChildData(
                 // שם המפתח נקבע לפי ScreenName + _SUBFORM
                 const subformKey = `${job.ScreenName}_SUBFORM`;
                 
-                if (job.HasSiblings) {
-                  // אם יש אפשרות לילדים מרובים, משתמשים במערך אבל מסירים את ה-RowId מכל רשומה
-                  priorityObject[subformKey] = parsedChildData.map(item => {
-                    const { RowId, __tableName, __jobTypeName, ...childWithoutMetadata } = item;
-                    return childWithoutMetadata;
-                  });
-                } else {
-                    // For single child case
-                    if (parsedChildData.length === 0) {
-                        priorityObject[subformKey] = {};
-                    } else if (parsedChildData.length === 1) {
-                        // Remove RowId from API payload but keep the rest
-                        const { RowId, __tableName, __jobTypeName, ...childWithoutMetadata } = parsedChildData[0];
-                        priorityObject[subformKey] = childWithoutMetadata;
-                    } else {
-                        console.warn(`Expected only one child record for ${job.ScreenName} but found ${parsedChildData.length}`);
-                        const { RowId, __tableName, __jobTypeName, ...childWithoutMetadata } = parsedChildData[0];
-                        priorityObject[subformKey] = childWithoutMetadata;
-                    }
-                }
+                  // הוספת הילדים לפי הגדרת HasSiblings
+                  if (job.HasSiblings) {
+                      if (parsedChildData.length > 0) {
+                          priorityObject[subformKey] = parsedChildData.map(item => {
+                              const { RowId, __tableName, __jobTypeName, ...childWithoutMetadata } = item;
+                              return childWithoutMetadata;
+                          });
+                      }
+                      // אם אין ילדים, לא נוסיף את השדה בכלל
+                  }  else {
+                  if (parsedChildData.length > 0) {
+                      if (parsedChildData.length > 1) {
+                          console.warn(`נמצאו ${parsedChildData.length} רשומות ילד עבור ${job.ScreenName}, אך HasSiblings=false. משתמש ברשומה הראשונה בלבד.`);
+                      }
+                      
+                      // הסרת שדות מעקב והשמה כאובייקט בודד
+                      const { RowId, __tableName, __jobTypeName, ...childWithoutMetadata } = parsedChildData[0];
+                      priorityObject[subformKey] = childWithoutMetadata;
+                  }
+                  // אם אין ילדים, לא נוסיף את השדה בכלל
+    }
             }    
             
             // Include the RowId in the object for tracking purposes
@@ -136,41 +160,33 @@ async function fetchAllChildData(
     linkedValues: any[],
     linkedField: string 
   ): Promise<Map<string, Map<any, ChildRecord[]>>> {
-    // console.log(`Fetching child data, Parent linked value: ${linkedValues}`);
-
-    // מפה דו-רמתית: סוג הילד -> ערך מקשר -> רשימת רשומות
     const childDataMap = new Map<string, Map<any, ChildRecord[]>>();
     
-    // שליפה מקבילה של כל סוגי הילדים
     await Promise.all(childJobs.map(async (childJob) => {
-        // console.log(`Fetching children for job type: ${childJob.JobTypeName}, table: ${childJob.DBTableName}`);
         
-        // תיקון: העברת linkedField במקום childJob.priority_id
+        const mapKey = childJob.DBTableName; 
+        
         const childRecords = await fetchChildRecords(
           childJob.DBTableName,
-          linkedField,  // משתמשים בשדה המקשר שהועבר מהאב
+          linkedField,
           linkedValues
         );
-
-        // console.log(`Fetched ${childRecords.length} child records for ${childJob.JobTypeName}`);
       
-        // יצירת מפה פנימית לסוג הילד הנוכחי
         const innerMap = new Map<any, ChildRecord[]>();
-      
-        // ארגון הרשומות לפי ערך המפתח - גם כאן משתמשים בlinkedField
+        
         for (const record of childRecords) {
-          const linkValue = record[linkedField];  // תיקון: משתמשים באותו שדה מקשר גם כאן
+          const linkValue = record[linkedField];
           if (!innerMap.has(linkValue)) {
             innerMap.set(linkValue, []);
           }
           innerMap.get(linkValue)!.push(record);
         }
       
-        childDataMap.set(childJob.JobTypeName, innerMap);
+        childDataMap.set(mapKey, innerMap);
     }));
     
     return childDataMap;
-  }
+}
 //---------------------------------------------------------------------------
 /**
  * שליפת רשומות אב העומדות בתנאים הנדרשים
