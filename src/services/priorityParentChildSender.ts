@@ -13,7 +13,8 @@ import {
 } from "../services/requestSender";
 import { processParentChildResponse } from "./priorityParentChildResponseProcessor";
 import { ChildJob } from "../jobs/jobParentAndChilds";
-// import { writeToLogFile } from "../config/logger";
+import { writeToLogFile } from "../config/logger";
+
 // תוצאת שליחה של מנה (Batch)
 export interface BatchSendResult {
   success: boolean;
@@ -101,7 +102,25 @@ export async function sendParentChildBatch(
     
     // מדידת זמן השליחה
     perfMonitor.startRequest();
+
     
+    //--------------------------------------
+    // ------ DEBUGGING: Write the raw data to a file for inspection ------
+    // writeToLogFile(
+    //   'Requestheader.log',
+    //   `=== REQUEST HEADERS ===\n${JSON.stringify({
+    //     ...headers,
+    //     Authorization: headers.Authorization ? '[REDACTED]' : undefined
+    //   }, null, 2)}\n\n`
+    // );
+
+    // // Log the full batch body
+    // writeToLogFile(
+    //   'Requestbody.log',
+    //   `=== BATCH BODY ===\n${batchBody}\n\n`
+    // );
+    //--------------------------------------
+
     // שליחת הבקשה
     let response;
     try {

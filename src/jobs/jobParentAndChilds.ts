@@ -5,8 +5,8 @@ import ProgressTracker from "../utils/progressTracker";
 import PerformanceMonitor from "../utils/performanceMonitor";
 import { performBulkUpdateWithService, performBulkErrorInsertWithService } from "../services/dataService";
 import { ErrorBufferService } from "../utils/errorBufferService";
+import { writeToLogFile } from "../config/logger";
 
-// import { writeToLogFile } from "../config/logger";
 export interface ChildJob {
     ChildJobeId: number;
     JobTypeName: string;
@@ -99,6 +99,19 @@ async function processParentChildBatches(
       linkedField,
       childJobs
     );
+    //-----------------------------------------------------------------------------
+    // ------ DEBUGGING: Write the raw data to a file for inspection ------
+    // for await (const record of dataStream) {
+    //   // Create a clean copy without tracking fields
+    //   const { RowId, childRecords, ...cleanRecord } = record;
+      
+    //   // Write the clean record with proper formatting (indentation of 2 spaces)
+    //   writeToLogFile(
+    //     "parentChildData_clean.json",
+    //     `${JSON.stringify(cleanRecord, null, 2)}\n\n`
+    //   );
+    // }
+    //-----------------------------------------------------------------------------
 
     // Process all data in manageable chunks to avoid memory issues
     let currentRow = 0;
@@ -257,6 +270,7 @@ async function processParentChildBatches(
     // console.log(`Average time per record: ${metrics.averageTimePerRecord}`);
 
     ProgressTracker.completeJob(jobId, totalSuccessCount, totalFailureCount);
+
     return results;
   } catch (error) {
     console.error(`Fatal error in processParentChildBatches:`, error);
