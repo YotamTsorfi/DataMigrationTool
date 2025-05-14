@@ -215,31 +215,49 @@ export async function processParentChildResponse(
         // Process each child table
         for (const [tableName, updates] of Object.entries(childUpdatesByTable)) {
           try {
-            // ====== התיקון המוצע מתחיל כאן ======
-            // יצירת לוג של העדכונים לילדים לפני השליחה למסד הנתונים
-            console.log(`About to update child table ${tableName} with ${updates.length} records`);
-            console.log(`Sample child update (first record):`, 
-              updates.length > 0 ? JSON.stringify(updates[0]) : 'No updates');
+            // // ====== התיקון המוצע מתחיל כאן ======
+            // // יצירת לוג של העדכונים לילדים לפני השליחה למסד הנתונים
+            // console.log(`About to update child table ${tableName} with ${updates.length} records`);
+            // console.log(`Sample child update (first record):`, 
+            //   updates.length > 0 ? JSON.stringify(updates[0]) : 'No updates');
               
-            // וידוא שהשדה priority_id תמיד מתקבל כמחרוזת או null
-            updates.forEach(update => {
-              // הדפסת לוג רק לרשומות שיש להן ערך priority_id
-              if (update.priority_id !== null && update.priority_id !== undefined) {
-                console.log(`Child RowId ${update.RowId} has priority_id: ${update.priority_id} (${typeof update.priority_id})`);
-              }
+            // // וידוא שהשדה priority_id תמיד מתקבל כמחרוזת או null
+            // updates.forEach(update => {
+            //   // הדפסת לוג רק לרשומות שיש להן ערך priority_id
+            //   if (update.priority_id !== null && update.priority_id !== undefined) {
+            //     console.log(`Child RowId ${update.RowId} has priority_id: ${update.priority_id} (${typeof update.priority_id})`);
+            //   }
               
-              // אילוץ priority_id להיות null או מחרוזת (חלק ממסדי הנתונים דורשים זאת)
-              if (update.priority_id === undefined) {
-                update.priority_id = null;
-              } else if (update.priority_id !== null) {
-                update.priority_id = String(update.priority_id); // המרה למחרוזת
-              }
-            });
+            //   // אילוץ priority_id להיות null או מחרוזת (חלק ממסדי הנתונים דורשים זאת)
+            //   if (update.priority_id === undefined) {
+            //     update.priority_id = null;
+            //   } else if (update.priority_id !== null) {
+            //     update.priority_id = String(update.priority_id); // המרה למחרוזת
+            //   }
+            // });
+
+            
+            // Force parameter types explicitly for each child table
+            const updatesWithExplicitTypes = updates.map(update => ({
+              ...update,
+              // Force each priority_id to be an explicit string or null
+              priority_id: update.priority_id !== null && update.priority_id !== undefined 
+                ? String(update.priority_id) 
+                : null,
+              // Make sure other fields match their expected types
+              is_new: Number(update.is_new)
+            }));
+            
+            console.log(`Processing child table ${tableName} with ${updatesWithExplicitTypes.length} records`);
+            console.log(`First record sample: ${JSON.stringify(updatesWithExplicitTypes[0])}`);
+            
+
+
             // ====== התיקון המוצע מסתיים כאן ======
 
             const childResult = await performBulkUpdateWithService(
               tableName,
-              updates,
+              updatesWithExplicitTypes,
               perfMonitor,
               undefined,
               3,
@@ -352,11 +370,20 @@ export async function processParentChildResponse(
     };
   }
 }
+//------------------------------------------------------------------------- 
 // Helper function to get child records with flexible lookup
-function getChildRecords(record: any, jobTypeName: string): any[] | undefined {
+function getChildRecords(record: any, jobTypeName: string, tableName?: string): any[] | undefined {
   if (!record.childRecords) return undefined;
-
-  // Try exact match
+  
+  // Try composite key first if table name is provided
+  if (tableName) {
+    const compositeKey = `${jobTypeName}_${tableName}`;
+    if (record.childRecords[compositeKey]) {
+      return record.childRecords[compositeKey];
+    }
+  }
+  
+  // Try exact match with job type name
   if (record.childRecords[jobTypeName]) {
     return record.childRecords[jobTypeName];
   }
@@ -382,7 +409,7 @@ function getChildRecords(record: any, jobTypeName: string): any[] | undefined {
 
   return undefined;
 }
-
+//------------------------------------------------------------------------- 
 // Helper function to force database updates when processor fails
 async function forceErrorDatabaseUpdates(
   records: any[],
@@ -484,7 +511,6 @@ async function forceErrorDatabaseUpdates(
     console.error("Failed to update database with error information:", dbError);
   }
 }
-
 //------------------------------------------------------------------------- 
 /**
  * עיבוד התגובה מה-API והכנת השורות לעדכון
@@ -581,7 +607,9 @@ function processApiResponse(
           const jobTypeName = job.JobTypeName;
 
           // Find child records with enhanced lookup
-          const childRecords = getChildRecords(record, jobTypeName);
+          //OLD
+          //const childRecords = getChildRecords(record, jobTypeName);
+          const childRecords = getChildRecords(record, jobTypeName, childTableName);
 
           // Only process child records if we found any
           if (childRecords && Array.isArray(childRecords) && childRecords.length > 0) {
@@ -614,13 +642,22 @@ function processApiResponse(
                     ? JSON.parse(apiResponse.body)
                     : apiResponse.body;
 
-                  console.log(`Processing child record extraction for job: ${jobTypeName}, Screen: ${job.ScreenName}, priority_id: ${job.priority_id}`);
+                  // console.log(`Processing child record extraction for job: ${jobTypeName}, Screen: ${job.ScreenName}, priority_id: ${job.priority_id}`);
 
                   // Extract subform key based on job's screen name
                   const subformKey = `${job.ScreenName}_SUBFORM`;
                   
                   // Check if subform exists in response
                   if (responseBody && responseBody[subformKey] !== undefined) {
+                    const matchingItem = responseBody[subformKey].find(
+                          (item: any) => item[job.priority_id] === childRecord[job.priority_id]
+                        );
+                  if (matchingItem) {
+                    const idValue = matchingItem[job.priority_id];
+                    childUpdate.priority_id = idValue !== null ? String(idValue) : null;
+                    childUpdate.RowId = childRecord.RowId; // עדכון ה-RowId המתאים
+                  }                        
+
                     // Case 1: HasSiblings=true - רשומות במערך (לדוגמה NATF_ACCPERSONNEL_SUBFORM)
                     if (job.HasSiblings && Array.isArray(responseBody[subformKey])) {
                       console.log(`Found array subform ${subformKey} with ${responseBody[subformKey].length} items`);

@@ -105,7 +105,12 @@ export async function* streamParentChildData(
                   });
 
                 // Store child records for tracking (by job type)
-                childRecordsByType[job.JobTypeName] = parsedChildData;
+                //OLD
+                //childRecordsByType[job.JobTypeName] = parsedChildData;
+
+                // Store child records with unique key
+                const uniqueKey = `${job.JobTypeName}_${job.DBTableName}`;
+                childRecordsByType[uniqueKey] = parsedChildData;
 
                 // שם המפתח נקבע לפי ScreenName + _SUBFORM
                 const subformKey = `${job.ScreenName}_SUBFORM`;
