@@ -248,8 +248,8 @@ export async function processParentChildResponse(
               is_new: Number(update.is_new)
             }));
             
-            console.log(`Processing child table ${tableName} with ${updatesWithExplicitTypes.length} records`);
-            console.log(`First record sample: ${JSON.stringify(updatesWithExplicitTypes[0])}`);
+            // console.log(`Processing child table ${tableName} with ${updatesWithExplicitTypes.length} records`);
+            // console.log(`First record sample: ${JSON.stringify(updatesWithExplicitTypes[0])}`);
             
 
 
@@ -265,7 +265,7 @@ export async function processParentChildResponse(
             );
 
             // לוג הצלחה לאחר העדכון
-            console.log(`✅ Updated ${updates.length} records in child table ${tableName}, success: ${childResult.successful}`);
+            // console.log(`✅ Updated ${updates.length} records in child table ${tableName}, success: ${childResult.successful}`);
 
             totalDbUpdateTime += childResult.updateTime;
             if (childResult.hadDeadlocks) hadDeadlocks = true;
@@ -660,7 +660,7 @@ function processApiResponse(
 
                     // Case 1: HasSiblings=true - רשומות במערך (לדוגמה NATF_ACCPERSONNEL_SUBFORM)
                     if (job.HasSiblings && Array.isArray(responseBody[subformKey])) {
-                      console.log(`Found array subform ${subformKey} with ${responseBody[subformKey].length} items`);
+                      // console.log(`Found array subform ${subformKey} with ${responseBody[subformKey].length} items`);
                       
                       // לולאה על כל הרשומות במערך בחיפוש אחר התאמה
                       let foundMatch = false;
@@ -675,7 +675,7 @@ function processApiResponse(
                             ? String(idValue)
                             : null;
                           
-                          console.log(`✓ Found child ID in array item ${i}: ${childUpdate.priority_id}`);
+                          // console.log(`✓ Found child ID in array item ${i}: ${childUpdate.priority_id}`);
                           foundMatch = true;
                           break;
                         }
@@ -703,7 +703,7 @@ function processApiResponse(
                         if (subformData[job.priority_id] !== undefined) {
                           const idValue = subformData[job.priority_id];
                           childUpdate.priority_id = idValue !== null ? String(idValue) : null;
-                          console.log(`✓ Found child ID in object: ${childUpdate.priority_id}`);
+                          // console.log(`✓ Found child ID in object: ${childUpdate.priority_id}`);
                         } else {
                           console.log(`Field ${job.priority_id} not found in subform object`);
                         }
@@ -713,7 +713,7 @@ function processApiResponse(
                         if (subformData[0][job.priority_id] !== undefined) {
                           const idValue = subformData[0][job.priority_id];
                           childUpdate.priority_id = idValue !== null ? String(idValue) : null;
-                          console.log(`✓ Found child ID in array item (unexpected format): ${childUpdate.priority_id}`);
+                          // console.log(`✓ Found child ID in array item (unexpected format): ${childUpdate.priority_id}`);
                         }
                       }
                     }
@@ -722,7 +722,7 @@ function processApiResponse(
                       if (responseBody[subformKey][job.priority_id] !== undefined) {
                         const idValue = responseBody[subformKey][job.priority_id];
                         childUpdate.priority_id = idValue !== null ? String(idValue) : null;
-                        console.log(`✓ Found child ID in direct object (unexpected format): ${childUpdate.priority_id}`);
+                        // console.log(`✓ Found child ID in direct object (unexpected format): ${childUpdate.priority_id}`);
                       }
                     }
                   } 
@@ -739,13 +739,13 @@ function processApiResponse(
                   }
                   
                   // תיעוד סופי של המזהה שהתקבל
-                  console.log(`Final priority_id for child record (RowId ${childRecord.RowId}): ${childUpdate.priority_id}`);
+                  // console.log(`Final priority_id for child record (RowId ${childRecord.RowId}): ${childUpdate.priority_id}`);
                   
                 } catch (e) {
                   console.error(`Error extracting child ID for ${jobTypeName}:`, e);
                 }
               } else {
-                console.log(`No job.priority_id defined for child job ${jobTypeName} or no response body`);
+                // console.log(`No job.priority_id defined for child job ${jobTypeName} or no response body`);
               }
 
               childUpdateRows.push(childUpdate);
