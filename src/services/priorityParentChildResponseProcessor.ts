@@ -728,7 +728,7 @@ function processApiResponse(
                   } 
                   // אם לא נמצא תת-מבנה בתשובה, בדוק אם המזהה קיים ישירות בשורש
                   else {
-                    console.log(`⚠️ Subform ${subformKey} not found in response. Available keys: ${Object.keys(responseBody).join(', ')}`);
+                    // console.log(`⚠️ Subform ${subformKey} not found in response. Available keys: ${Object.keys(responseBody).join(', ')}`);
                     
                     // בדיקה אם המזהה קיים ברמה העליונה של התשובה
                     if (responseBody[job.priority_id] !== undefined) {
@@ -751,7 +751,7 @@ function processApiResponse(
               childUpdateRows.push(childUpdate);
             });
           } else {
-            console.log(`No valid child records found for job ${jobTypeName} - parent record RowId: ${record.RowId}`);
+            // console.log(`No valid child records found for job ${jobTypeName} - parent record RowId: ${record.RowId}`);
           }
         });
       }
