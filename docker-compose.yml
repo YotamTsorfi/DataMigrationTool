@@ -1,0 +1,19 @@
+version: "3.8"
+services:
+  server:
+    build: .
+    container_name: carmelton_server
+    env_file:
+      - .env.production
+    ports:
+      - "3002:3002"
+    restart: always
+    depends_on:
+      - client
+
+  client:
+    build: ./client
+    container_name: carmelton_client
+    ports:
+      - "3000:80"
+    restart: always
