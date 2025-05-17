@@ -1,15 +1,56 @@
 // index.ts
 
-import dotenv from "dotenv";
+// Import modules needed for path resolution first
+import * as fs from "fs";
 import path from "path";
 
-// טען קובץ env מתאים לפי NODE_ENV, עם נתיב מלא ל-production
-if (process.env.NODE_ENV === "production") {
-  dotenv.config({ path: path.resolve(__dirname, "../.env.production") });
-} else {
-  dotenv.config(); // טען .env (ברירת מחדל לפיתוח)
+// נפיץ פונקציה לטעינת משתני סביבה עם לוגים מורחבים
+function loadEnvironmentVariables() {
+  const isProduction = process.env.NODE_ENV === "production";
+  console.log(`Running in ${isProduction ? "PRODUCTION" : "DEVELOPMENT"} mode`);
+
+  // נתיבים אפשריים לקובץ .env
+  const envPaths = {
+    production: [
+      path.resolve(__dirname, "../.env.production"),
+      path.resolve(process.cwd(), ".env.production"),
+    ],
+    development: [
+      path.resolve(__dirname, "../.env"),
+      path.resolve(process.cwd(), ".env"),
+    ],
+  };
+
+  const pathsToTry = isProduction ? envPaths.production : envPaths.development;
+
+  let loaded = false;
+  for (const envPath of pathsToTry) {
+    if (fs.existsSync(envPath)) {
+      console.log(`Loading env variables from: ${envPath}`);
+      require("dotenv").config({ path: envPath });
+      loaded = true;
+      break;
+    } else {
+      console.log(`Env file not found at: ${envPath}`);
+    }
+  }
+
+  if (!loaded) {
+    console.warn(
+      "No .env file was loaded! Environment variables may be missing."
+    );
+  }
+
+  // לוג ערך משתנה סביבה קריטי (ללא חשיפת סיסמאות)
+  console.log(
+    `SERVER_PORT from env: ${process.env.SERVER_PORT || "NOT DEFINED"}`
+  );
 }
 
+// טען משתני סביבה לפני כל import אחר שמשתמש בהם
+loadEnvironmentVariables();
+
+import dotenv from "dotenv";
 import express from "express";
 import cors from "cors";
 import { createServer } from "http";
