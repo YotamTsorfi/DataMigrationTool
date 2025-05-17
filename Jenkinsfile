@@ -13,14 +13,14 @@ pipeline {
         }
         stage('Build & Test') {
             steps {
-                sh 'npm install'
-                sh 'npm run build'
-                sh 'cd client && npm install && npm run build'
+                bat 'npm install'
+                bat 'npm run build'
+                bat 'cd client && npm install && npm run build'
             }
         }
         stage('Build Docker Images') {
             steps {
-                sh 'docker-compose build'
+                bat 'docker-compose build'
             }
         }
         stage('Deploy (Production)') {
@@ -28,8 +28,8 @@ pipeline {
                 branch 'main'
             }
             steps {
-                sh 'docker-compose down || true'
-                sh 'docker-compose up -d --force-recreate'
+                bat 'docker-compose down || exit 0'
+                bat 'docker-compose up -d --force-recreate'
             }
         }
         stage('Deploy (Dev)') {
@@ -37,8 +37,8 @@ pipeline {
                 branch 'dev'
             }
             steps {
-                sh 'docker-compose down || true'
-                sh 'docker-compose up -d --force-recreate'
+                bat 'docker-compose down || exit 0'
+                bat 'docker-compose up -d --force-recreate'
             }
         }
     }
