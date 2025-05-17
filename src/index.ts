@@ -12,6 +12,7 @@ import userRouter from "./routers/userRouter";
 import jobRoutes from "./routers/jobRouters";
 import configRouter from "./routers/configRouters";
 import dashboardRouter from "./routers/dashboardRouter";
+import path from "path"; // הוסף את הייבוא של path
 // -----------------------------------------------------------------
 
 // Initialize Express app
@@ -64,6 +65,14 @@ app.use("/api", userRouter);
 app.use("/job", jobRoutes);
 app.use("/config", configRouter);
 app.use("/dashboard", dashboardRouter);
+
+// הגשת קבצי ה-client כ-static
+app.use(express.static(path.join(__dirname, "../client/build")));
+
+// כל בקשה שלא נמצאה - תחזיר את index.html של ה-client
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "../client/build", "index.html"));
+});
 
 // Start server
 httpServer.listen(port, "0.0.0.0", () => {

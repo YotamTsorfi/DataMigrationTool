@@ -8,20 +8,23 @@ pipeline {
         }
         stage('Install & Build') {
             steps {
+                // התקנת תלויות ובניית שרת
                 bat 'npm install'
                 bat 'npm run build'
+                // התקנת תלויות ובניית קליינט
                 bat 'cd client && npm install && npm run build'
             }
         }
         stage('Copy env files') {
             steps {
-                // העתק את קובצי ההגדרות production מהשרת ל-workspace
+                // העתקת קבצי env מהשרת ל-workspace
                 bat 'copy C:\\carmelton_typescript\\.env.production dist\\.env.production'
                 bat 'copy C:\\carmelton_typescript\\client\\.env.production client\\.env.production'
             }
         }
         stage('Deploy') {
             steps {
+                // העתקת כל קבצי ה-production לשרת
                 bat 'xcopy /Y /E /I dist C:\\production\\carmelton-data-migration\\dist'
                 bat 'copy package.json C:\\production\\carmelton-data-migration\\package.json'
                 bat 'copy package-lock.json C:\\production\\carmelton-data-migration\\package-lock.json'
