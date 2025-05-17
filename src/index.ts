@@ -1,10 +1,11 @@
 // index.ts
 
 import dotenv from "dotenv";
+import path from "path";
 
-// טען קובץ env מתאים לפי NODE_ENV
+// טען קובץ env מתאים לפי NODE_ENV, עם נתיב מלא ל-production
 if (process.env.NODE_ENV === "production") {
-  dotenv.config({ path: ".env.production" });
+  dotenv.config({ path: path.resolve(__dirname, "../.env.production") });
 } else {
   dotenv.config(); // טען .env (ברירת מחדל לפיתוח)
 }
@@ -21,7 +22,6 @@ import userRouter from "./routers/userRouter";
 import jobRoutes from "./routers/jobRouters";
 import configRouter from "./routers/configRouters";
 import dashboardRouter from "./routers/dashboardRouter";
-import path from "path";
 
 // -----------------------------------------------------------------
 
