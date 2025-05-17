@@ -17,7 +17,6 @@
     "format": "prettier --write \"src/**/*.ts\"",
     "clean": "rimraf dist",
     "prebuild": "npm run clean",
-    "postbuild": "copy .env.development dist\\.env.development && copy .env.production dist\\.env.production || cp .env.development dist/.env.development && cp .env.production dist/.env.production",
     "insert-to-db": "ts-node src/scripts/populateAllvehicles.ts"
   },
   "keywords": [],
