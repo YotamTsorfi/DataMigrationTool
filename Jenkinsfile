@@ -8,7 +8,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'dev', url: 'https://github.com/YotamTsorfi/DataMigrationTool.git'
+                checkout scm
             }
         }
         stage('Build & Test') {
