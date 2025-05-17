@@ -7,6 +7,13 @@ RUN npm install
 
 COPY . .
 
+# הוסף ARG לכל משתנה שחשוב לך
+ARG REACT_APP_API_URL
+ENV REACT_APP_API_URL=$REACT_APP_API_URL
+
+ARG REACT_APP_OTHER_VAR
+ENV REACT_APP_OTHER_VAR=$REACT_APP_OTHER_VAR
+
 RUN npm run build
 
 # שלב הפצה עם nginx

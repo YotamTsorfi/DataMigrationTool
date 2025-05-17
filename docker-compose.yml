@@ -12,7 +12,11 @@ services:
       - client
 
   client:
-    build: ./client
+    build:
+      context: ./client
+      args:
+        REACT_APP_API_URL: "http://localhost:3002"
+        # הוסף כאן משתנים נוספים אם צריך
     container_name: carmelton_client
     ports:
       - "3000:80"
