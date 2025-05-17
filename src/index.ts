@@ -1,5 +1,14 @@
 // index.ts
 
+import dotenv from "dotenv";
+
+// טען קובץ env מתאים לפי NODE_ENV
+if (process.env.NODE_ENV === "production") {
+  dotenv.config({ path: ".env.production" });
+} else {
+  dotenv.config(); // טען .env (ברירת מחדל לפיתוח)
+}
+
 import express from "express";
 import cors from "cors";
 import { createServer } from "http";
@@ -12,7 +21,8 @@ import userRouter from "./routers/userRouter";
 import jobRoutes from "./routers/jobRouters";
 import configRouter from "./routers/configRouters";
 import dashboardRouter from "./routers/dashboardRouter";
-import path from "path"; // הוסף את הייבוא של path
+import path from "path";
+
 // -----------------------------------------------------------------
 
 // Initialize Express app
@@ -48,7 +58,6 @@ io.on("connection", (socket) => {
 });
 
 // Middleware
-//app.use(cors());
 app.use(
   cors({
     origin: allowedOrigins,
