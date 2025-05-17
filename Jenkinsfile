@@ -15,8 +15,8 @@ pipeline {
         }
         stage('Copy env file') {
             steps {
-        bat 'copy .env.production dist\\.env.production'
-        bat 'copy .env.development dist\\.env.development'
+                // העתק את קובץ ההגדרות production בלבד
+                bat 'copy C:\\carmelton_typescript\\.env.production dist\\.env.production'
             }
         }
         stage('Deploy') {
@@ -24,7 +24,7 @@ pipeline {
                 bat 'xcopy /Y /E /I dist C:\\production\\carmelton-data-migration\\dist'
                 bat 'copy package.json C:\\production\\carmelton-data-migration\\package.json'
                 bat 'copy package-lock.json C:\\production\\carmelton-data-migration\\package-lock.json'
-                bat 'copy .env.production C:\\production\\carmelton-data-migration\\.env.production'
+                bat 'copy C:\\carmelton_typescript\\.env.production C:\\production\\carmelton-data-migration\\.env.production'
                 bat 'xcopy /Y /E /I client\\build C:\\production\\carmelton-data-migration\\client\\build'
                 bat 'copy client\\package.json C:\\production\\carmelton-data-migration\\client\\package.json'
                 bat 'copy client\\package-lock.json C:\\production\\carmelton-data-migration\\client\\package-lock.json'
