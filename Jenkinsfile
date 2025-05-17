@@ -13,10 +13,11 @@ pipeline {
                 bat 'cd client && npm install && npm run build'
             }
         }
-        stage('Copy env file') {
+        stage('Copy env files') {
             steps {
-                // העתק את קובץ ההגדרות production בלבד
+                // העתק את קובצי ההגדרות production מהשרת ל-workspace
                 bat 'copy C:\\carmelton_typescript\\.env.production dist\\.env.production'
+                bat 'copy C:\\carmelton_typescript\\client\\.env.production client\\.env.production'
             }
         }
         stage('Deploy') {
