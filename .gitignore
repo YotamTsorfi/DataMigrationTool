@@ -62,3 +62,6 @@ pids
 windows-service.js
 uninstall-service.js
 *-service.js
+
+# Client public files
+client/public/favicon.ico
