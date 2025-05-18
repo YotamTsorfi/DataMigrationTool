@@ -1,5 +1,5 @@
 import { performance } from "perf_hooks";
-import { writeToLogFile } from "../config/logger";
+// import { writeToLogFile } from "../config/logger";
 import moment from "moment-timezone";
 
 interface PerformanceMetrics {
@@ -223,27 +223,27 @@ class PerformanceMonitor {
       this.metrics.dbUpdateTime = this.externalDbUpdateTime;
     }
 
-    const performanceLog = {
-      timestamp: this.formatDate(new Date()),
-      operation: "batchProcessing",
-      metrics: {
-        totalDuration: this.formatTime(this.metrics.duration),
-        requestSize: this.formatSize(this.metrics.requestSize),
-        responseSize: this.formatSize(this.metrics.responseSize),
-        recordCount: this.metrics.recordCount,
-        success: this.metrics.success,
-        statusCode: this.metrics.statusCode,
-        errorType: this.metrics.errorType,
-        averageTimePerRecord:
-          this.metrics.recordCount > 0
-            ? this.formatTime(this.metrics.duration / this.metrics.recordCount)
-            : "N/A",
-        dbFetchTime: this.formatTime(this.metrics.dbFetchTime),
-        dbUpdateTime: this.formatTime(this.metrics.dbUpdateTime), // Add DB update time to logs
-        batchBuildTime: this.formatTime(this.metrics.batchBuildTime),
-        requestTime: this.formatTime(this.metrics.requestTime),
-      },
-    };
+    // const performanceLog = {
+    //   timestamp: this.formatDate(new Date()),
+    //   operation: "batchProcessing",
+    //   metrics: {
+    //     totalDuration: this.formatTime(this.metrics.duration),
+    //     requestSize: this.formatSize(this.metrics.requestSize),
+    //     responseSize: this.formatSize(this.metrics.responseSize),
+    //     recordCount: this.metrics.recordCount,
+    //     success: this.metrics.success,
+    //     statusCode: this.metrics.statusCode,
+    //     errorType: this.metrics.errorType,
+    //     averageTimePerRecord:
+    //       this.metrics.recordCount > 0
+    //         ? this.formatTime(this.metrics.duration / this.metrics.recordCount)
+    //         : "N/A",
+    //     dbFetchTime: this.formatTime(this.metrics.dbFetchTime),
+    //     dbUpdateTime: this.formatTime(this.metrics.dbUpdateTime), // Add DB update time to logs
+    //     batchBuildTime: this.formatTime(this.metrics.batchBuildTime),
+    //     requestTime: this.formatTime(this.metrics.requestTime),
+    //   },
+    // };
 
     // console.log("Performance Summary:", performanceLog);
     // writeToLogFile("performance.log", JSON.stringify(performanceLog));
@@ -303,17 +303,16 @@ class PerformanceMonitor {
   }
 
   static logServerMetrics() {
-    const memoryUsage = process.memoryUsage();
-    const metrics = {
-      timestamp: new PerformanceMonitor().formatDate(new Date()),
-      operation: "serverStatus",
-      metrics: {
-        heapUsed: `${(memoryUsage.heapUsed / 1024 / 1024).toFixed(2)}MB`,
-        heapTotal: `${(memoryUsage.heapTotal / 1024 / 1024).toFixed(2)}MB`,
-        rss: `${(memoryUsage.rss / 1024 / 1024).toFixed(2)}MB`,
-      },
-    };
-
+    // const memoryUsage = process.memoryUsage();
+    // const metrics = {
+    //   timestamp: new PerformanceMonitor().formatDate(new Date()),
+    //   operation: "serverStatus",
+    //   metrics: {
+    //     heapUsed: `${(memoryUsage.heapUsed / 1024 / 1024).toFixed(2)}MB`,
+    //     heapTotal: `${(memoryUsage.heapTotal / 1024 / 1024).toFixed(2)}MB`,
+    //     rss: `${(memoryUsage.rss / 1024 / 1024).toFixed(2)}MB`,
+    //   },
+    // };
     // writeToLogFile("performance.log", JSON.stringify(metrics));
   }
 }

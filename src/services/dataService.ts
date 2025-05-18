@@ -31,11 +31,11 @@ export async function fetchDataChunk(
     // console.log(
     //   `Fetching data chunk: lastRowId=${lastRowId}, chunkSize=${chunkSize}, table=${tableName}`
     // );
-    const startTime = Date.now();
+    // const startTime = Date.now();
 
     const rowsData = await DatabaseService.executeQuery(query);
 
-    const fetchTime = Date.now() - startTime;
+    // const fetchTime = Date.now() - startTime;
     // console.log(
     //   `Database query completed in ${fetchTime}ms, returned ${rowsData.length} rows`
     // );
@@ -59,24 +59,27 @@ export async function fetchDataChunk(
  * @returns Sanitized update array
  */
 export function sanitizeForSqlUpdate(updates: any[]): any[] {
-  return updates.map(update => {
+  return updates.map((update) => {
     // Create a new object to avoid modifying the original
     const sanitized = { ...update };
-    
+
     // Ensure priority_id is either a string or null (never undefined)
     if (sanitized.priority_id === undefined) {
       sanitized.priority_id = null;
     } else if (sanitized.priority_id !== null) {
       sanitized.priority_id = String(sanitized.priority_id);
     }
-    
+
     // Ensure ErrorMessage is either a string or null
-    if (sanitized.ErrorMessage !== null && sanitized.ErrorMessage !== undefined) {
+    if (
+      sanitized.ErrorMessage !== null &&
+      sanitized.ErrorMessage !== undefined
+    ) {
       sanitized.ErrorMessage = String(sanitized.ErrorMessage);
     } else {
       sanitized.ErrorMessage = null;
     }
-    
+
     return sanitized;
   });
 }
@@ -128,7 +131,7 @@ export async function performBulkUpdateWithService(
 
   localPerfMonitor.startDbUpdate();
   let hadDeadlocks = false;
-  let successful = true;
+  // let successful = true;
 
   try {
     // Sanitize data before update
@@ -168,7 +171,7 @@ export async function performBulkUpdateWithService(
       (error instanceof Error && error.message.includes("deadlock"));
 
     hadDeadlocks = isDeadlock;
-    successful = false;
+    // successful = false;
 
     const isConnectionError =
       error?.code === "ECONNRESET" ||
@@ -275,14 +278,14 @@ export async function performBulkErrorInsertWithService(
   try {
     // Generate batch identifier for better error tracing
     const batchId = `err-${Date.now().toString(36)}-${Math.floor(Math.random() * 1000)}`;
-    
+
     const result = await DatabaseService.executeBulkOperation(
       "dbo.BulkInsertErrorLogs",
       {}, // No additional parameters
       "Errors",
       "dbo.ErrorLogTableType",
       errors,
-      batchSize, 
+      batchSize,
       maxRetries,
       batchId // Pass batch identifier for better logging
     );
@@ -330,7 +333,7 @@ export async function recordBatchProcessing(
   errorMessage: string | null,
   tableName: string
 ): Promise<void> {
-  const recordStartTime = Date.now();
+  // const recordStartTime = Date.now();
 
   try {
     // Ensure status is correct based on success/failure/PartialSync counts
@@ -411,6 +414,6 @@ export async function recordBatchProcessing(
     }
   }
 
-  const recordTime = Date.now() - recordStartTime;
+  // const recordTime = Date.now() - recordStartTime;
   // console.log(`Batch processing record saved in ${recordTime}ms`);
 }

@@ -46,7 +46,7 @@ export class DatabaseService {
   //--------------------------------------------------------------------------------
   static async executeQuery<T>(query: string, inputs?: any): Promise<T[]> {
     const pool = await this.getPool();
-    let request = pool.request();
+    const request = pool.request();
 
     if (inputs) {
       Object.entries(inputs).forEach(([key, value]) => {
@@ -303,14 +303,14 @@ export class DatabaseService {
     isolationLevel: sql.IIsolationLevel = sql.ISOLATION_LEVEL.READ_COMMITTED
   ): Promise<T[]> {
     const pool = await this.getPool();
-    let transaction = new sql.Transaction(pool);
+    const transaction = new sql.Transaction(pool);
     let transactionStarted = false;
 
     try {
       await transaction.begin(isolationLevel);
       transactionStarted = true;
 
-      let request = new sql.Request(transaction);
+      const request = new sql.Request(transaction);
 
       // Add parameters
       if (params) {

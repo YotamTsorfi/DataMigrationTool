@@ -3,12 +3,9 @@ import { streamParentChildData } from "../services/parentChildDataFetcher";
 import { sendParentChildBatchesInParallel } from "../services/priorityParentChildSender";
 import ProgressTracker from "../utils/progressTracker";
 import PerformanceMonitor from "../utils/performanceMonitor";
-import {
-  performBulkUpdateWithService,
-  performBulkErrorInsertWithService,
-} from "../services/dataService";
+import { performBulkUpdateWithService } from "../services/dataService";
 import { ErrorBufferService } from "../utils/errorBufferService";
-import { writeToLogFile } from "../config/logger";
+// import { writeToLogFile } from "../config/logger";
 
 export interface ChildJob {
   ChildJobeId: number;

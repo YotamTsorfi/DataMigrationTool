@@ -57,3 +57,8 @@ pids
 *.pid
 *.seed
 *.pid.lock
+
+# Windows Service Scripts
+windows-service.js
+uninstall-service.js
+*-service.js

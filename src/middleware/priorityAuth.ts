@@ -1,7 +1,7 @@
-import { Request, Response, NextFunction } from 'express';
-import axios, { AxiosInstance } from 'axios';
-import { config } from '../config/config';
-import { url } from "inspector";
+import { Request, Response, NextFunction } from "express";
+import axios, { AxiosInstance } from "axios";
+import { config } from "../config/config";
+// import { url } from "inspector";
 
 // set up global namespace for Express Request
 declare global {

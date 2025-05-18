@@ -9,45 +9,55 @@ router.use(priorityAuthMiddleware);
 
 // New dashboard API endpoints
 //-----------------------------------
-router.get("/dashboard-summary", async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { dateRange = 'last7days', statusFilter = 'all', jobFilter = 'all', tableFilter = 'all' } = req.query;
-    
-    // Calculate date filter based on dateRange
-    let dateFilter = '';
-    const now = new Date();
-    
-    if (dateRange === 'today') {
-      const today = moment().startOf('day').format('YYYY-MM-DD');
-      dateFilter = `AND CONVERT(DATE, StartTime) = '${today}'`;
-    } else if (dateRange === 'yesterday') {
-      const yesterday = moment().subtract(1, 'days').startOf('day').format('YYYY-MM-DD');
-      dateFilter = `AND CONVERT(DATE, StartTime) = '${yesterday}'`;
-    } else if (dateRange === 'last7days') {
-      const last7days = moment().subtract(7, 'days').format('YYYY-MM-DD');
-      dateFilter = `AND StartTime >= '${last7days}'`;
-    } else if (dateRange === 'last30days') {
-      const last30days = moment().subtract(30, 'days').format('YYYY-MM-DD');
-      dateFilter = `AND StartTime >= '${last30days}'`;
-    }
-    
-    // Build where clause for filters
-    let whereClause = dateFilter ? `WHERE 1=1 ${dateFilter}` : 'WHERE 1=1';
-    
-    if (statusFilter !== 'all') {
-      whereClause += ` AND Status = '${statusFilter}'`;
-    }
-    
-    if (jobFilter !== 'all') {
-      whereClause += ` AND JobName = '${jobFilter}'`;
-    }
-    
-    if (tableFilter !== 'all') {
-      whereClause += ` AND TableName = '${tableFilter}'`;
-    }
-    
-    // Execute aggregate queries with optimized performance
-    const summaryQuery = `
+router.get(
+  "/dashboard-summary",
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const {
+        dateRange = "last7days",
+        statusFilter = "all",
+        jobFilter = "all",
+        tableFilter = "all",
+      } = req.query;
+
+      // Calculate date filter based on dateRange
+      let dateFilter = "";
+      // const now = new Date();
+
+      if (dateRange === "today") {
+        const today = moment().startOf("day").format("YYYY-MM-DD");
+        dateFilter = `AND CONVERT(DATE, StartTime) = '${today}'`;
+      } else if (dateRange === "yesterday") {
+        const yesterday = moment()
+          .subtract(1, "days")
+          .startOf("day")
+          .format("YYYY-MM-DD");
+        dateFilter = `AND CONVERT(DATE, StartTime) = '${yesterday}'`;
+      } else if (dateRange === "last7days") {
+        const last7days = moment().subtract(7, "days").format("YYYY-MM-DD");
+        dateFilter = `AND StartTime >= '${last7days}'`;
+      } else if (dateRange === "last30days") {
+        const last30days = moment().subtract(30, "days").format("YYYY-MM-DD");
+        dateFilter = `AND StartTime >= '${last30days}'`;
+      }
+
+      // Build where clause for filters
+      let whereClause = dateFilter ? `WHERE 1=1 ${dateFilter}` : "WHERE 1=1";
+
+      if (statusFilter !== "all") {
+        whereClause += ` AND Status = '${statusFilter}'`;
+      }
+
+      if (jobFilter !== "all") {
+        whereClause += ` AND JobName = '${jobFilter}'`;
+      }
+
+      if (tableFilter !== "all") {
+        whereClause += ` AND TableName = '${tableFilter}'`;
+      }
+
+      // Execute aggregate queries with optimized performance
+      const summaryQuery = `
       SELECT 
         COUNT(DISTINCT JobId) AS totalJobs,
         SUM(CASE WHEN Status = 'Completed' THEN 1 ELSE 0 END) AS completedJobs,
@@ -65,95 +75,98 @@ router.get("/dashboard-summary", async (req: Request, res: Response): Promise<vo
       FROM PriorityJobsHistory
       ${whereClause}
     `;
-    
-    const tableDistributionQuery = `
+
+      const tableDistributionQuery = `
       SELECT TableName, COUNT(*) as Count
       FROM PriorityJobsHistory
       ${whereClause}
       GROUP BY TableName
       ORDER BY Count DESC
     `;
-    
-    const [summaryResults, tableDistribution] = await Promise.all([
-      DatabaseService.executeQuery(summaryQuery),
-      DatabaseService.executeQuery(tableDistributionQuery)
-    ]);
-    
-    // Convert table distribution to object format for easier frontend consumption
-    const tableCounts: Record<string, number> = {};
-    (tableDistribution as any[]).forEach(item => {
-      tableCounts[item.TableName] = item.Count;
-    });
-    
-    res.status(200).json({
-      ...(summaryResults[0] as Record<string, any>),
-      tableCounts
-    });
-    
-  } catch (error) {
-    console.error("Error fetching dashboard summary:", error);
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : "Unknown error"
-    });
+
+      const [summaryResults, tableDistribution] = await Promise.all([
+        DatabaseService.executeQuery(summaryQuery),
+        DatabaseService.executeQuery(tableDistributionQuery),
+      ]);
+
+      // Convert table distribution to object format for easier frontend consumption
+      const tableCounts: Record<string, number> = {};
+      (tableDistribution as any[]).forEach((item) => {
+        tableCounts[item.TableName] = item.Count;
+      });
+
+      res.status(200).json({
+        ...(summaryResults[0] as Record<string, any>),
+        tableCounts,
+      });
+    } catch (error) {
+      console.error("Error fetching dashboard summary:", error);
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
   }
-});
+);
 
 //-----------------------------------
 router.get("/results", async (req: Request, res: Response): Promise<void> => {
   try {
-    const { 
-      page = 1, 
+    const {
+      page = 1,
       pageSize = 20,
-      dateRange = 'last7days',
-      status = 'all',
-      jobType = 'all',
-      tableName = 'all'
+      dateRange = "last7days",
+      status = "all",
+      jobType = "all",
+      tableName = "all",
     } = req.query;
-    
+
     const pageNumber = Number(page);
     const limit = Number(pageSize);
     const offset = (pageNumber - 1) * limit;
-    
+
     // Calculate date filter based on dateRange
-    let dateFilter = '';
-    
-    if (dateRange === 'today') {
-      const today = moment().startOf('day').format('YYYY-MM-DD');
+    let dateFilter = "";
+
+    if (dateRange === "today") {
+      const today = moment().startOf("day").format("YYYY-MM-DD");
       dateFilter = `AND CONVERT(DATE, StartTime) = '${today}'`;
-    } else if (dateRange === 'yesterday') {
-      const yesterday = moment().subtract(1, 'days').startOf('day').format('YYYY-MM-DD');
+    } else if (dateRange === "yesterday") {
+      const yesterday = moment()
+        .subtract(1, "days")
+        .startOf("day")
+        .format("YYYY-MM-DD");
       dateFilter = `AND CONVERT(DATE, StartTime) = '${yesterday}'`;
-    } else if (dateRange === 'last7days') {
-      const last7days = moment().subtract(7, 'days').format('YYYY-MM-DD');
+    } else if (dateRange === "last7days") {
+      const last7days = moment().subtract(7, "days").format("YYYY-MM-DD");
       dateFilter = `AND StartTime >= '${last7days}'`;
-    } else if (dateRange === 'last30days') {
-      const last30days = moment().subtract(30, 'days').format('YYYY-MM-DD');
+    } else if (dateRange === "last30days") {
+      const last30days = moment().subtract(30, "days").format("YYYY-MM-DD");
       dateFilter = `AND StartTime >= '${last30days}'`;
     }
-    
+
     // Build where clause for filters
-    let whereClause = dateFilter ? `WHERE 1=1 ${dateFilter}` : 'WHERE 1=1';
-    
-    if (status !== 'all') {
+    let whereClause = dateFilter ? `WHERE 1=1 ${dateFilter}` : "WHERE 1=1";
+
+    if (status !== "all") {
       whereClause += ` AND Status = '${status}'`;
     }
-    
-    if (jobType !== 'all') {
+
+    if (jobType !== "all") {
       whereClause += ` AND JobName = '${jobType}'`;
     }
-    
-    if (tableName !== 'all') {
+
+    if (tableName !== "all") {
       whereClause += ` AND TableName = '${tableName}'`;
     }
-    
+
     // Get total count for pagination
     const countQuery = `
       SELECT COUNT(*) as total
       FROM PriorityBatchProcessing
       ${whereClause}
     `;
-    
+
     // Get actual results with pagination
     const resultsQuery = `
       SELECT *
@@ -163,23 +176,22 @@ router.get("/results", async (req: Request, res: Response): Promise<void> => {
       OFFSET ${offset} ROWS
       FETCH NEXT ${limit} ROWS ONLY
     `;
-    
+
     const [countResult, batchResults] = await Promise.all([
       DatabaseService.executeQuery(countQuery),
-      DatabaseService.executeQuery(resultsQuery)
+      DatabaseService.executeQuery(resultsQuery),
     ]);
-    
+
     res.status(200).json({
       success: true,
       total: (countResult[0] as { total: number }).total,
-      batchResults
+      batchResults,
     });
-    
   } catch (error) {
     console.error("Error fetching batch results:", error);
     res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : "Unknown error"
+      error: error instanceof Error ? error.message : "Unknown error",
     });
   }
 });
@@ -187,53 +199,56 @@ router.get("/results", async (req: Request, res: Response): Promise<void> => {
 //-----------------------------------
 router.get("/errors", async (req: Request, res: Response): Promise<void> => {
   try {
-    const { 
-      page = 1, 
+    const {
+      page = 1,
       pageSize = 20,
-      dateRange = 'last7days',
-      jobType = 'all',
-      tableName = 'all'
+      dateRange = "last7days",
+      jobType = "all",
+      tableName = "all",
     } = req.query;
-    
+
     const pageNumber = Number(page);
     const limit = Number(pageSize);
     const offset = (pageNumber - 1) * limit;
-    
+
     // Calculate date filter based on dateRange
-    let dateFilter = '';
-    
-    if (dateRange === 'today') {
-      const today = moment().startOf('day').format('YYYY-MM-DD');
+    let dateFilter = "";
+
+    if (dateRange === "today") {
+      const today = moment().startOf("day").format("YYYY-MM-DD");
       dateFilter = `AND CONVERT(DATE, Timestamp) = '${today}'`;
-    } else if (dateRange === 'yesterday') {
-      const yesterday = moment().subtract(1, 'days').startOf('day').format('YYYY-MM-DD');
+    } else if (dateRange === "yesterday") {
+      const yesterday = moment()
+        .subtract(1, "days")
+        .startOf("day")
+        .format("YYYY-MM-DD");
       dateFilter = `AND CONVERT(DATE, Timestamp) = '${yesterday}'`;
-    } else if (dateRange === 'last7days') {
-      const last7days = moment().subtract(7, 'days').format('YYYY-MM-DD');
+    } else if (dateRange === "last7days") {
+      const last7days = moment().subtract(7, "days").format("YYYY-MM-DD");
       dateFilter = `AND Timestamp >= '${last7days}'`;
-    } else if (dateRange === 'last30days') {
-      const last30days = moment().subtract(30, 'days').format('YYYY-MM-DD');
+    } else if (dateRange === "last30days") {
+      const last30days = moment().subtract(30, "days").format("YYYY-MM-DD");
       dateFilter = `AND Timestamp >= '${last30days}'`;
     }
-    
+
     // Build where clause for filters
-    let whereClause = dateFilter ? `WHERE 1=1 ${dateFilter}` : 'WHERE 1=1';
-    
-    if (jobType !== 'all') {
+    let whereClause = dateFilter ? `WHERE 1=1 ${dateFilter}` : "WHERE 1=1";
+
+    if (jobType !== "all") {
       whereClause += ` AND JobName = '${jobType}'`;
     }
-    
-    if (tableName !== 'all') {
+
+    if (tableName !== "all") {
       whereClause += ` AND TableName = '${tableName}'`;
     }
-    
+
     // Get total count for pagination
     const countQuery = `
       SELECT COUNT(*) as total
       FROM PriorityErrorLogs
       ${whereClause}
     `;
-    
+
     // Get actual results with pagination
     const resultsQuery = `
       SELECT *
@@ -243,90 +258,94 @@ router.get("/errors", async (req: Request, res: Response): Promise<void> => {
       OFFSET ${offset} ROWS
       FETCH NEXT ${limit} ROWS ONLY
     `;
-    
+
     const [countResult, errorLogs] = await Promise.all([
       DatabaseService.executeQuery(countQuery),
-      DatabaseService.executeQuery(resultsQuery)
+      DatabaseService.executeQuery(resultsQuery),
     ]);
-    
+
     res.status(200).json({
       success: true,
       total: (countResult[0] as { total: number }).total,
-      errorLogs
+      errorLogs,
     });
-    
   } catch (error) {
     console.error("Error fetching error logs:", error);
     res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : "Unknown error"
+      error: error instanceof Error ? error.message : "Unknown error",
     });
   }
 });
 
 //-----------------------------------
-router.get("/jobs-history", async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { 
-      dateRange = 'last7days',
-      status = 'all',
-      jobType = 'all',
-      tableName = 'all'
-    } = req.query;
-    
-    // Calculate date filter based on dateRange
-    let dateFilter = '';
-    
-    if (dateRange === 'today') {
-      const today = moment().startOf('day').format('YYYY-MM-DD');
-      dateFilter = `AND CONVERT(DATE, StartTime) = '${today}'`;
-    } else if (dateRange === 'yesterday') {
-      const yesterday = moment().subtract(1, 'days').startOf('day').format('YYYY-MM-DD');
-      dateFilter = `AND CONVERT(DATE, StartTime) = '${yesterday}'`;
-    } else if (dateRange === 'last7days') {
-      const last7days = moment().subtract(7, 'days').format('YYYY-MM-DD');
-      dateFilter = `AND StartTime >= '${last7days}'`;
-    } else if (dateRange === 'last30days') {
-      const last30days = moment().subtract(30, 'days').format('YYYY-MM-DD');
-      dateFilter = `AND StartTime >= '${last30days}'`;
-    }
-    
-    // Build where clause for filters
-    let whereClause = dateFilter ? `WHERE 1=1 ${dateFilter}` : 'WHERE 1=1';
-    
-    if (status !== 'all') {
-      whereClause += ` AND Status = '${status}'`;
-    }
-    
-    if (jobType !== 'all') {
-      whereClause += ` AND JobName = '${jobType}'`;
-    }
-    
-    if (tableName !== 'all') {
-      whereClause += ` AND TableName = '${tableName}'`;
-    }
-    
-    const query = `
+router.get(
+  "/jobs-history",
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const {
+        dateRange = "last7days",
+        status = "all",
+        jobType = "all",
+        tableName = "all",
+      } = req.query;
+
+      // Calculate date filter based on dateRange
+      let dateFilter = "";
+
+      if (dateRange === "today") {
+        const today = moment().startOf("day").format("YYYY-MM-DD");
+        dateFilter = `AND CONVERT(DATE, StartTime) = '${today}'`;
+      } else if (dateRange === "yesterday") {
+        const yesterday = moment()
+          .subtract(1, "days")
+          .startOf("day")
+          .format("YYYY-MM-DD");
+        dateFilter = `AND CONVERT(DATE, StartTime) = '${yesterday}'`;
+      } else if (dateRange === "last7days") {
+        const last7days = moment().subtract(7, "days").format("YYYY-MM-DD");
+        dateFilter = `AND StartTime >= '${last7days}'`;
+      } else if (dateRange === "last30days") {
+        const last30days = moment().subtract(30, "days").format("YYYY-MM-DD");
+        dateFilter = `AND StartTime >= '${last30days}'`;
+      }
+
+      // Build where clause for filters
+      let whereClause = dateFilter ? `WHERE 1=1 ${dateFilter}` : "WHERE 1=1";
+
+      if (status !== "all") {
+        whereClause += ` AND Status = '${status}'`;
+      }
+
+      if (jobType !== "all") {
+        whereClause += ` AND JobName = '${jobType}'`;
+      }
+
+      if (tableName !== "all") {
+        whereClause += ` AND TableName = '${tableName}'`;
+      }
+
+      const query = `
       SELECT *
       FROM PriorityJobsHistory
       ${whereClause}
       ORDER BY StartTime DESC
     `;
-    
-    const jobsHistory = await DatabaseService.executeQuery(query);
-    
-    res.status(200).json({
-      success: true,
-      jobsHistory
-    });
-    
-  } catch (error) {
-    console.error("Error fetching jobs history:", error);
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : "Unknown error"
-    });
+
+      const jobsHistory = await DatabaseService.executeQuery(query);
+
+      res.status(200).json({
+        success: true,
+        jobsHistory,
+      });
+    } catch (error) {
+      console.error("Error fetching jobs history:", error);
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
   }
-});
+);
 
 export default router;

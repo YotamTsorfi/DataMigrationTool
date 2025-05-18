@@ -2,13 +2,12 @@ import PerformanceMonitor from "../utils/performanceMonitor";
 import { measureResponsePerformance } from "../services/requestSender";
 import {
   performBulkUpdateWithService,
-  performBulkErrorInsertWithService,
   recordBatchProcessing,
 } from "../services/dataService";
 import { ChildJob } from "../jobs/jobParentAndChilds";
 import { ErrorBufferService } from "../utils/errorBufferService";
 
-//------------------------------------------------------------------------- 
+//-------------------------------------------------------------------------
 export interface ProcessResponseResult {
   success: boolean;
   message: string;
@@ -25,7 +24,7 @@ export interface ProcessResponseResult {
   };
 }
 
-//------------------------------------------------------------------------- 
+//-------------------------------------------------------------------------
 /**
  * Adjusts the date to the local timezone by removing the timezone offset.
  * @param date - The date to adjust.
@@ -36,7 +35,7 @@ const adjustTimeZone = (date: Date): Date => {
   return new Date(date.getTime() - offset);
 };
 
-//------------------------------------------------------------------------- 
+//-------------------------------------------------------------------------
 /**
  * עיבוד תשובה מה-API עבור מבנה אב-ילדים
  * @param response - התשובה שהתקבלה מה-API
@@ -72,9 +71,13 @@ export async function processParentChildResponse(
     const sentToPriority = !!(response && response.data);
     let apiErrorMessage = null;
 
-    if (response?.status >= 400 || (response?.data?.error)) {
-      apiErrorMessage = response?.data?.error?.message || `API Error: Status ${response?.status}`;
-      console.warn(`API returned error status ${response?.status}, but continuing with database updates`);
+    if (response?.status >= 400 || response?.data?.error) {
+      apiErrorMessage =
+        response?.data?.error?.message ||
+        `API Error: Status ${response?.status}`;
+      console.warn(
+        `API returned error status ${response?.status}, but continuing with database updates`
+      );
     }
 
     // Process API response - even if there are errors
@@ -85,8 +88,13 @@ export async function processParentChildResponse(
       successCount,
       failureCount,
       lastProcessedIndex,
-      sentToPriority: responseSuccess
-    } = processApiResponse(response, enrichedRecords, priorityIdField, childJobs);
+      sentToPriority: responseSuccess,
+    } = processApiResponse(
+      response,
+      enrichedRecords,
+      priorityIdField,
+      childJobs
+    );
 
     // Update performance metrics - THIS IS THE FIX
     perfMonitor.metrics.successCount = successCount;
@@ -100,7 +108,7 @@ export async function processParentChildResponse(
       // Force all parent records to be updated as failed
       parentUpdateRows.length = 0; // Clear any existing updates
 
-      enrichedRecords.forEach(record => {
+      enrichedRecords.forEach((record) => {
         parentUpdateRows.push({
           RowId: record.RowId,
           BatchId: record.__batchId,
@@ -109,7 +117,7 @@ export async function processParentChildResponse(
           ErrorMessage: apiErrorMessage,
           JobId: record.__jobId,
           priority_id: null,
-          is_new: 1
+          is_new: 1,
         });
 
         // Add error record
@@ -120,20 +128,24 @@ export async function processParentChildResponse(
           RowId: record.RowId,
           Error: apiErrorMessage,
           JobId: record.__jobId,
-          ErrorStatus: response?.status?.toString() || "400"
+          ErrorStatus: response?.status?.toString() || "400",
         });
 
         // Process child records if they exist
         if (childJobs && record.childRecords) {
-          childJobs.forEach(job => {
+          childJobs.forEach((job) => {
             const childTableName = job.DBTableName;
             const jobTypeName = job.JobTypeName;
 
             // Try to get child records with flexible lookup
             const childRecords = getChildRecords(record, jobTypeName);
 
-            if (childRecords && Array.isArray(childRecords) && childRecords.length > 0) {
-              childRecords.forEach(childRecord => {
+            if (
+              childRecords &&
+              Array.isArray(childRecords) &&
+              childRecords.length > 0
+            ) {
+              childRecords.forEach((childRecord) => {
                 childUpdateRows.push({
                   RowId: childRecord.RowId,
                   BatchId: record.__batchId,
@@ -143,7 +155,7 @@ export async function processParentChildResponse(
                   JobId: record.__jobId,
                   priority_id: null,
                   is_new: 1,
-                  tableName: childTableName
+                  tableName: childTableName,
                 });
               });
             }
@@ -163,7 +175,7 @@ export async function processParentChildResponse(
 
     // Database update tracking
     let totalDbUpdateTime = 0;
-    let batchStatus = responseSuccess ? "Completed" : "Failed";
+    const batchStatus = responseSuccess ? "Completed" : "Failed";
     let hadDeadlocks = false;
 
     // Always update parent records - even if we have errors
@@ -198,9 +210,12 @@ export async function processParentChildResponse(
         // Group child updates by table name for efficiency
         const childUpdatesByTable: Record<string, any[]> = {};
 
-        childUpdateRows.forEach(update => {
+        childUpdateRows.forEach((update) => {
           if (!update.tableName) {
-            console.error(`❌ Child update missing tableName property:`, update);
+            console.error(
+              `❌ Child update missing tableName property:`,
+              update
+            );
             return;
           }
           const tableName = update.tableName;
@@ -213,21 +228,23 @@ export async function processParentChildResponse(
         });
 
         // Process each child table
-        for (const [tableName, updates] of Object.entries(childUpdatesByTable)) {
+        for (const [tableName, updates] of Object.entries(
+          childUpdatesByTable
+        )) {
           try {
             // // ====== התיקון המוצע מתחיל כאן ======
             // // יצירת לוג של העדכונים לילדים לפני השליחה למסד הנתונים
             // console.log(`About to update child table ${tableName} with ${updates.length} records`);
-            // console.log(`Sample child update (first record):`, 
+            // console.log(`Sample child update (first record):`,
             //   updates.length > 0 ? JSON.stringify(updates[0]) : 'No updates');
-              
+
             // // וידוא שהשדה priority_id תמיד מתקבל כמחרוזת או null
             // updates.forEach(update => {
             //   // הדפסת לוג רק לרשומות שיש להן ערך priority_id
             //   if (update.priority_id !== null && update.priority_id !== undefined) {
             //     console.log(`Child RowId ${update.RowId} has priority_id: ${update.priority_id} (${typeof update.priority_id})`);
             //   }
-              
+
             //   // אילוץ priority_id להיות null או מחרוזת (חלק ממסדי הנתונים דורשים זאת)
             //   if (update.priority_id === undefined) {
             //     update.priority_id = null;
@@ -236,22 +253,20 @@ export async function processParentChildResponse(
             //   }
             // });
 
-            
             // Force parameter types explicitly for each child table
-            const updatesWithExplicitTypes = updates.map(update => ({
+            const updatesWithExplicitTypes = updates.map((update) => ({
               ...update,
               // Force each priority_id to be an explicit string or null
-              priority_id: update.priority_id !== null && update.priority_id !== undefined 
-                ? String(update.priority_id) 
-                : null,
+              priority_id:
+                update.priority_id !== null && update.priority_id !== undefined
+                  ? String(update.priority_id)
+                  : null,
               // Make sure other fields match their expected types
-              is_new: Number(update.is_new)
+              is_new: Number(update.is_new),
             }));
-            
+
             // console.log(`Processing child table ${tableName} with ${updatesWithExplicitTypes.length} records`);
             // console.log(`First record sample: ${JSON.stringify(updatesWithExplicitTypes[0])}`);
-            
-
 
             // ====== התיקון המוצע מסתיים כאן ======
 
@@ -270,7 +285,10 @@ export async function processParentChildResponse(
             totalDbUpdateTime += childResult.updateTime;
             if (childResult.hadDeadlocks) hadDeadlocks = true;
           } catch (tableError) {
-            console.error(`Error updating child table ${tableName}:`, tableError);
+            console.error(
+              `Error updating child table ${tableName}:`,
+              tableError
+            );
             // Continue with other tables despite error
           }
         }
@@ -317,7 +335,9 @@ export async function processParentChildResponse(
       perfMonitor.metrics.failureCount,
       perfMonitor.metrics.lastProcessedIndex,
       batchStatus,
-      hadDeadlocks ? "DB update had deadlocks but completed successfully" : null,
+      hadDeadlocks
+        ? "DB update had deadlocks but completed successfully"
+        : null,
       parentTable
     );
 
@@ -356,7 +376,10 @@ export async function processParentChildResponse(
 
     return {
       success: false,
-      message: error instanceof Error ? error.message : "Unknown error in response processing",
+      message:
+        error instanceof Error
+          ? error.message
+          : "Unknown error in response processing",
       successCount: 0,
       failureCount: enrichedRecords.length,
       averageTimePerRecord: "N/A",
@@ -370,11 +393,15 @@ export async function processParentChildResponse(
     };
   }
 }
-//------------------------------------------------------------------------- 
+//-------------------------------------------------------------------------
 // Helper function to get child records with flexible lookup
-function getChildRecords(record: any, jobTypeName: string, tableName?: string): any[] | undefined {
+function getChildRecords(
+  record: any,
+  jobTypeName: string,
+  tableName?: string
+): any[] | undefined {
   if (!record.childRecords) return undefined;
-  
+
   // Try composite key first if table name is provided
   if (tableName) {
     const compositeKey = `${jobTypeName}_${tableName}`;
@@ -382,7 +409,7 @@ function getChildRecords(record: any, jobTypeName: string, tableName?: string): 
       return record.childRecords[compositeKey];
     }
   }
-  
+
   // Try exact match with job type name
   if (record.childRecords[jobTypeName]) {
     return record.childRecords[jobTypeName];
@@ -409,7 +436,7 @@ function getChildRecords(record: any, jobTypeName: string, tableName?: string): 
 
   return undefined;
 }
-//------------------------------------------------------------------------- 
+//-------------------------------------------------------------------------
 // Helper function to force database updates when processor fails
 async function forceErrorDatabaseUpdates(
   records: any[],
@@ -419,12 +446,14 @@ async function forceErrorDatabaseUpdates(
   batchId: string,
   childJobs?: ChildJob[]
 ): Promise<void> {
-  console.log(`Forcing database updates for ${records.length} records due to processor error`);
+  console.log(
+    `Forcing database updates for ${records.length} records due to processor error`
+  );
 
   const errorMessage = error instanceof Error ? error.message : String(error);
 
   // Create parent updates
-  const parentUpdates = records.map(record => ({
+  const parentUpdates = records.map((record) => ({
     RowId: record.RowId,
     BatchId: record.__batchId || batchId,
     JobName: record.__jobType,
@@ -432,31 +461,31 @@ async function forceErrorDatabaseUpdates(
     ErrorMessage: errorMessage,
     JobId: jobId,
     priority_id: null,
-    is_new: 1
+    is_new: 1,
   }));
 
   // Create error logs
-  const errorLogs = records.map(record => ({
+  const errorLogs = records.map((record) => ({
     JobName: record.__jobType,
     BatchId: record.__batchId || batchId,
     TableName: record.__tableName || parentTable,
     RowId: record.RowId,
     Error: errorMessage,
     JobId: jobId,
-    ErrorStatus: "PROCESSOR_ERROR"
+    ErrorStatus: "PROCESSOR_ERROR",
   }));
 
   // Create child updates if applicable
   const childUpdates: any[] = [];
 
   if (childJobs && childJobs.length > 0) {
-    records.forEach(record => {
+    records.forEach((record) => {
       if (record.childRecords) {
-        childJobs.forEach(job => {
+        childJobs.forEach((job) => {
           const childRecords = getChildRecords(record, job.JobTypeName);
 
           if (childRecords && Array.isArray(childRecords)) {
-            childRecords.forEach(childRecord => {
+            childRecords.forEach((childRecord) => {
               childUpdates.push({
                 RowId: childRecord.RowId,
                 BatchId: record.__batchId || batchId,
@@ -466,7 +495,7 @@ async function forceErrorDatabaseUpdates(
                 JobId: jobId,
                 priority_id: null,
                 is_new: 1,
-                tableName: job.DBTableName
+                tableName: job.DBTableName,
               });
             });
           }
@@ -491,7 +520,7 @@ async function forceErrorDatabaseUpdates(
       // Group by table name
       const childUpdatesByTable: Record<string, any[]> = {};
 
-      childUpdates.forEach(update => {
+      childUpdates.forEach((update) => {
         const tableName = update.tableName;
         delete update.tableName;
 
@@ -511,7 +540,7 @@ async function forceErrorDatabaseUpdates(
     console.error("Failed to update database with error information:", dbError);
   }
 }
-//------------------------------------------------------------------------- 
+//-------------------------------------------------------------------------
 /**
  * עיבוד התגובה מה-API והכנת השורות לעדכון
  * @param response - התגובה מה-API
@@ -567,22 +596,24 @@ function processApiResponse(
         ErrorMessage: null,
         JobId: record.__jobId,
         priority_id: null as string | null, // Explicitly type as string|null for SQL compatibility
-        is_new: 0
+        is_new: 0,
       };
 
       // Extract Priority ID if available
       if (apiResponse.body && priorityIdField) {
         try {
-          const responseBody = typeof apiResponse.body === "string"
-            ? JSON.parse(apiResponse.body)
-            : apiResponse.body;
+          const responseBody =
+            typeof apiResponse.body === "string"
+              ? JSON.parse(apiResponse.body)
+              : apiResponse.body;
 
           if (responseBody && responseBody[priorityIdField] !== undefined) {
             // Ensure priority_id is stored as a string or null
             const idValue = responseBody[priorityIdField];
-            parentUpdate.priority_id = idValue !== null && idValue !== undefined
-              ? String(idValue) // Convert to string
-              : null;
+            parentUpdate.priority_id =
+              idValue !== null && idValue !== undefined
+                ? String(idValue) // Convert to string
+                : null;
             // console.log(`Found parent priority_id: ${parentUpdate.priority_id} from field: ${priorityIdField}`);
           }
         } catch (e) {
@@ -602,20 +633,28 @@ function processApiResponse(
           // console.log(`DEBUG: Found child record keys: ${childRecordKeys.join(', ')} for parent ${record.RowId}`);
         }
 
-        childJobs.forEach(job => {
+        childJobs.forEach((job) => {
           const childTableName = job.DBTableName;
           const jobTypeName = job.JobTypeName;
 
           // Find child records with enhanced lookup
           //OLD
           //const childRecords = getChildRecords(record, jobTypeName);
-          const childRecords = getChildRecords(record, jobTypeName, childTableName);
+          const childRecords = getChildRecords(
+            record,
+            jobTypeName,
+            childTableName
+          );
 
           // Only process child records if we found any
-          if (childRecords && Array.isArray(childRecords) && childRecords.length > 0) {
+          if (
+            childRecords &&
+            Array.isArray(childRecords) &&
+            childRecords.length > 0
+          ) {
             // console.log(`Found ${childRecords.length} child records for job ${jobTypeName}, parent ${record.RowId}`);
 
-            childRecords.forEach(childRecord => {
+            childRecords.forEach((childRecord) => {
               // Ensure childRecord has a RowId
               if (!childRecord.RowId) {
                 // console.error(`Child record missing RowId for job ${jobTypeName}`);
@@ -632,117 +671,159 @@ function processApiResponse(
                 JobId: record.__jobId,
                 priority_id: null as string | null, // Explicitly type as string|null for SQL compatibility
                 is_new: 0,
-                tableName: childTableName
+                tableName: childTableName,
               };
 
               // Extract Priority ID for child record if available
               if (apiResponse.body && job.priority_id) {
                 try {
-                  const responseBody = typeof apiResponse.body === "string"
-                    ? JSON.parse(apiResponse.body)
-                    : apiResponse.body;
+                  const responseBody =
+                    typeof apiResponse.body === "string"
+                      ? JSON.parse(apiResponse.body)
+                      : apiResponse.body;
 
                   // console.log(`Processing child record extraction for job: ${jobTypeName}, Screen: ${job.ScreenName}, priority_id: ${job.priority_id}`);
 
                   // Extract subform key based on job's screen name
                   const subformKey = `${job.ScreenName}_SUBFORM`;
-                  
+
                   // Check if subform exists in response
                   if (responseBody && responseBody[subformKey] !== undefined) {
                     const matchingItem = responseBody[subformKey].find(
-                          (item: any) => item[job.priority_id] === childRecord[job.priority_id]
-                        );
-                  if (matchingItem) {
-                    const idValue = matchingItem[job.priority_id];
-                    childUpdate.priority_id = idValue !== null ? String(idValue) : null;
-                    childUpdate.RowId = childRecord.RowId; // עדכון ה-RowId המתאים
-                  }                        
+                      (item: any) =>
+                        item[job.priority_id] === childRecord[job.priority_id]
+                    );
+                    if (matchingItem) {
+                      const idValue = matchingItem[job.priority_id];
+                      childUpdate.priority_id =
+                        idValue !== null ? String(idValue) : null;
+                      childUpdate.RowId = childRecord.RowId; // עדכון ה-RowId המתאים
+                    }
 
                     // Case 1: HasSiblings=true - רשומות במערך (לדוגמה NATF_ACCPERSONNEL_SUBFORM)
-                    if (job.HasSiblings && Array.isArray(responseBody[subformKey])) {
+                    if (
+                      job.HasSiblings &&
+                      Array.isArray(responseBody[subformKey])
+                    ) {
                       // console.log(`Found array subform ${subformKey} with ${responseBody[subformKey].length} items`);
-                      
+
                       // לולאה על כל הרשומות במערך בחיפוש אחר התאמה
                       let foundMatch = false;
-                      
-                      for (let i = 0; i < responseBody[subformKey].length; i++) {
+
+                      for (
+                        let i = 0;
+                        i < responseBody[subformKey].length;
+                        i++
+                      ) {
                         const item = responseBody[subformKey][i];
-                        
+
                         // בדוק אם השדה המבוקש קיים ברשומה הנוכחית
                         if (item && item[job.priority_id] !== undefined) {
                           const idValue = item[job.priority_id];
-                          childUpdate.priority_id = idValue !== null && idValue !== undefined
-                            ? String(idValue)
-                            : null;
-                          
+                          childUpdate.priority_id =
+                            idValue !== null && idValue !== undefined
+                              ? String(idValue)
+                              : null;
+
                           // console.log(`✓ Found child ID in array item ${i}: ${childUpdate.priority_id}`);
                           foundMatch = true;
                           break;
                         }
                       }
-                      
+
                       // אם לא נמצאה התאמה, ננסה לקחת מהרשומה הראשונה
                       if (!foundMatch && responseBody[subformKey].length > 0) {
                         const firstItem = responseBody[subformKey][0];
                         if (firstItem[job.priority_id] !== undefined) {
                           const idValue = firstItem[job.priority_id];
-                          childUpdate.priority_id = idValue !== null ? String(idValue) : null;
-                          console.log(`Using first item's ${job.priority_id} as fallback: ${childUpdate.priority_id}`);
+                          childUpdate.priority_id =
+                            idValue !== null ? String(idValue) : null;
+                          console.log(
+                            `Using first item's ${job.priority_id} as fallback: ${childUpdate.priority_id}`
+                          );
                         } else {
-                          console.log(`No ${job.priority_id} field found in first array item`);
+                          console.log(
+                            `No ${job.priority_id} field found in first array item`
+                          );
                         }
                       }
                     }
                     // Case 2: HasSiblings=false - אובייקט בודד (לדוגמה PAYMENTDEF_SUBFORM)
                     else if (!job.HasSiblings) {
                       const subformData = responseBody[subformKey];
-                      console.log(`Found single object subform ${subformKey}: ${typeof subformData}`);
-                      
+                      console.log(
+                        `Found single object subform ${subformKey}: ${typeof subformData}`
+                      );
+
                       // אם הנתונים הם אובייקט ישיר (לא מערך)
-                      if (typeof subformData === 'object' && subformData !== null && !Array.isArray(subformData)) {
+                      if (
+                        typeof subformData === "object" &&
+                        subformData !== null &&
+                        !Array.isArray(subformData)
+                      ) {
                         if (subformData[job.priority_id] !== undefined) {
                           const idValue = subformData[job.priority_id];
-                          childUpdate.priority_id = idValue !== null ? String(idValue) : null;
+                          childUpdate.priority_id =
+                            idValue !== null ? String(idValue) : null;
                           // console.log(`✓ Found child ID in object: ${childUpdate.priority_id}`);
                         } else {
-                          console.log(`Field ${job.priority_id} not found in subform object`);
+                          console.log(
+                            `Field ${job.priority_id} not found in subform object`
+                          );
                         }
                       }
                       // אם במקרה הנתונים הם מערך (למרות שהוגדר HasSiblings=false)
-                      else if (Array.isArray(subformData) && subformData.length > 0) {
+                      else if (
+                        Array.isArray(subformData) &&
+                        subformData.length > 0
+                      ) {
                         if (subformData[0][job.priority_id] !== undefined) {
                           const idValue = subformData[0][job.priority_id];
-                          childUpdate.priority_id = idValue !== null ? String(idValue) : null;
+                          childUpdate.priority_id =
+                            idValue !== null ? String(idValue) : null;
                           // console.log(`✓ Found child ID in array item (unexpected format): ${childUpdate.priority_id}`);
                         }
                       }
                     }
                     // טיפול במקרה חריג שבו HasSiblings=true אבל התקבל אובייקט בודד
-                    else if (job.HasSiblings && typeof responseBody[subformKey] === 'object' && !Array.isArray(responseBody[subformKey])) {
-                      if (responseBody[subformKey][job.priority_id] !== undefined) {
-                        const idValue = responseBody[subformKey][job.priority_id];
-                        childUpdate.priority_id = idValue !== null ? String(idValue) : null;
+                    else if (
+                      job.HasSiblings &&
+                      typeof responseBody[subformKey] === "object" &&
+                      !Array.isArray(responseBody[subformKey])
+                    ) {
+                      if (
+                        responseBody[subformKey][job.priority_id] !== undefined
+                      ) {
+                        const idValue =
+                          responseBody[subformKey][job.priority_id];
+                        childUpdate.priority_id =
+                          idValue !== null ? String(idValue) : null;
                         // console.log(`✓ Found child ID in direct object (unexpected format): ${childUpdate.priority_id}`);
                       }
                     }
-                  } 
+                  }
                   // אם לא נמצא תת-מבנה בתשובה, בדוק אם המזהה קיים ישירות בשורש
                   else {
                     // console.log(`⚠️ Subform ${subformKey} not found in response. Available keys: ${Object.keys(responseBody).join(', ')}`);
-                    
+
                     // בדיקה אם המזהה קיים ברמה העליונה של התשובה
                     if (responseBody[job.priority_id] !== undefined) {
                       const idValue = responseBody[job.priority_id];
-                      childUpdate.priority_id = idValue !== null ? String(idValue) : null;
-                      console.log(`Found child ID at root level: ${childUpdate.priority_id}`);
+                      childUpdate.priority_id =
+                        idValue !== null ? String(idValue) : null;
+                      console.log(
+                        `Found child ID at root level: ${childUpdate.priority_id}`
+                      );
                     }
                   }
-                  
+
                   // תיעוד סופי של המזהה שהתקבל
                   // console.log(`Final priority_id for child record (RowId ${childRecord.RowId}): ${childUpdate.priority_id}`);
-                  
                 } catch (e) {
-                  console.error(`Error extracting child ID for ${jobTypeName}:`, e);
+                  console.error(
+                    `Error extracting child ID for ${jobTypeName}:`,
+                    e
+                  );
                 }
               } else {
                 // console.log(`No job.priority_id defined for child job ${jobTypeName} or no response body`);
@@ -755,7 +836,7 @@ function processApiResponse(
           }
         });
       }
-//-------------------------------------------------
+      //-------------------------------------------------
     } else {
       // Handle error case
       failureCount++;
@@ -764,15 +845,17 @@ function processApiResponse(
       let errorMessage = "Unknown error";
       try {
         if (apiResponse.body) {
-          const errorBody = typeof apiResponse.body === "string"
-            ? JSON.parse(apiResponse.body)
-            : apiResponse.body;
+          const errorBody =
+            typeof apiResponse.body === "string"
+              ? JSON.parse(apiResponse.body)
+              : apiResponse.body;
 
           if (errorBody?.FORM?.InterfaceErrors?.text) {
             // Priority-specific error format
             errorMessage = errorBody.FORM.InterfaceErrors.text;
           } else {
-            errorMessage = errorBody.error || errorBody.message || JSON.stringify(errorBody);
+            errorMessage =
+              errorBody.error || errorBody.message || JSON.stringify(errorBody);
           }
         }
       } catch (e) {
@@ -780,9 +863,12 @@ function processApiResponse(
       }
 
       // Ensure errorMessage is always a string for parent record
-      const safeParentErrorMessage = typeof errorMessage === 'string'
-        ? errorMessage
-        : errorMessage ? JSON.stringify(errorMessage) : "Unknown error";
+      const safeParentErrorMessage =
+        typeof errorMessage === "string"
+          ? errorMessage
+          : errorMessage
+            ? JSON.stringify(errorMessage)
+            : "Unknown error";
 
       // Update parent record with error - with all required columns
       parentUpdateRows.push({
@@ -793,12 +879,12 @@ function processApiResponse(
         ErrorMessage: safeParentErrorMessage,
         JobId: record.__jobId,
         priority_id: null, // Explicitly set to null for SQL compatibility
-        is_new: 1
+        is_new: 1,
       });
 
       // Update child records with the same error
       if (childJobs && record.childRecords) {
-        childJobs.forEach(job => {
+        childJobs.forEach((job) => {
           const childTableName = job.DBTableName;
           const jobTypeName = job.JobTypeName;
 
@@ -806,11 +892,14 @@ function processApiResponse(
           const childRecords = getChildRecords(record, jobTypeName);
 
           if (childRecords && Array.isArray(childRecords)) {
-            childRecords.forEach(childRecord => {
+            childRecords.forEach((childRecord) => {
               // Ensure errorMessage is always a string
-              const safeErrorMessage = typeof errorMessage === 'string'
-                ? errorMessage
-                : errorMessage ? JSON.stringify(errorMessage) : "Unknown error";
+              const safeErrorMessage =
+                typeof errorMessage === "string"
+                  ? errorMessage
+                  : errorMessage
+                    ? JSON.stringify(errorMessage)
+                    : "Unknown error";
 
               // Create the childUpdate object with proper SQL-compatible values
               const childUpdate = {
@@ -822,7 +911,7 @@ function processApiResponse(
                 JobId: record.__jobId,
                 priority_id: null, // Explicitly set to null for SQL compatibility
                 is_new: 1,
-                tableName: childTableName
+                tableName: childTableName,
               };
 
               childUpdateRows.push(childUpdate);
@@ -831,8 +920,10 @@ function processApiResponse(
         });
       }
 
-      const statusCode = apiResponse.status ||
-        (typeof apiResponse.body === 'string' && apiResponse.body.includes('"code"')
+      const statusCode =
+        apiResponse.status ||
+        (typeof apiResponse.body === "string" &&
+        apiResponse.body.includes('"code"')
           ? JSON.parse(apiResponse.body).code
           : "Unknown");
 
@@ -844,7 +935,7 @@ function processApiResponse(
         RowId: record.RowId,
         Error: safeParentErrorMessage,
         JobId: record.__jobId,
-        ErrorStatus: statusCode.toString()
+        ErrorStatus: statusCode.toString(),
       });
     }
   });

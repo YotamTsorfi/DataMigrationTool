@@ -13,7 +13,7 @@ import {
 } from "../services/requestSender";
 import { processParentChildResponse } from "./priorityParentChildResponseProcessor";
 import { ChildJob } from "../jobs/jobParentAndChilds";
-import { writeToLogFile } from "../config/logger";
+// import { writeToLogFile } from "../config/logger";
 
 // תוצאת שליחה של מנה (Batch)
 export interface BatchSendResult {
@@ -54,11 +54,11 @@ export async function sendParentChildBatch(
   jobId: string,
   priorityIdField?: string,
   childTableNames?: string[],
-  childJobs?: ChildJob[]  
+  childJobs?: ChildJob[]
 ): Promise<BatchSendResult> {
   // יצירת מזהה ייחודי למנה
   const batchId = uuidv4();
-  
+
   // הגדרת מונה ביצועים
   const perfMonitor = new PerformanceMonitor();
   perfMonitor.startOperation();
@@ -77,11 +77,11 @@ export async function sendParentChildBatch(
       __tableName: tableName,
       __jobId: jobId,
       __priorityScreenName: priorityScreenName,
-      RowId: record.RowId
+      RowId: record.RowId,
     }));
 
     // Create clean records for sending to API, keeping enrichedRecords for tracking
-    const cleanRecordsForApi = enrichedRecords.map(record => {
+    const cleanRecordsForApi = enrichedRecords.map((record) => {
       const { childRecords, RowId, ...cleanRecord } = record;
       return cleanRecord;
     });
@@ -99,11 +99,10 @@ export async function sendParentChildBatch(
       `Basic ${Buffer.from(`${config.priorityPAT}:${config.priorityPassword}`).toString("base64")}`
     );
     perfMonitor.endBatchBuild();
-    
+
     // מדידת זמן השליחה
     perfMonitor.startRequest();
 
-    
     //--------------------------------------
     // ------ DEBUGGING: Write the raw data to a file for inspection ------
     // writeToLogFile(
@@ -129,19 +128,23 @@ export async function sendParentChildBatch(
     } catch (error) {
       perfMonitor.logError(error);
       console.error("Error sending parent-child batch request:", error);
-      
+
       // Create a fake response structure to ensure processing continues
       response = {
         status: 500,
         data: {
-          error: { message: error instanceof Error ? error.message : String(error) }
-        }
+          error: {
+            message: error instanceof Error ? error.message : String(error),
+          },
+        },
       };
-      
+
       // Still continue with response processing to ensure database updates happen
-      console.log("Created fallback response structure to continue with database updates");
+      console.log(
+        "Created fallback response structure to continue with database updates"
+      );
     }
-        
+
     /**
      * עיבוד התגובה מה-API
      */
@@ -155,7 +158,7 @@ export async function sendParentChildBatch(
       jobId,
       priorityIdField,
       childTableNames,
-      childJobs 
+      childJobs
     );
 
     return {
@@ -199,29 +202,29 @@ export async function sendParentChildBatchesInParallel(
   batches: any[][],
   concurrency: number,
   jobType: string,
-  tableName: string, 
+  tableName: string,
   priorityScreenName: string,
   jobId: string,
   priorityIdField?: string,
   childTableNames?: string[],
-  childJobs?: ChildJob[] 
+  childJobs?: ChildJob[]
 ): Promise<BatchSendResult[]> {
   // Explicitly ensure concurrency is capped
   const effectiveConcurrency = Math.min(concurrency, 10); // Never exceed 10 concurrent batches
   const limit = pLimit(effectiveConcurrency);
-  
+
   // console.log(`Sending ${batches.length} batches with max concurrency of ${effectiveConcurrency}`);
-  
+
   // Send all batches in parallel with concurrency limit
-  const sendPromises = batches.map((batch, index) => 
+  const sendPromises = batches.map((batch, index) =>
     limit(async () => {
       // console.log(`Starting batch ${index + 1}/${batches.length} with ${batch.length} records`);
       const result = await sendParentChildBatch(
-        batch, 
-        jobType, 
-        tableName, 
-        priorityScreenName, 
-        jobId, 
+        batch,
+        jobType,
+        tableName,
+        priorityScreenName,
+        jobId,
         priorityIdField,
         childTableNames,
         childJobs
@@ -230,23 +233,29 @@ export async function sendParentChildBatchesInParallel(
       return result;
     })
   );
-  
+
   // Wait for all batches to complete
   const results = await Promise.all(sendPromises);
-  
+
   // Summarize results
-  const totalRecords = batches.reduce((sum, batch) => sum + batch.length, 0);
-  const successfulRecords = results.reduce((sum, result) => sum + result.successCount, 0);
-  const failedRecords = results.reduce((sum, result) => sum + result.failureCount, 0);
-  
+  // const totalRecords = batches.reduce((sum, batch) => sum + batch.length, 0);
+  // const successfulRecords = results.reduce(
+  //   (sum, result) => sum + result.successCount,
+  //   0
+  // );
+  // const failedRecords = results.reduce(
+  //   (sum, result) => sum + result.failureCount,
+  //   0
+  // );
+
   // console.log(`Completed sending ${batches.length} batches: ${successfulRecords} successful, ${failedRecords} failed out of ${totalRecords} total records`);
-  
+
   // Help garbage collection
-  batches.forEach(batch => {
+  batches.forEach((batch) => {
     if (batch && Array.isArray(batch)) {
       batch.length = 0;
     }
   });
-  
+
   return results;
 }
