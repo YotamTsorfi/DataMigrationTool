@@ -22,6 +22,12 @@ pipeline {
                 bat 'copy C:\\carmelton_typescript\\client\\.env.production client\\.env.production'
             }
         }
+        stage('Stop Production Service') {
+            steps {
+                // עצירת שירות PM2 עם טיפול בשגיאות
+                bat 'cd C:\\production\\carmelton-data-migration && npx pm2 stop all || echo "No processes running"'
+            }
+        }
         stage('Deploy') {
             steps {
                 // העתקת כל קבצי ה-production לשרת
@@ -34,6 +40,22 @@ pipeline {
                 bat 'copy client\\package-lock.json C:\\production\\carmelton-data-migration\\client\\package-lock.json'
                 bat 'copy client\\.env.production C:\\production\\carmelton-data-migration\\client\\.env.production'
             }
+        }
+        stage('Start Production Service') {
+            steps {
+                // הפעלה מחדש של השירות
+                bat 'cd C:\\production\\carmelton-data-migration && npx pm2 start ecosystem.config.js || echo "Failed to start services"'
+            }
+        }
+    }
+    post {
+        success {
+            echo 'Deployment completed successfully'
+        }
+        failure {
+            // במקרה של כישלון, ננסה להפעיל את השירות בכל זאת
+            bat 'cd C:\\production\\carmelton-data-migration && npx pm2 start ecosystem.config.js || echo "Failed to restart services"'
+            echo 'Deployment failed, attempted to restart services'
         }
     }
 }
