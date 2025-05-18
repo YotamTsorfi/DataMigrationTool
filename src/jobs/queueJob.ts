@@ -4,7 +4,10 @@ import { configService } from "../config/configService";
 import PerformanceMonitor from "../utils/performanceMonitor";
 import ProgressTracker from "../utils/progressTracker";
 import { QueueProcessor, QueueItem } from "../services/queueProcessor";
-import { performBulkUpdateWithService, performBulkErrorInsertWithService } from "../services/dataService";
+import {
+  performBulkUpdateWithService,
+  performBulkErrorInsertWithService,
+} from "../services/dataService";
 import { DatabaseService } from "../services/databaseService";
 
 /**
@@ -304,6 +307,6 @@ async function processQueueResults(
   }
 
   perfMonitor.endOperation();
-  const metrics = perfMonitor.getFormattedMetrics();
+  // const metrics = perfMonitor.getFormattedMetrics();
   // console.log(`Queue results processing completed in ${metrics.totalDuration}ms`);
 }

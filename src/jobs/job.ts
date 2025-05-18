@@ -9,7 +9,6 @@ import { v4 as uuidv4 } from "uuid";
 import {
   fetchDataChunk,
   performBulkUpdateWithService,
-  performBulkErrorInsertWithService,
   recordBatchProcessing,
 } from "../services/dataService";
 import {
@@ -306,9 +305,9 @@ async function processBatches(
 
   // Configure error buffer service with appropriate size based on configuration
   const errorBuffer = ErrorBufferService.getInstance();
-  errorBuffer.configure({ 
-    flushSize: Math.max(5000, BATCH_SIZE * 10),  // Appropriate buffer size based on batch size
-    flushInterval: 5000  // Flush at least every 5 seconds if not triggered by size
+  errorBuffer.configure({
+    flushSize: Math.max(5000, BATCH_SIZE * 10), // Appropriate buffer size based on batch size
+    flushInterval: 5000, // Flush at least every 5 seconds if not triggered by size
   });
 
   // const memoryMonitor = setInterval(() => {
@@ -412,12 +411,13 @@ async function processBatches(
             currentDelay = Math.max(currentDelay * 0.8, MIN_DELAY); // Speed up
           }
         } catch (error) {
-          console.error("Batch processing failed:", error);          
+          console.error("Batch processing failed:", error);
           // Add the failed result with error details
-          const failedBatchSize = BATCH_SIZE; 
+          const failedBatchSize = BATCH_SIZE;
           results.push({
             success: false,
-            error: error instanceof Error ? error.message : "Unknown batch error",
+            error:
+              error instanceof Error ? error.message : "Unknown batch error",
             rowsCount: failedBatchSize,
           });
 

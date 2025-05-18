@@ -397,8 +397,8 @@ export class QueueProcessor {
         };
       } catch (error: any) {
         retryCount++;
-        let errorMessage = formatAxiosError(error);
-        let errorStatus = error.response?.status || 500;
+        const errorMessage = formatAxiosError(error);
+        // let errorStatus = error.response?.status || 500;
 
         // Handle rate limiting (HTTP 429)
         if (axios.isAxiosError(error) && error.response?.status === 429) {
