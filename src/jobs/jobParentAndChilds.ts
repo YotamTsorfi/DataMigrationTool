@@ -5,7 +5,7 @@ import ProgressTracker from "../utils/progressTracker";
 import PerformanceMonitor from "../utils/performanceMonitor";
 import { performBulkUpdateWithService } from "../services/dataService";
 import { ErrorBufferService } from "../utils/errorBufferService";
-// import { writeToLogFile } from "../config/logger";
+import { writeToLogFile } from "../config/logger";
 
 export interface ChildJob {
   ChildJobeId: number;
@@ -118,6 +118,7 @@ async function processParentChildBatches(
         childJobs
       );
       //-----------------------------------------------------------------------------
+      // ***** DEV ONLY ***** //
       //-----------------------------------------------------------------------------
       // ------ DEBUGGING: Write the raw data to a file for inspection ------
       // for await (const record of dataStream) {
@@ -128,6 +129,12 @@ async function processParentChildBatches(
       //   writeToLogFile(
       //     "parentChildData_clean.json",
       //     `${JSON.stringify(cleanRecord, null, 2)}\n\n`
+      //   );
+
+      //   // הוסף גם את המבנה המלא כולל childRecords
+      //   writeToLogFile(
+      //     "parentChildData_full.json",
+      //     `${JSON.stringify(record, null, 2)}\n\n`
       //   );
       // }
       //-----------------------------------------------------------------------------
