@@ -8,6 +8,7 @@ import {
   performBulkUpdateWithService,
   performBulkErrorInsertWithService,
 } from "../services/dataService";
+import { ErrorBufferService } from "../utils/errorBufferService";
 import { DatabaseService } from "../services/databaseService";
 
 /**
@@ -24,6 +25,14 @@ export async function processWithQueues(
 ): Promise<any[]> {
   // Get system configuration
   const config = await configService.getConfig();
+
+  // Initialize ErrorBufferService at the beginning of the function
+  const errorBuffer = ErrorBufferService.getInstance();
+  errorBuffer.configure({
+    flushSize: 1000, // Configure a larger flush size
+    minFlushSize: 200,
+    flushInterval: 30000, // 30 seconds
+  });
 
   // Set horizontal batch size from configuration or use default
   const HORIZONTAL_BATCH_SIZE = parseInt(
@@ -177,7 +186,16 @@ export async function processWithQueues(
     lastRowId = (rows[rows.length - 1] as { RowId: number }).RowId;
     processedCount += rows.length;
     totalProcessedRecords = processedCount;
+
+    // Ensure we're flushing errors regularly
+    // This is optional, since the ErrorBufferService will flush based on size/time
+    if (totalFailureCount > 0 && totalFailureCount % 500 === 0) {
+      await errorBuffer.flush();
+    }
   }
+
+  // Make sure to flush any remaining errors before completing
+  await errorBuffer.flushAll();
 
   // Finalize progress tracking for this job
   ProgressTracker.completeJob(jobId, totalSuccessCount, totalFailureCount);
@@ -335,10 +353,11 @@ async function processQueueResults(
   // Insert error logs
   if (resultData.errorRows.length > 0) {
     try {
-      await performBulkErrorInsertWithService(
-        resultData.errorRows,
-        perfMonitor
-      );
+      ErrorBufferService.getInstance().addErrors(resultData.errorRows);
+      // await performBulkErrorInsertWithService(
+      //   resultData.errorRows,
+      //   perfMonitor
+      // );
     } catch (error) {
       console.error("Error inserting error logs for queue results:", error);
     }
