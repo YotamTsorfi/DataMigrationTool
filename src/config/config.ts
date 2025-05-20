@@ -5,7 +5,7 @@ import path from "path";
 import * as fs from "fs";
 
 const isProduction = process.env.NODE_ENV === "production";
-console.log(`Running in ${isProduction ? "PRODUCTION" : "DEVELOPMENT"} mode`);
+// console.log(`Running in ${isProduction ? "PRODUCTION" : "DEVELOPMENT"} mode`);
 
 // Check if environment variables are already set (e.g. from PM2)
 let allEnvVarsPresent = true;

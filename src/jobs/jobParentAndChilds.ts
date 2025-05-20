@@ -5,7 +5,8 @@ import ProgressTracker from "../utils/progressTracker";
 import PerformanceMonitor from "../utils/performanceMonitor";
 import { performBulkUpdateWithService } from "../services/dataService";
 import { ErrorBufferService } from "../utils/errorBufferService";
-import { writeToLogFile } from "../config/logger";
+import { configService } from "../config/configService";
+// import { writeToLogFile } from "../config/logger";
 
 export interface ChildJob {
   ChildJobeId: number;
@@ -71,8 +72,12 @@ async function processParentChildBatches(
   // Fixed for exactly 100 records per batch
   const maxBatchSizeForApi = 100;
 
-  // Fixed for processing 10 batches in parallel
-  const maxConcurrentBatches = 10;
+  // Get concurrency setting from database
+  const config = await configService.getConfig();
+  const maxConcurrentBatches = config.CONCURRENT_BATCHES;
+  console.log(
+    `Using concurrency of ${maxConcurrentBatches} batches from system configuration`
+  );
 
   // Configure error buffer for more efficient error logging
   const errorBuffer = ErrorBufferService.getInstance();
@@ -190,10 +195,9 @@ async function processParentChildBatches(
       );
 
       try {
-        // Send batches in parallel (max 10 concurrently)
         const batchResults = await sendParentChildBatchesInParallel(
           batchGroup,
-          maxConcurrentBatches, // Explicitly set to 10
+          maxConcurrentBatches,
           jobType,
           parentTableName,
           parentScreenName,

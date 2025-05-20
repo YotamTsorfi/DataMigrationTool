@@ -47,9 +47,9 @@ class JobManager {
 
     await DatabaseService.executeQuery(
       `
-      INSERT INTO PriorityJobsHistory (JobId, JobName, TableName, ScreenName, StartTime, TotalRecords, Status, ProcessingType)
-      VALUES (@JobId, @JobName, @TableName, @ScreenName, @StartTime, @TotalRecords, @Status,  @ProcessingType)
-    `,
+    INSERT INTO PriorityJobsHistory (JobId, JobName, TableName, ScreenName, StartTime, TotalRecords, Status, ProcessingType, IsParentChildJob)
+    VALUES (@JobId, @JobName, @TableName, @ScreenName, @StartTime, @TotalRecords, @Status, @ProcessingType, 0)
+  `,
       {
         JobId: jobId,
         JobName: jobRequest.jobType,
@@ -90,27 +90,31 @@ class JobManager {
   }
 
   //   ----------------------------
-  
+  /**
+   * Starts the job processing by updating the job status and executing the appropriate processing method.
+   * @param jobId - The unique identifier for the job.
+   * @param jobRequest - The request object containing job parameters.
+   * @returns A promise that resolves with the job results.
+   */
   async startJob(jobId: string, jobRequest: JobRequest): Promise<any> {
     const jobStartTime = Date.now();
     let results;
-  
+
     console.log(`Job ${jobId} starting with request:`, {
       recordCount: jobRequest.recordCount,
       tableName: jobRequest.tableName,
       processingType: jobRequest.processingType || "default not set",
     });
-  
+
     console.log(`Job ${jobId} starting at: ${adjustTimeZone(new Date())}`);
-  
+
     // עדכון סטטוס העבודה ל-"מתבצעת"
     await this.updateJobStatus(jobId, "Running");
-  
+
     // קביעת סוג העיבוד (batch או queue)
     const processingType =
       jobRequest.processingType || (await this.getDefaultProcessingType());
-    // console.log(`Job ${jobId} using processing type: ${processingType}`);
-  
+
     // עדכון סוג העיבוד במסד הנתונים
     await DatabaseService.executeQuery(
       `UPDATE PriorityJobsHistory SET ProcessingType = @ProcessingType WHERE JobId = @JobId`,
@@ -119,36 +123,46 @@ class JobManager {
         JobId: jobId,
       }
     );
-  
+
     try {
       // בדיקה האם מדובר בעבודה עם קשרי הורה-ילד
       if (jobRequest.priorityLinkedField) {
-        // console.log(`Job ${jobId} has parent-child relationship with linked field: ${jobRequest.priorityLinkedField}`);
-  
         // חילוץ עבודות ילד ממסד הנתונים
         const childJobs = (await DatabaseService.executeQuery(
           `SELECT ChildJobeId, JobTypeName, DBTableName, ScreenName, priority_id, HasSiblings 
-           FROM PriorityChildJob 
-           WHERE refParentJobId = @JobTypeId`,
+         FROM PriorityChildJob 
+         WHERE refParentJobId = @JobTypeId`,
           {
             JobTypeId: jobRequest.priorityJobTypeId,
           }
         )) as ChildJob[];
-  
+
         const childJobCount = childJobs.length;
-        // console.log(`Job ${jobId} found ${childJobCount} child jobs`);
-  
+
         // אם יש עבודות ילד ומדובר בעיבוד מסוג batch, הפעלת מעבד הורה-ילד
         if (childJobCount > 0 && processingType === "batch") {
           console.log(`Job ${jobId} executing parent-child batch processing`);
-          
+
+          // סימון הג'וב כאב-בן כדי למנוע יצירת ג'ובים נפרדים לטבלאות הילדים
+          await DatabaseService.executeQuery(
+            `UPDATE PriorityJobsHistory SET IsParentChildJob = 1, ChildTables = @ChildTables WHERE JobId = @JobId`,
+            {
+              JobId: jobId,
+              ChildTables: childJobs.map((job) => job.DBTableName).join(","),
+            }
+          );
+
+          console.log(
+            `Job ${jobId} marked as parent-child job with ${childJobCount} child tables: ${childJobs.map((job) => job.DBTableName).join(", ")}`
+          );
+
           // Configure error buffer for larger batch size for parent-child processing
           ErrorBufferService.getInstance().configure({
             flushSize: 1000, // Larger batch size for parent-child operations
             minFlushSize: 200, // Higher minimum to prevent small flushes
-            flushInterval: 60000 // Longer interval for parent-child operations
+            flushInterval: 60000, // Longer interval for parent-child operations
           });
-          
+
           results = await processParentChildBatches(
             jobRequest.recordCount,
             jobRequest.startRow,
@@ -160,69 +174,80 @@ class JobManager {
             jobRequest.priorityLinkedField,
             childJobs
           );
-          
+
           // Reset error buffer configuration to default after parent-child processing
           ErrorBufferService.getInstance().configure({
             flushSize: 500,
             minFlushSize: 100,
-            flushInterval: 30000
+            flushInterval: 30000,
           });
         } else {
           // אם אין עבודות ילד או לא מדובר בעיבוד מסוג batch, ביצוע עיבוד רגיל
-          console.log(`Job ${jobId} has parent-child relationship but using standard processing (${processingType})`);
-          results = await this.executeStandardProcessing(jobId, jobRequest, processingType);
+          console.log(
+            `Job ${jobId} has parent-child relationship but using standard processing (${processingType})`
+          );
+          results = await this.executeStandardProcessing(
+            jobId,
+            jobRequest,
+            processingType
+          );
         }
       } else {
         // אין קשרי הורה-ילד, ביצוע עיבוד רגיל
-        console.log(`Job ${jobId} using standard processing (${processingType})`);
-        results = await this.executeStandardProcessing(jobId, jobRequest, processingType);
+        console.log(
+          `Job ${jobId} using standard processing (${processingType})`
+        );
+        results = await this.executeStandardProcessing(
+          jobId,
+          jobRequest,
+          processingType
+        );
       }
-  
+
       // Ensure all buffered errors are flushed before completing the job
       await ErrorBufferService.getInstance().flushAll();
 
       // חישוב סטטיסטיקות הצלחה וכישלון
-      const totalSuccess = results.reduce(
-        (acc: number, result: JobResult) => {
-          // Use only explicit successCount and avoid fallback to result.success
-          return acc + (typeof result.successCount === 'number' ? result.successCount : 0);
-        },
-        0
-      );
-      
-      const totalFailures = results.reduce(
-        (acc: number, result: JobResult) => {
-          // Use only explicit failureCount and avoid fallback to !result.success
-          return acc + (typeof result.failureCount === 'number' ? result.failureCount : 0);
-        },
-        0
-      );
-  
+      const totalSuccess = results.reduce((acc: number, result: JobResult) => {
+        // Use only explicit successCount and avoid fallback to result.success
+        return (
+          acc +
+          (typeof result.successCount === "number" ? result.successCount : 0)
+        );
+      }, 0);
+
+      const totalFailures = results.reduce((acc: number, result: JobResult) => {
+        // Use only explicit failureCount and avoid fallback to !result.success
+        return (
+          acc +
+          (typeof result.failureCount === "number" ? result.failureCount : 0)
+        );
+      }, 0);
+
       // סיום המעקב אחר התקדמות העבודה
       ProgressTracker.completeJob(jobId, totalSuccess, totalFailures);
-  
+
       // עדכון סטטוס העבודה ל-"הושלמה"
       await this.updateJobStatus(
         jobId,
-        "Completed", 
+        "Completed",
         totalSuccess,
         totalFailures,
         totalFailures > 0 ? "Some records failed" : undefined
       );
-  
+
       // הדפסת סטטיסטיקות ביצועים
       const jobEndTime = Date.now();
       const jobDurationSec = ((jobEndTime - jobStartTime) / 1000).toFixed(2);
       console.log(
         `Job ${jobId} completed in ${jobDurationSec} seconds. Results: Success: ${totalSuccess}, Failures: ${totalFailures}`
       );
-  
+
       return results;
-      
     } catch (error) {
       // טיפול בשגיאות
       console.error(`Job ${jobId} failed with error:`, error);
-      
+
       // Ensure errors are flushed even on job failure
       try {
         await ErrorBufferService.getInstance().flushAll();
@@ -236,25 +261,31 @@ class JobManager {
         "Failed",
         0,
         jobRequest.recordCount,
-        error instanceof Error ? error.message : 'Unknown error'
+        error instanceof Error ? error.message : "Unknown error"
       );
-      
+
       throw error;
     }
   }
-  
+
   // פונקציית עזר לביצוע עיבוד רגיל (הוצאתי לפונקציה נפרדת למען הסדר)
-  private async executeStandardProcessing(jobId: string, jobRequest: JobRequest, processingType: string): Promise<any> {
+  private async executeStandardProcessing(
+    jobId: string,
+    jobRequest: JobRequest,
+    processingType: string
+  ): Promise<any> {
     console.log(`Job ${jobId} starting ${processingType} processing`);
-    
+
     // אתחול מעקב התקדמות
     ProgressTracker.initJob(jobId, jobRequest.recordCount);
-    
+
     const batchStartTime = Date.now();
-    console.log(`Job ${jobId} starting processing at: ${new Date().toISOString()}`);
-    
+    console.log(
+      `Job ${jobId} starting processing at: ${new Date().toISOString()}`
+    );
+
     let results;
-    
+
     if (processingType === "queue") {
       // עיבוד עם תורים
       results = await processWithQueues(
@@ -278,11 +309,15 @@ class JobManager {
         jobRequest.priorityIdField
       );
     }
-    
+
     const batchEndTime = Date.now();
-    const batchDurationSec = ((batchEndTime - batchStartTime) / 1000).toFixed(2);
-    console.log(`Job ${jobId} completed processing in ${batchDurationSec} seconds at: ${adjustTimeZone(new Date())}`);
-    
+    const batchDurationSec = ((batchEndTime - batchStartTime) / 1000).toFixed(
+      2
+    );
+    console.log(
+      `Job ${jobId} completed processing in ${batchDurationSec} seconds at: ${adjustTimeZone(new Date())}`
+    );
+
     return results;
   }
 

@@ -1,7 +1,8 @@
 import axios from "axios";
 import http from "http";
 import https from "https";
-import { config } from "../config/config";
+import { config } from "../config/config"; // env
+import { configService } from "../config/configService"; // DB
 import PerformanceMonitor from "../utils/performanceMonitor";
 import { formatAxiosError, createCleanError } from "../utils/errorHandler";
 
@@ -31,19 +32,24 @@ export async function sendBatchRequest(
   let retryCount = 0;
   let lastError: any;
 
+  const config = await configService.getConfig();
+  const timeout = config.TIME_OUT || 180000;
+  const baseUrl = config.PRIORITY_BASE_URL;
+  const company = config.PRIORITY_COMPANY;
+  const url = `${baseUrl.replace(/\/$/, "")}/${company}/$batch`;
+
+  // Print the URL for debugging
+  //console.log("Sending batch request to URL:", url);
+
   while (retryCount < maxRetries) {
     try {
       // Add timeout parameter explicitly
-      const response = await axios.post(
-        `${config.priorityDEVBaseUrl}/$batch`,
-        batchBody,
-        {
-          headers,
-          timeout: 60000, //Was 60000 = 60 seconds timeout
-          httpAgent,
-          httpsAgent,
-        }
-      );
+      const response = await axios.post(url, batchBody, {
+        headers,
+        timeout,
+        httpAgent,
+        httpsAgent,
+      });
       return response;
     } catch (error: any) {
       lastError = error;

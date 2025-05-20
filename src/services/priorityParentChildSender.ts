@@ -210,8 +210,10 @@ export async function sendParentChildBatchesInParallel(
   childJobs?: ChildJob[]
 ): Promise<BatchSendResult[]> {
   // Explicitly ensure concurrency is capped
-  const effectiveConcurrency = Math.min(concurrency, 10); // Never exceed 10 concurrent batches
-  const limit = pLimit(effectiveConcurrency);
+  //TODO
+  // const effectiveConcurrency = Math.min(concurrency, 10); // Never exceed 10 concurrent batches
+  // const limit = pLimit(effectiveConcurrency);
+  const limit = pLimit(concurrency);
 
   // console.log(`Sending ${batches.length} batches with max concurrency of ${effectiveConcurrency}`);
 
