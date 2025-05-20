@@ -1,8 +1,8 @@
 import axios from "axios";
 import http from "http";
 import https from "https";
-import { config } from "../config/config";
-import { configService } from "../config/configService";
+// import { config } from "../config/config";
+import { configService } from "../config/configService"; //DB
 import PerformanceMonitor from "../utils/performanceMonitor";
 import ProgressTracker from "../utils/progressTracker";
 import { v4 as uuidv4 } from "uuid";
@@ -172,6 +172,17 @@ export class QueueProcessor {
     }
   }
 
+  private progressListener:
+    | ((successCount: number, failureCount: number) => void)
+    | null = null;
+
+  // הוספת שיטה להגדרת מאזין התקדמות
+  public setProgressListener(
+    listener: (successCount: number, failureCount: number) => void
+  ): void {
+    this.progressListener = listener;
+  }
+
   // Process a single item in the queue
   private async processItem(item: QueueItem): Promise<void> {
     try {
@@ -208,6 +219,7 @@ export class QueueProcessor {
           ErrorMessage: null,
           JobId: item.jobId,
           priority_id: priorityId,
+          is_new: 0,
         });
       } else {
         this.failureCount++;
@@ -224,6 +236,7 @@ export class QueueProcessor {
           Status: "Failed",
           ErrorMessage: cleanErrorMessage,
           JobId: item.jobId,
+          is_new: null,
         });
 
         this.errorRows.push({
@@ -233,8 +246,12 @@ export class QueueProcessor {
           RowId: item.row.RowId,
           Error: cleanErrorMessage,
           JobId: item.jobId,
-          ErrorStatus: response.status,
+          ErrorStatus: response.status ? String(response.status) : null,
         });
+      }
+
+      if (this.progressListener) {
+        this.progressListener(this.successCount, this.failureCount);
       }
 
       this.lastProcessedIndex = Math.max(
@@ -244,6 +261,10 @@ export class QueueProcessor {
     } catch (error) {
       console.error(`Error processing item in queue ${this.queueId}:`, error);
       this.failureCount++;
+
+      if (this.progressListener) {
+        this.progressListener(this.successCount, this.failureCount);
+      }
 
       const errorMessage = this.formatErrorMessage(
         error instanceof Error ? error.message : "Unknown error",
@@ -331,7 +352,7 @@ export class QueueProcessor {
 
     // If the error message contains a URL, clean it
     if (errorMessage.includes("http")) {
-      const urlRegex = /(https?:\/\/[^\s\)]+)/g;
+      const urlRegex = /(https?:\/\/[^\s)]+)/g;
       errorMessage = errorMessage.replace(urlRegex, "[API_URL]");
     }
 
@@ -347,6 +368,8 @@ export class QueueProcessor {
   private async sendRequest(item: QueueItem): Promise<QueueItemResponse> {
     const maxRetries = 3;
     let retryCount = 0;
+    const config = await configService.getConfig();
+    const timeout = config.TIME_OUT || 180000;
 
     // Instead of preparing the data, we send it as is
     // just remove internal fields from the object
@@ -364,27 +387,22 @@ export class QueueProcessor {
       try {
         // Prepare the URL for the request
         // Check if the base URL ends with a slash and the screen name starts with one
-        let baseUrl = config.priorityDEVBaseUrl;
-        if (baseUrl.endsWith("/") && item.priorityScreenName.startsWith("/")) {
-          baseUrl = baseUrl.slice(0, -1);
-        } else if (
-          !baseUrl.endsWith("/") &&
-          !item.priorityScreenName.startsWith("/")
-        ) {
-          baseUrl = baseUrl + "/";
-        }
+        let baseUrl = config.PRIORITY_BASE_URL;
+        if (!baseUrl.endsWith("/")) baseUrl += "/";
+        let company = config.PRIORITY_COMPANY;
+        if (company.endsWith("/")) company = company.slice(0, -1);
 
         // Construct the full URL for the request
-        const url = `${config.priorityDEVBaseUrl}/${item.priorityScreenName}`;
+        const url = `${baseUrl}${company}/${item.priorityScreenName}`;
 
         const response = await axios.post(url, requestData, {
           headers: {
             "Content-Type": "application/json",
             Accept: "application/json",
             "OData-Version": "4.0",
-            Authorization: `Basic ${Buffer.from(`${config.priorityPAT}:${config.priorityPassword}`).toString("base64")}`,
+            Authorization: `Basic ${Buffer.from(`${config.PRIORITY_PAT}:${config.PRIORITY_PASSWORD}`).toString("base64")}`,
           },
-          timeout: 30000,
+          timeout,
           httpAgent,
           httpsAgent,
         });
@@ -462,6 +480,10 @@ export class QueueProcessor {
       this.successCount,
       this.failureCount
     );
+
+    if (this.progressListener) {
+      this.progressListener(this.successCount, this.failureCount);
+    }
   }
 
   // Get result data for database updates

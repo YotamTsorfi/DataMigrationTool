@@ -1,7 +1,7 @@
 import axios from "axios";
 import http from "http";
 import https from "https";
-import { config } from "../config/config"; // env
+// import { config } from "../config/config"; // env
 import { configService } from "../config/configService"; // DB
 import PerformanceMonitor from "../utils/performanceMonitor";
 import { formatAxiosError, createCleanError } from "../utils/errorHandler";
