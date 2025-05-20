@@ -306,9 +306,14 @@ async function processBatches(
   // Configure error buffer service with appropriate size based on configuration
   const errorBuffer = ErrorBufferService.getInstance();
   errorBuffer.configure({
-    flushSize: Math.max(5000, BATCH_SIZE * 10), // Appropriate buffer size based on batch size
-    flushInterval: 5000, // Flush at least every 5 seconds if not triggered by size
+    flushSize: 1000, // או 2000 אם יש מספיק זיכרון
+    minFlushSize: 200, // אפשר להעלות גם ל-500
+    flushInterval: 60000, // דקה
   });
+  // errorBuffer.configure({
+  //   flushSize: Math.max(5000, BATCH_SIZE * 10), // Appropriate buffer size based on batch size
+  //   flushInterval: 5000, // Flush at least every 5 seconds if not triggered by size
+  // });
 
   // const memoryMonitor = setInterval(() => {
   //   const memoryUsage = process.memoryUsage();

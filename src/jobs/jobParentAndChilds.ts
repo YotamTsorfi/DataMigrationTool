@@ -82,9 +82,14 @@ async function processParentChildBatches(
   // Configure error buffer for more efficient error logging
   const errorBuffer = ErrorBufferService.getInstance();
   errorBuffer.configure({
-    flushSize: Math.max(5000, maxBatchSizeForApi * 10),
-    flushInterval: 5000,
+    flushSize: 1000, // או 2000 אם יש מספיק זיכרון
+    minFlushSize: 200, // אפשר להעלות גם ל-500
+    flushInterval: 60000, // דקה
   });
+  // errorBuffer.configure({
+  //   flushSize: Math.max(5000, maxBatchSizeForApi * 10),
+  //   flushInterval: 5000,
+  // });
 
   // Add error tracking
   let consecutiveFailedBatches = 0;
