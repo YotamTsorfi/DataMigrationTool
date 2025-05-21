@@ -58,11 +58,12 @@ export async function processParentChildResponse(
   jobId: string,
   priorityIdField?: string,
   childTableNames?: string[],
-  childJobs?: ChildJob[]
+  childJobs?: ChildJob[],
+  logErrors: boolean = false
 ): Promise<ProcessResponseResult> {
   try {
     // Start measuring DB update time
-    const dbUpdateStart = Date.now();
+    // const dbUpdateStart = Date.now();
 
     // Measure response performance
     measureResponsePerformance(response, perfMonitor);
@@ -232,27 +233,6 @@ export async function processParentChildResponse(
           childUpdatesByTable
         )) {
           try {
-            // // ====== התיקון המוצע מתחיל כאן ======
-            // // יצירת לוג של העדכונים לילדים לפני השליחה למסד הנתונים
-            // console.log(`About to update child table ${tableName} with ${updates.length} records`);
-            // console.log(`Sample child update (first record):`,
-            //   updates.length > 0 ? JSON.stringify(updates[0]) : 'No updates');
-
-            // // וידוא שהשדה priority_id תמיד מתקבל כמחרוזת או null
-            // updates.forEach(update => {
-            //   // הדפסת לוג רק לרשומות שיש להן ערך priority_id
-            //   if (update.priority_id !== null && update.priority_id !== undefined) {
-            //     console.log(`Child RowId ${update.RowId} has priority_id: ${update.priority_id} (${typeof update.priority_id})`);
-            //   }
-
-            //   // אילוץ priority_id להיות null או מחרוזת (חלק ממסדי הנתונים דורשים זאת)
-            //   if (update.priority_id === undefined) {
-            //     update.priority_id = null;
-            //   } else if (update.priority_id !== null) {
-            //     update.priority_id = String(update.priority_id); // המרה למחרוזת
-            //   }
-            // });
-
             // Force parameter types explicitly for each child table
             const updatesWithExplicitTypes = updates.map((update) => ({
               ...update,
@@ -301,7 +281,7 @@ export async function processParentChildResponse(
     }
 
     // Insert error logs using the buffer instead of direct insertion
-    if (errorRows.length > 0) {
+    if (errorRows.length > 0 && logErrors) {
       try {
         // Use error buffer service instead of immediate insert
         ErrorBufferService.getInstance().addErrors(errorRows);
@@ -444,7 +424,8 @@ async function forceErrorDatabaseUpdates(
   parentTable: string,
   jobId: string,
   batchId: string,
-  childJobs?: ChildJob[]
+  childJobs?: ChildJob[],
+  logErrors: boolean = false
 ): Promise<void> {
   console.log(
     `Forcing database updates for ${records.length} records due to processor error`
@@ -512,7 +493,7 @@ async function forceErrorDatabaseUpdates(
     }
 
     // Use error buffer instead of direct insert for error logs
-    if (errorLogs.length > 0) {
+    if (errorLogs.length > 0 && logErrors) {
       ErrorBufferService.getInstance().addErrors(errorLogs);
     }
 

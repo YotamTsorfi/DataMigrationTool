@@ -6,8 +6,9 @@ import ProgressTracker from "../utils/progressTracker";
 import { QueueProcessor, QueueItem } from "../services/queueProcessor";
 import {
   performBulkUpdateWithService,
-  performBulkErrorInsertWithService,
+  // performBulkErrorInsertWithService,
 } from "../services/dataService";
+import { ErrorBufferService } from "../utils/errorBufferService";
 import { DatabaseService } from "../services/databaseService";
 
 /**
@@ -20,10 +21,19 @@ export async function processWithQueues(
   priorityScreenName: string,
   jobType: string,
   jobId: string,
-  priorityIdField?: string
+  priorityIdField?: string,
+  logErrors: boolean = false
 ): Promise<any[]> {
   // Get system configuration
   const config = await configService.getConfig();
+
+  // Initialize ErrorBufferService at the beginning of the function
+  const errorBuffer = ErrorBufferService.getInstance();
+  errorBuffer.configure({
+    flushSize: 1000, // Configure a larger flush size
+    minFlushSize: 200, // Minimum size before flushing
+    flushInterval: 30000, // 30 seconds
+  });
 
   // Set horizontal batch size from configuration or use default
   const HORIZONTAL_BATCH_SIZE = parseInt(
@@ -46,6 +56,7 @@ export async function processWithQueues(
   const results = [];
   let totalSuccessCount = 0;
   let totalFailureCount = 0;
+  let totalProcessedRecords = 0;
 
   while (processedCount < recordCount) {
     const chunkSize = Math.min(CHUNK_SIZE, recordCount - processedCount);
@@ -107,10 +118,44 @@ export async function processWithQueues(
         horizontalQueues[h].addItems(queueItems);
       }
 
+      //
+      const progressUpdates = new Map();
+
       // Process each queue in parallel - each queue processes its vertical batch in order
       const queuePromises = horizontalQueues
         .filter((q) => q.hasItems()) // Just process queues with items
-        .map((queue) => queue.process());
+        .map((queue) => {
+          // **שינוי 2**: הוספת מאזין התקדמות לכל תור
+          const queueId = queue.getQueueId();
+
+          // פונקציה שתקרא בכל פעם שתור מעדכן את ההתקדמות שלו
+          const updateListener = (success: number, failure: number) => {
+            progressUpdates.set(queueId, { success, failure });
+
+            // חישוב סך הכל מכל התורים
+            let currentSuccess = 0;
+            let currentFailure = 0;
+
+            progressUpdates.forEach((update) => {
+              currentSuccess += update.success;
+              currentFailure += update.failure;
+            });
+
+            // עדכון המעקב הכללי - מוסיפים למספרים המצטברים הכוללים
+            ProgressTracker.updateProgress(
+              jobId,
+              totalProcessedRecords + currentSuccess + currentFailure,
+              totalSuccessCount + currentSuccess,
+              totalFailureCount + currentFailure
+            );
+          };
+
+          // הוספת המאזין לתור
+          queue.setProgressListener(updateListener);
+
+          // עיבוד התור כרגיל
+          return queue.process();
+        });
 
       const queueResults = await Promise.all(queuePromises);
 
@@ -124,13 +169,15 @@ export async function processWithQueues(
         // Get the result data for this queue to update the database
         const resultData = horizontalQueues[qIndex].getResultData();
         // Update the database with the results
-        await processQueueResults(resultData, tableName);
+        await processQueueResults(resultData, tableName, logErrors);
       }
+
+      progressUpdates.clear();
 
       // Update progress tracker with the total processed count
       ProgressTracker.updateProgress(
         jobId,
-        totalSuccessCount + totalFailureCount,
+        totalProcessedRecords + totalSuccessCount + totalFailureCount,
         totalSuccessCount,
         totalFailureCount
       );
@@ -139,7 +186,17 @@ export async function processWithQueues(
     // Update the last processed row ID for the next chunk
     lastRowId = (rows[rows.length - 1] as { RowId: number }).RowId;
     processedCount += rows.length;
+    totalProcessedRecords = processedCount;
+
+    // Ensure we're flushing errors regularly
+    // This is optional, since the ErrorBufferService will flush based on size/time
+    if (totalFailureCount > 0 && totalFailureCount % 500 === 0) {
+      await errorBuffer.flush();
+    }
   }
+
+  // Make sure to flush any remaining errors before completing
+  await errorBuffer.flushAll();
 
   // Finalize progress tracking for this job
   ProgressTracker.completeJob(jobId, totalSuccessCount, totalFailureCount);
@@ -163,7 +220,8 @@ async function processQueueResults(
     failureCount: number;
     lastProcessedIndex: number;
   },
-  tableName: string
+  tableName: string,
+  logErrors: boolean
 ): Promise<void> {
   const perfMonitor = new PerformanceMonitor();
   perfMonitor.startOperation();
@@ -295,12 +353,13 @@ async function processQueueResults(
   }
 
   // Insert error logs
-  if (resultData.errorRows.length > 0) {
+  if (resultData.errorRows.length > 0 && logErrors) {
     try {
-      await performBulkErrorInsertWithService(
-        resultData.errorRows,
-        perfMonitor
-      );
+      ErrorBufferService.getInstance().addErrors(resultData.errorRows);
+      // await performBulkErrorInsertWithService(
+      //   resultData.errorRows,
+      //   perfMonitor
+      // );
     } catch (error) {
       console.error("Error inserting error logs for queue results:", error);
     }

@@ -5,7 +5,8 @@ import ProgressTracker from "../utils/progressTracker";
 import PerformanceMonitor from "../utils/performanceMonitor";
 import { performBulkUpdateWithService } from "../services/dataService";
 import { ErrorBufferService } from "../utils/errorBufferService";
-import { writeToLogFile } from "../config/logger";
+import { configService } from "../config/configService";
+// import { writeToLogFile } from "../config/logger";
 
 export interface ChildJob {
   ChildJobeId: number;
@@ -35,7 +36,8 @@ async function processParentChildBatches(
   jobId: string,
   parentIdField: string,
   linkedField: string,
-  childJobs: ChildJob[]
+  childJobs: ChildJob[],
+  logErrors: boolean = false
 ): Promise<BatchResult[]> {
   // Debug logging (keep this)
   console.log("------------- DEBUG --------------------");
@@ -71,15 +73,22 @@ async function processParentChildBatches(
   // Fixed for exactly 100 records per batch
   const maxBatchSizeForApi = 100;
 
-  // Fixed for processing 10 batches in parallel
-  const maxConcurrentBatches = 10;
+  // Get concurrency setting from database
+  const config = await configService.getConfig();
+  const maxConcurrentBatches = config.CONCURRENT_BATCHES;
+  console.log(
+    `Using concurrency of ${maxConcurrentBatches} batches from system configuration`
+  );
 
   // Configure error buffer for more efficient error logging
   const errorBuffer = ErrorBufferService.getInstance();
   errorBuffer.configure({
-    flushSize: Math.max(5000, maxBatchSizeForApi * 10),
-    flushInterval: 5000,
+    flushSize: 1000, // או 2000 אם יש מספיק זיכרון
+    minFlushSize: 200, // אפשר להעלות גם ל-500
+    flushInterval: 30000, // 30 שניות
   });
+  // Set the logging state based on the parameter
+  errorBuffer.setLoggingEnabled(logErrors);
 
   // Add error tracking
   let consecutiveFailedBatches = 0;
@@ -190,10 +199,9 @@ async function processParentChildBatches(
       );
 
       try {
-        // Send batches in parallel (max 10 concurrently)
         const batchResults = await sendParentChildBatchesInParallel(
           batchGroup,
-          maxConcurrentBatches, // Explicitly set to 10
+          maxConcurrentBatches,
           jobType,
           parentTableName,
           parentScreenName,

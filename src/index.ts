@@ -16,8 +16,8 @@ function loadEnvironmentVariables() {
       path.resolve(process.cwd(), ".env.production"),
     ],
     development: [
-      path.resolve(__dirname, "../.env"),
-      path.resolve(process.cwd(), ".env"),
+      path.resolve(__dirname, "../.env.development"),
+      path.resolve(process.cwd(), ".env.development"),
     ],
   };
 
@@ -42,9 +42,9 @@ function loadEnvironmentVariables() {
   }
 
   // לוג ערך משתנה סביבה קריטי (ללא חשיפת סיסמאות)
-  console.log(
-    `SERVER_PORT from env: ${process.env.SERVER_PORT || "NOT DEFINED"}`
-  );
+  // console.log(
+  //   `SERVER_PORT from env: ${process.env.SERVER_PORT || "NOT DEFINED"}`
+  // );
 }
 
 // טען משתני סביבה לפני כל import אחר שמשתמש בהם

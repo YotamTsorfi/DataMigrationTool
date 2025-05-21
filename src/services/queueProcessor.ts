@@ -1,27 +1,30 @@
 import axios from "axios";
 import http from "http";
 import https from "https";
-import { config } from "../config/config";
-import { configService } from "../config/configService";
+// import { config } from "../config/config";
+import { configService } from "../config/configService"; //DB
 import PerformanceMonitor from "../utils/performanceMonitor";
 import ProgressTracker from "../utils/progressTracker";
 import { v4 as uuidv4 } from "uuid";
 import { formatAxiosError } from "../utils/errorHandler";
 import { recordBatchProcessing } from "./dataService";
 
-// Create reusable HTTP/HTTPS agents with keep-alive enabled
 const httpAgent = new http.Agent({
   keepAlive: true,
-  // maxSockets: 50,
-  maxSockets: 200,
-  keepAliveMsecs: 30000, // Keep connections alive for 30 seconds
+  maxSockets: 4000, // הגדלה משמעותית לתמיכה ב-40 תורים × עד 100 בקשות במקביל
+  keepAliveMsecs: 30000,
+  timeout: 240000, // 4 דקות - חשוב למנוע "תקיעת" חיבורים
+  maxFreeSockets: 1000, // שימור חיבורים פנויים לשימוש חוזר מהיר
+  scheduling: "fifo", // סדר השימוש בחיבורים
 });
 
 const httpsAgent = new https.Agent({
   keepAlive: true,
-  // maxSockets: 50,
-  maxSockets: 200,
+  maxSockets: 4000, // זהה לhttpAgent
   keepAliveMsecs: 30000,
+  timeout: 240000,
+  maxFreeSockets: 1000,
+  scheduling: "fifo",
 });
 
 // Interface for queue items
@@ -108,26 +111,45 @@ export class QueueProcessor {
 
     this.processing = true;
     const systemConfig = await configService.getConfig();
-    this.rateLimit = parseInt(systemConfig.QUEUE_RATE_LIMIT || "10", 10);
-    this.minDelay = parseInt(systemConfig.QUEUE_MIN_DELAY || "100", 10);
+    this.rateLimit = parseInt(systemConfig.QUEUE_RATE_LIMIT || "1000", 10); // בסיס 10 - דצימלי
+    this.minDelay = parseInt(systemConfig.QUEUE_MIN_DELAY || "5", 10); // בסיס 10 - דצימלי
 
+    // Number of items to process concurrently
+    const QUEUE_CONCURRENT_ITEMS = parseInt(
+      systemConfig.QUEUE_CONCURRENT_ITEMS || "40",
+      10
+    );
     const startTime = Date.now();
     const batchId = uuidv4();
 
     try {
       // console.log(`Queue ${this.queueId} starting processing ${this.queue.length} items`);
+      //// Explanation:
+      //// - We process items in batches of CONCURRENT_ITEMS (40) to improve performance.
+      //// - Each batch is processed in parallel using Promise.all.
+      //// Process all items in the queue
+      // for (const item of this.queue) {
+      //   await this.processItem(item);
 
-      // Process all items in the queue
-      for (const item of this.queue) {
-        await this.processItem(item);
+      //// Apply rate limiting
+      //   await this.applyRateLimit();
+      //   // Update progress tracker every few items
+      //   if ((this.successCount + this.failureCount) % 10 === 0) {
+      //     this.updateProgress();
+      //   }
+      // }
 
-        // Apply rate limiting
+      for (let i = 0; i < this.queue.length; i += QUEUE_CONCURRENT_ITEMS) {
+        const batch = this.queue.slice(i, i + QUEUE_CONCURRENT_ITEMS);
+
+        const batchPromises = batch.map((item) => this.processItem(item));
+        await Promise.all(batchPromises);
+
+        // רק השהיה אחת בין אצוות, לא בין כל פריט
         await this.applyRateLimit();
 
-        // Update progress tracker every few items
-        if ((this.successCount + this.failureCount) % 10 === 0) {
-          this.updateProgress();
-        }
+        // עדכן progress אחרי כל אצווה
+        this.updateProgress();
       }
 
       const endTime = Date.now();
@@ -171,7 +193,18 @@ export class QueueProcessor {
       this.processing = false;
     }
   }
-
+  //-------------------------
+  private progressListener:
+    | ((successCount: number, failureCount: number) => void)
+    | null = null;
+  //-------------------------
+  // הוספת שיטה להגדרת מאזין התקדמות
+  public setProgressListener(
+    listener: (successCount: number, failureCount: number) => void
+  ): void {
+    this.progressListener = listener;
+  }
+  //------------------------------------------------------
   // Process a single item in the queue
   private async processItem(item: QueueItem): Promise<void> {
     try {
@@ -208,6 +241,7 @@ export class QueueProcessor {
           ErrorMessage: null,
           JobId: item.jobId,
           priority_id: priorityId,
+          is_new: 0,
         });
       } else {
         this.failureCount++;
@@ -224,6 +258,7 @@ export class QueueProcessor {
           Status: "Failed",
           ErrorMessage: cleanErrorMessage,
           JobId: item.jobId,
+          is_new: 1,
         });
 
         this.errorRows.push({
@@ -233,8 +268,12 @@ export class QueueProcessor {
           RowId: item.row.RowId,
           Error: cleanErrorMessage,
           JobId: item.jobId,
-          ErrorStatus: response.status,
+          ErrorStatus: response.status ? String(response.status) : null,
         });
+      }
+
+      if (this.progressListener) {
+        this.progressListener(this.successCount, this.failureCount);
       }
 
       this.lastProcessedIndex = Math.max(
@@ -244,6 +283,10 @@ export class QueueProcessor {
     } catch (error) {
       console.error(`Error processing item in queue ${this.queueId}:`, error);
       this.failureCount++;
+
+      if (this.progressListener) {
+        this.progressListener(this.successCount, this.failureCount);
+      }
 
       const errorMessage = this.formatErrorMessage(
         error instanceof Error ? error.message : "Unknown error",
@@ -257,6 +300,7 @@ export class QueueProcessor {
         Status: "Failed",
         ErrorMessage: errorMessage,
         JobId: item.jobId,
+        is_new: 1,
       });
 
       this.errorRows.push({
@@ -270,7 +314,7 @@ export class QueueProcessor {
       });
     }
   }
-
+  //------------------------------------------------------
   // Format error message to be more user friendly
   private formatErrorMessage(errorMessage: string, status: number): string {
     // Check for specific error messages
@@ -331,7 +375,7 @@ export class QueueProcessor {
 
     // If the error message contains a URL, clean it
     if (errorMessage.includes("http")) {
-      const urlRegex = /(https?:\/\/[^\s\)]+)/g;
+      const urlRegex = /(https?:\/\/[^\s)]+)/g;
       errorMessage = errorMessage.replace(urlRegex, "[API_URL]");
     }
 
@@ -342,11 +386,13 @@ export class QueueProcessor {
 
     return cleanedError || "Unknown error occurred";
   }
-
+  //------------------------------------------------------
   // Send a request to the Priority API for a single item
   private async sendRequest(item: QueueItem): Promise<QueueItemResponse> {
     const maxRetries = 3;
     let retryCount = 0;
+    const config = await configService.getConfig();
+    const timeout = config.TIME_OUT || 180000;
 
     // Instead of preparing the data, we send it as is
     // just remove internal fields from the object
@@ -364,27 +410,22 @@ export class QueueProcessor {
       try {
         // Prepare the URL for the request
         // Check if the base URL ends with a slash and the screen name starts with one
-        let baseUrl = config.priorityDEVBaseUrl;
-        if (baseUrl.endsWith("/") && item.priorityScreenName.startsWith("/")) {
-          baseUrl = baseUrl.slice(0, -1);
-        } else if (
-          !baseUrl.endsWith("/") &&
-          !item.priorityScreenName.startsWith("/")
-        ) {
-          baseUrl = baseUrl + "/";
-        }
+        let baseUrl = config.PRIORITY_BASE_URL;
+        if (!baseUrl.endsWith("/")) baseUrl += "/";
+        let company = config.PRIORITY_COMPANY;
+        if (company.endsWith("/")) company = company.slice(0, -1);
 
         // Construct the full URL for the request
-        const url = `${config.priorityDEVBaseUrl}/${item.priorityScreenName}`;
+        const url = `${baseUrl}${company}/${item.priorityScreenName}`;
 
         const response = await axios.post(url, requestData, {
           headers: {
             "Content-Type": "application/json",
             Accept: "application/json",
             "OData-Version": "4.0",
-            Authorization: `Basic ${Buffer.from(`${config.priorityPAT}:${config.priorityPassword}`).toString("base64")}`,
+            Authorization: `Basic ${Buffer.from(`${config.PRIORITY_PAT}:${config.PRIORITY_PASSWORD}`).toString("base64")}`,
           },
-          timeout: 30000,
+          timeout,
           httpAgent,
           httpsAgent,
         });
@@ -405,8 +446,8 @@ export class QueueProcessor {
           const retryAfter = error.response.headers["retry-after"];
           let delayMs = retryAfter
             ? parseInt(retryAfter) * 1000
-            : 1000 * Math.pow(2, retryCount);
-          delayMs += Math.floor(Math.random() * 1000);
+            : 500 * Math.pow(2, retryCount);
+          delayMs += Math.floor(Math.random() * 500);
 
           console.log(
             `Rate limit exceeded (429). Retry attempt ${retryCount} after ${delayMs}ms delay. ${errorMessage}`
@@ -447,13 +488,23 @@ export class QueueProcessor {
       row: item.row,
     };
   }
-
+  //------------------------------------------------------
   // Apply rate limiting between requests
   private async applyRateLimit(): Promise<void> {
+    const queueLength = this.queue.length;
+    // אם נשארו מעט פריטים בתור או שקצב השליחה נמוך, לא צריך להמתין
+    if (queueLength < 10 && this.successCount + this.failureCount < 100) {
+      return; // דילוג על ההשהייה כשאין עומס
+    }
+
     const delay = Math.max(1000 / this.rateLimit, this.minDelay);
     await new Promise((resolve) => setTimeout(resolve, delay));
   }
-
+  // private async applyRateLimit(): Promise<void> {
+  //   const delay = Math.max(1000 / this.rateLimit, this.minDelay);
+  //   await new Promise((resolve) => setTimeout(resolve, delay));
+  // }
+  //------------------------------------------------------
   // Update the progress tracker
   private updateProgress(): void {
     ProgressTracker.updateProgress(
@@ -462,8 +513,12 @@ export class QueueProcessor {
       this.successCount,
       this.failureCount
     );
-  }
 
+    if (this.progressListener) {
+      this.progressListener(this.successCount, this.failureCount);
+    }
+  }
+  //------------------------------------------------------
   // Get result data for database updates
   public getResultData() {
     return {

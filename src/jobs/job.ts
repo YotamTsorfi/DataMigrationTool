@@ -62,7 +62,8 @@ async function processBatch(
   priorityScreenName: string,
   jobId: string,
   dbFetchTime?: number,
-  priorityIdField?: string
+  priorityIdField?: string,
+  logErrors: boolean = false
 ): Promise<BatchCreateRowsResult> {
   //TODO
   // console.log(`processBatch called with priorityIdField: [${priorityIdField}]`);
@@ -191,7 +192,7 @@ async function processBatch(
     }
 
     // Update error handling to use buffer instead of immediate insert
-    if (errorRows.length > 0) {
+    if (errorRows.length > 0 && logErrors) {
       try {
         // Add errors to buffer instead of immediately inserting
         ErrorBufferService.getInstance().addErrors(errorRows);
@@ -293,7 +294,8 @@ async function processBatches(
   priorityScreenName: string,
   jobType: string,
   jobId: string,
-  priorityIdField: string
+  priorityIdField: string,
+  logErrors: boolean = false
 ): Promise<any[]> {
   const config = await configService.getConfig();
   const BATCH_SIZE = config.BATCH_SIZE;
@@ -306,9 +308,14 @@ async function processBatches(
   // Configure error buffer service with appropriate size based on configuration
   const errorBuffer = ErrorBufferService.getInstance();
   errorBuffer.configure({
-    flushSize: Math.max(5000, BATCH_SIZE * 10), // Appropriate buffer size based on batch size
-    flushInterval: 5000, // Flush at least every 5 seconds if not triggered by size
+    flushSize: 1000, // או 2000 אם יש מספיק זיכרון
+    minFlushSize: 200, // אפשר להעלות גם ל-500
+    flushInterval: 30000, // 30 שניות
   });
+  // errorBuffer.configure({
+  //   flushSize: Math.max(5000, BATCH_SIZE * 10), // Appropriate buffer size based on batch size
+  //   flushInterval: 5000, // Flush at least every 5 seconds if not triggered by size
+  // });
 
   // const memoryMonitor = setInterval(() => {
   //   const memoryUsage = process.memoryUsage();
@@ -365,7 +372,8 @@ async function processBatches(
               priorityScreenName,
               jobId,
               perfMonitor.metrics.dbFetchTime,
-              priorityIdField
+              priorityIdField,
+              logErrors
             )
           )
         );

@@ -1,24 +1,10 @@
 import axios from "axios";
 import http from "http";
 import https from "https";
-import { config } from "../config/config";
+// import { config } from "../config/config"; // env
+import { configService } from "../config/configService"; // DB
 import PerformanceMonitor from "../utils/performanceMonitor";
 import { formatAxiosError, createCleanError } from "../utils/errorHandler";
-
-// Create reusable HTTP/HTTPS agents with keep-alive enabled
-const httpAgent = new http.Agent({
-  keepAlive: true,
-  // maxSockets: 50,
-  maxSockets: 200,
-  keepAliveMsecs: 30000, // Keep connections alive for 30 seconds
-});
-
-const httpsAgent = new https.Agent({
-  keepAlive: true,
-  // maxSockets: 50,
-  maxSockets: 200,
-  keepAliveMsecs: 30000,
-});
 
 /**
  * Sends a batch request to the Priority API
@@ -31,19 +17,44 @@ export async function sendBatchRequest(
   let retryCount = 0;
   let lastError: any;
 
+  const config = await configService.getConfig();
+  const timeout = config.TIME_OUT || 180000;
+  const baseUrl = config.PRIORITY_BASE_URL;
+  const company = config.PRIORITY_COMPANY;
+  const url = `${baseUrl.replace(/\/$/, "")}/${company}/$batch`;
+
+  // Create reusable HTTP/HTTPS agents with keep-alive enabled
+  const httpAgent = new http.Agent({
+    keepAlive: true,
+    // maxSockets: 50,
+    maxSockets: 4000,
+    keepAliveMsecs: 30000,
+    timeout: config.TIME_OUT,
+    maxFreeSockets: 1000,
+    scheduling: "fifo",
+  });
+
+  const httpsAgent = new https.Agent({
+    keepAlive: true,
+    // maxSockets: 50,
+    maxSockets: 4000,
+    keepAliveMsecs: 30000,
+    timeout: config.TIME_OUT, //
+    maxFreeSockets: 1000, // This value is set to allow for a large number of free sockets to be kept alive
+    scheduling: "fifo",
+  });
+  // Print the URL for debugging
+  //console.log("Sending batch request to URL:", url);
+
   while (retryCount < maxRetries) {
     try {
       // Add timeout parameter explicitly
-      const response = await axios.post(
-        `${config.priorityDEVBaseUrl}/$batch`,
-        batchBody,
-        {
-          headers,
-          timeout: 60000, //Was 60000 = 60 seconds timeout
-          httpAgent,
-          httpsAgent,
-        }
-      );
+      const response = await axios.post(url, batchBody, {
+        headers,
+        timeout,
+        httpAgent,
+        httpsAgent,
+      });
       return response;
     } catch (error: any) {
       lastError = error;
@@ -57,10 +68,10 @@ export async function sendBatchRequest(
         const retryAfter = error.response.headers["retry-after"];
         let delayMs = retryAfter
           ? parseInt(retryAfter) * 1000
-          : 1000 * Math.pow(2, retryCount);
+          : 500 * Math.pow(2, retryCount);
 
         // Add jitter to prevent all retries happening simultaneously
-        delayMs += Math.floor(Math.random() * 1000);
+        delayMs += Math.floor(Math.random() * 500);
 
         retryCount++;
         console.log(

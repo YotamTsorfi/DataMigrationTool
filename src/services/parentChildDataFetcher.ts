@@ -247,12 +247,12 @@ async function fetchEligibleParentRecords(
         WHERE is_eligible = 1
         AND is_new = 1
         AND Status IS NULL
-        AND RowId >= ${offset} 
+        AND RowId >= @startRow
         ORDER BY RowId ASC
       `;
 
     // console.log(`Fetching parent records from ${tableName} with offset ${offset}, limit ${limit}`);
-    const results = await DatabaseService.executeQuery(query);
+    const results = await DatabaseService.executeQuery(query, { startRow });
     // console.log(`Finished fetching ${results?.length || 0} parent records`);
     return results as ParentRecord[];
   } catch (error) {
