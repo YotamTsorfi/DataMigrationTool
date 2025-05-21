@@ -235,16 +235,17 @@ async function processParentChildBatches(
         if (batchFailureCount > 0 && batchSuccessCount === 0) {
           consecutiveFailedBatches++;
           console.warn(
-            `Batch group completely failed (${consecutiveFailedBatches}/${maxConsecutiveFailures} consecutive failures)`
+            `Batch group completely failed (${consecutiveFailedBatches} consecutive failures) - continuing anyway`
           );
 
+          // Keep track of failures but don't break
           if (consecutiveFailedBatches >= maxConsecutiveFailures) {
-            console.error(
-              `Stopping job after ${maxConsecutiveFailures} consecutive failed batch groups`
+            console.warn(
+              `${maxConsecutiveFailures}+ consecutive failed batch groups detected, but continuing per configuration`
             );
             // Still add the results to the overall results
             results.push(...batchResults);
-            break;
+            // No break - continue processing
           }
         } else {
           // Reset consecutive failures counter on any success
@@ -278,10 +279,10 @@ async function processParentChildBatches(
         }
 
         if (consecutiveFailedBatches >= maxConsecutiveFailures) {
-          console.error(
-            `Stopping job after ${maxConsecutiveFailures} consecutive failed batch groups`
+          console.warn(
+            `${maxConsecutiveFailures}+ consecutive failed batch groups detected, but continuing per configuration`
           );
-          break;
+          // No break - continue processing all records
         }
       } finally {
         // IMPORTANT: Help garbage collection by clearing the batch group

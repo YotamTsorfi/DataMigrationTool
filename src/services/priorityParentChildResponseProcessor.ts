@@ -277,7 +277,7 @@ export async function processParentChildResponse(
         // Continue with error logging despite errors in child updates
       }
     } else {
-      console.log(`No child updates to process for batch ${batchId}`);
+      // console.log(`No child updates to process for batch ${batchId}`);
     }
 
     // Insert error logs using the buffer instead of direct insertion
