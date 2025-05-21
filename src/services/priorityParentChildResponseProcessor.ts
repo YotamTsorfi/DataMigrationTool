@@ -58,7 +58,8 @@ export async function processParentChildResponse(
   jobId: string,
   priorityIdField?: string,
   childTableNames?: string[],
-  childJobs?: ChildJob[]
+  childJobs?: ChildJob[],
+  logErrors: boolean = false
 ): Promise<ProcessResponseResult> {
   try {
     // Start measuring DB update time
@@ -280,7 +281,7 @@ export async function processParentChildResponse(
     }
 
     // Insert error logs using the buffer instead of direct insertion
-    if (errorRows.length > 0) {
+    if (errorRows.length > 0 && logErrors) {
       try {
         // Use error buffer service instead of immediate insert
         ErrorBufferService.getInstance().addErrors(errorRows);
@@ -423,7 +424,8 @@ async function forceErrorDatabaseUpdates(
   parentTable: string,
   jobId: string,
   batchId: string,
-  childJobs?: ChildJob[]
+  childJobs?: ChildJob[],
+  logErrors: boolean = false
 ): Promise<void> {
   console.log(
     `Forcing database updates for ${records.length} records due to processor error`
@@ -491,7 +493,7 @@ async function forceErrorDatabaseUpdates(
     }
 
     // Use error buffer instead of direct insert for error logs
-    if (errorLogs.length > 0) {
+    if (errorLogs.length > 0 && logErrors) {
       ErrorBufferService.getInstance().addErrors(errorLogs);
     }
 

@@ -189,7 +189,8 @@ class JobManager {
             jobId,
             jobRequest.priorityIdField,
             jobRequest.priorityLinkedField,
-            childJobs
+            childJobs,
+            logErrors
           );
 
           // Reset error buffer configuration to default after parent-child processing
@@ -329,7 +330,8 @@ class JobManager {
         jobRequest.priorityScreenName,
         jobRequest.jobType,
         jobId,
-        jobRequest.priorityIdField
+        jobRequest.priorityIdField,
+        logErrors
       );
     }
 

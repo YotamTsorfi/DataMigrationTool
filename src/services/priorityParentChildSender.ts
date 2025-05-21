@@ -54,7 +54,8 @@ export async function sendParentChildBatch(
   jobId: string,
   priorityIdField?: string,
   childTableNames?: string[],
-  childJobs?: ChildJob[]
+  childJobs?: ChildJob[],
+  logErrors: boolean = false
 ): Promise<BatchSendResult> {
   // יצירת מזהה ייחודי למנה
   const batchId = uuidv4();
@@ -158,7 +159,8 @@ export async function sendParentChildBatch(
       jobId,
       priorityIdField,
       childTableNames,
-      childJobs
+      childJobs,
+      logErrors
     );
 
     return {
@@ -207,7 +209,8 @@ export async function sendParentChildBatchesInParallel(
   jobId: string,
   priorityIdField?: string,
   childTableNames?: string[],
-  childJobs?: ChildJob[]
+  childJobs?: ChildJob[],
+  logErrors: boolean = false
 ): Promise<BatchSendResult[]> {
   // Explicitly ensure concurrency is capped
   //TODO
@@ -229,7 +232,8 @@ export async function sendParentChildBatchesInParallel(
         jobId,
         priorityIdField,
         childTableNames,
-        childJobs
+        childJobs,
+        logErrors
       );
       // console.log(`Completed batch ${index + 1}/${batches.length}`);
       return result;

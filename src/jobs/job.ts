@@ -62,7 +62,8 @@ async function processBatch(
   priorityScreenName: string,
   jobId: string,
   dbFetchTime?: number,
-  priorityIdField?: string
+  priorityIdField?: string,
+  logErrors: boolean = false
 ): Promise<BatchCreateRowsResult> {
   //TODO
   // console.log(`processBatch called with priorityIdField: [${priorityIdField}]`);
@@ -191,7 +192,7 @@ async function processBatch(
     }
 
     // Update error handling to use buffer instead of immediate insert
-    if (errorRows.length > 0) {
+    if (errorRows.length > 0 && logErrors) {
       try {
         // Add errors to buffer instead of immediately inserting
         ErrorBufferService.getInstance().addErrors(errorRows);
@@ -293,7 +294,8 @@ async function processBatches(
   priorityScreenName: string,
   jobType: string,
   jobId: string,
-  priorityIdField: string
+  priorityIdField: string,
+  logErrors: boolean = false
 ): Promise<any[]> {
   const config = await configService.getConfig();
   const BATCH_SIZE = config.BATCH_SIZE;
@@ -370,7 +372,8 @@ async function processBatches(
               priorityScreenName,
               jobId,
               perfMonitor.metrics.dbFetchTime,
-              priorityIdField
+              priorityIdField,
+              logErrors
             )
           )
         );

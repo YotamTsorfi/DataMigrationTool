@@ -36,7 +36,8 @@ async function processParentChildBatches(
   jobId: string,
   parentIdField: string,
   linkedField: string,
-  childJobs: ChildJob[]
+  childJobs: ChildJob[],
+  logErrors: boolean = false
 ): Promise<BatchResult[]> {
   // Debug logging (keep this)
   console.log("------------- DEBUG --------------------");
@@ -86,10 +87,8 @@ async function processParentChildBatches(
     minFlushSize: 200, // אפשר להעלות גם ל-500
     flushInterval: 30000, // 30 שניות
   });
-  // errorBuffer.configure({
-  //   flushSize: Math.max(5000, maxBatchSizeForApi * 10),
-  //   flushInterval: 5000,
-  // });
+  // Set the logging state based on the parameter
+  errorBuffer.setLoggingEnabled(logErrors);
 
   // Add error tracking
   let consecutiveFailedBatches = 0;
