@@ -58,26 +58,26 @@ class ConfigurationService {
   //   // console.log("Configuration polling started");
   // }
 
-  private async checkForConfigUpdates(): Promise<void> {
-    if (!this.isInitialized) return;
+  // private async checkForConfigUpdates(): Promise<void> {
+  //   if (!this.isInitialized) return;
 
-    try {
-      // Check if any config has been updated since last load
-      const updated = await DatabaseService.executeQuery(
-        `SELECT TOP 1 1 FROM PrioritySystemConfig WHERE LastUpdated > @LastLoaded`,
-        { LastLoaded: this.lastLoaded }
-      );
+  //   try {
+  //     // Check if any config has been updated since last load
+  //     const updated = await DatabaseService.executeQuery(
+  //       `SELECT TOP 1 1 FROM PrioritySystemConfig WHERE LastUpdated > @LastLoaded`,
+  //       { LastLoaded: this.lastLoaded }
+  //     );
 
-      if (updated && updated.length > 0) {
-        console.log("Configuration changes detected, reloading...");
-        await this.loadConfigFromDb();
-        this.lastLoaded = new Date();
-        // console.log("Configuration reloaded with latest changes");
-      }
-    } catch (error) {
-      console.error("Error checking for configuration updates:", error);
-    }
-  }
+  //     if (updated && updated.length > 0) {
+  //       console.log("Configuration changes detected, reloading...");
+  //       await this.loadConfigFromDb();
+  //       this.lastLoaded = new Date();
+  //       // console.log("Configuration reloaded with latest changes");
+  //     }
+  //   } catch (error) {
+  //     console.error("Error checking for configuration updates:", error);
+  //   }
+  // }
 
   public static getInstance(): ConfigurationService {
     if (!ConfigurationService.instance) {

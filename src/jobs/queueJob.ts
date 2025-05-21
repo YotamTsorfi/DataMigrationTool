@@ -6,7 +6,7 @@ import ProgressTracker from "../utils/progressTracker";
 import { QueueProcessor, QueueItem } from "../services/queueProcessor";
 import {
   performBulkUpdateWithService,
-  performBulkErrorInsertWithService,
+  // performBulkErrorInsertWithService,
 } from "../services/dataService";
 import { ErrorBufferService } from "../utils/errorBufferService";
 import { DatabaseService } from "../services/databaseService";
@@ -30,7 +30,7 @@ export async function processWithQueues(
   const errorBuffer = ErrorBufferService.getInstance();
   errorBuffer.configure({
     flushSize: 1000, // Configure a larger flush size
-    minFlushSize: 200,
+    minFlushSize: 200, // Minimum size before flushing
     flushInterval: 30000, // 30 seconds
   });
 

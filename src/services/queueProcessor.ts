@@ -9,19 +9,22 @@ import { v4 as uuidv4 } from "uuid";
 import { formatAxiosError } from "../utils/errorHandler";
 import { recordBatchProcessing } from "./dataService";
 
-// Create reusable HTTP/HTTPS agents with keep-alive enabled
 const httpAgent = new http.Agent({
   keepAlive: true,
-  // maxSockets: 50,
-  maxSockets: 200,
-  keepAliveMsecs: 30000, // Keep connections alive for 30 seconds
+  maxSockets: 4000, // הגדלה משמעותית לתמיכה ב-40 תורים × עד 100 בקשות במקביל
+  keepAliveMsecs: 30000,
+  timeout: 240000, // 4 דקות - חשוב למנוע "תקיעת" חיבורים
+  maxFreeSockets: 1000, // שימור חיבורים פנויים לשימוש חוזר מהיר
+  scheduling: "fifo", // סדר השימוש בחיבורים
 });
 
 const httpsAgent = new https.Agent({
   keepAlive: true,
-  // maxSockets: 50,
-  maxSockets: 200,
+  maxSockets: 4000, // זהה לhttpAgent
   keepAliveMsecs: 30000,
+  timeout: 240000,
+  maxFreeSockets: 1000,
+  scheduling: "fifo",
 });
 
 // Interface for queue items
@@ -108,26 +111,45 @@ export class QueueProcessor {
 
     this.processing = true;
     const systemConfig = await configService.getConfig();
-    this.rateLimit = parseInt(systemConfig.QUEUE_RATE_LIMIT || "10", 10);
-    this.minDelay = parseInt(systemConfig.QUEUE_MIN_DELAY || "100", 10);
+    this.rateLimit = parseInt(systemConfig.QUEUE_RATE_LIMIT || "1000", 10); // בסיס 10 - דצימלי
+    this.minDelay = parseInt(systemConfig.QUEUE_MIN_DELAY || "5", 10); // בסיס 10 - דצימלי
 
+    // Number of items to process concurrently
+    const QUEUE_CONCURRENT_ITEMS = parseInt(
+      systemConfig.QUEUE_CONCURRENT_ITEMS || "40",
+      10
+    );
     const startTime = Date.now();
     const batchId = uuidv4();
 
     try {
       // console.log(`Queue ${this.queueId} starting processing ${this.queue.length} items`);
+      //// Explanation:
+      //// - We process items in batches of CONCURRENT_ITEMS (40) to improve performance.
+      //// - Each batch is processed in parallel using Promise.all.
+      //// Process all items in the queue
+      // for (const item of this.queue) {
+      //   await this.processItem(item);
 
-      // Process all items in the queue
-      for (const item of this.queue) {
-        await this.processItem(item);
+      //// Apply rate limiting
+      //   await this.applyRateLimit();
+      //   // Update progress tracker every few items
+      //   if ((this.successCount + this.failureCount) % 10 === 0) {
+      //     this.updateProgress();
+      //   }
+      // }
 
-        // Apply rate limiting
+      for (let i = 0; i < this.queue.length; i += QUEUE_CONCURRENT_ITEMS) {
+        const batch = this.queue.slice(i, i + QUEUE_CONCURRENT_ITEMS);
+
+        const batchPromises = batch.map((item) => this.processItem(item));
+        await Promise.all(batchPromises);
+
+        // רק השהיה אחת בין אצוות, לא בין כל פריט
         await this.applyRateLimit();
 
-        // Update progress tracker every few items
-        if ((this.successCount + this.failureCount) % 10 === 0) {
-          this.updateProgress();
-        }
+        // עדכן progress אחרי כל אצווה
+        this.updateProgress();
       }
 
       const endTime = Date.now();
@@ -236,7 +258,7 @@ export class QueueProcessor {
           Status: "Failed",
           ErrorMessage: cleanErrorMessage,
           JobId: item.jobId,
-          is_new: null,
+          is_new: 1,
         });
 
         this.errorRows.push({
@@ -278,6 +300,7 @@ export class QueueProcessor {
         Status: "Failed",
         ErrorMessage: errorMessage,
         JobId: item.jobId,
+        is_new: 1,
       });
 
       this.errorRows.push({
@@ -423,8 +446,8 @@ export class QueueProcessor {
           const retryAfter = error.response.headers["retry-after"];
           let delayMs = retryAfter
             ? parseInt(retryAfter) * 1000
-            : 1000 * Math.pow(2, retryCount);
-          delayMs += Math.floor(Math.random() * 1000);
+            : 500 * Math.pow(2, retryCount);
+          delayMs += Math.floor(Math.random() * 500);
 
           console.log(
             `Rate limit exceeded (429). Retry attempt ${retryCount} after ${delayMs}ms delay. ${errorMessage}`
@@ -468,9 +491,19 @@ export class QueueProcessor {
 
   // Apply rate limiting between requests
   private async applyRateLimit(): Promise<void> {
+    const queueLength = this.queue.length;
+    // אם נשארו מעט פריטים בתור או שקצב השליחה נמוך, לא צריך להמתין
+    if (queueLength < 10 && this.successCount + this.failureCount < 100) {
+      return; // דילוג על ההשהייה כשאין עומס
+    }
+
     const delay = Math.max(1000 / this.rateLimit, this.minDelay);
     await new Promise((resolve) => setTimeout(resolve, delay));
   }
+  // private async applyRateLimit(): Promise<void> {
+  //   const delay = Math.max(1000 / this.rateLimit, this.minDelay);
+  //   await new Promise((resolve) => setTimeout(resolve, delay));
+  // }
 
   // Update the progress tracker
   private updateProgress(): void {

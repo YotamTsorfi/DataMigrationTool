@@ -84,7 +84,7 @@ async function processParentChildBatches(
   errorBuffer.configure({
     flushSize: 1000, // או 2000 אם יש מספיק זיכרון
     minFlushSize: 200, // אפשר להעלות גם ל-500
-    flushInterval: 60000, // דקה
+    flushInterval: 30000, // 30 שניות
   });
   // errorBuffer.configure({
   //   flushSize: Math.max(5000, maxBatchSizeForApi * 10),

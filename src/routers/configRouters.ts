@@ -11,8 +11,7 @@ router.get("/", function (req, res) {
     try {
       const configs = await DatabaseService.executeQuery(`
           SELECT * FROM PrioritySystemConfig 
-          WHERE IsVisible = 1
-          ORDER BY ConfigId
+          WHERE IsVisible = 1          
       `);
 
       res.status(200).json(configs);
