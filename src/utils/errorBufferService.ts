@@ -11,11 +11,16 @@ export class ErrorBufferService {
   private isProcessing: boolean = false;
   private perfMonitor: PerformanceMonitor;
   private forceFlushScheduled: boolean = false;
+  private isLoggingEnabled: boolean = false; // New parameter to control logging
 
   private constructor() {
     this.perfMonitor = new PerformanceMonitor();
   }
-
+  //------------------------------------------------------
+  public setLoggingEnabled(enabled: boolean): void {
+    this.isLoggingEnabled = enabled;
+  }
+  //------------------------------------------------------
   /**
    * Get the singleton instance of ErrorBufferService
    */
@@ -25,29 +30,37 @@ export class ErrorBufferService {
     }
     return ErrorBufferService.instance;
   }
-
+  //------------------------------------------------------
   /**
    * Add errors to the buffer
    */
   public addErrors(errors: any[]): void {
     if (!errors || errors.length === 0) return;
-    
+    if (!this.isLoggingEnabled) {
+      // Skip adding errors if logging is disabled
+      return;
+    }
+
     this.errorBuffer.push(...errors);
-    
+
     // Check if we should flush based on buffer size
     if (this.errorBuffer.length >= this.flushSize) {
       this.flush();
-    } 
+    }
     // Check if we should flush based on time elapsed, but only if we have enough errors
-    else if (Date.now() - this.lastFlushTime > this.flushInterval && 
-             this.errorBuffer.length >= this.minFlushSize) {
+    else if (
+      Date.now() - this.lastFlushTime > this.flushInterval &&
+      this.errorBuffer.length >= this.minFlushSize
+    ) {
       this.flush();
     }
     // Schedule a delayed flush for small batches
-    else if (!this.forceFlushScheduled && 
-             this.errorBuffer.length > 0 && 
-             this.errorBuffer.length < this.minFlushSize && 
-             Date.now() - this.lastFlushTime > this.flushInterval) {
+    else if (
+      !this.forceFlushScheduled &&
+      this.errorBuffer.length > 0 &&
+      this.errorBuffer.length < this.minFlushSize &&
+      Date.now() - this.lastFlushTime > this.flushInterval
+    ) {
       this.forceFlushScheduled = true;
       setTimeout(() => {
         this.forceFlushScheduled = false;
@@ -57,26 +70,29 @@ export class ErrorBufferService {
       }, 5000); // Wait additional 5 seconds before flushing small batches
     }
   }
-
+  //------------------------------------------------------
   /**
    * Configure buffer parameters
    */
-  public configure(options: { 
-    flushSize?: number; 
+  public configure(options: {
+    flushSize?: number;
     flushInterval?: number;
-    minFlushSize?: number; 
+    minFlushSize?: number;
   }): void {
     if (options.flushSize) this.flushSize = options.flushSize;
     if (options.flushInterval) this.flushInterval = options.flushInterval;
     if (options.minFlushSize) this.minFlushSize = options.minFlushSize;
   }
-
+  //------------------------------------------------------
   /**
    * Flush the error buffer to the database
    */
   public async flush(): Promise<void> {
     // Don't flush if already processing or if buffer is empty
     if (this.isProcessing || this.errorBuffer.length === 0) {
+      return;
+    }
+    if (!this.isLoggingEnabled || this.errorBuffer.length === 0) {
       return;
     }
 
@@ -93,16 +109,22 @@ export class ErrorBufferService {
         5000 // Increased batch size from 500 to 1000
       );
       this.perfMonitor.endOperation();
-      
+
       // Only log details for larger batches, use debug for small ones
       if (errorsToProcess.length > 50) {
-        console.log(`Flushed ${errorsToProcess.length} buffered errors to database`);
+        console.log(
+          `Flushed ${errorsToProcess.length} buffered errors to database`
+        );
       } else {
-        console.debug(`Flushed ${errorsToProcess.length} buffered errors to database`);
+        console.debug(
+          `Flushed ${errorsToProcess.length} buffered errors to database`
+        );
       }
     } catch (error) {
-      console.error(`Error flushing buffered errors: ${error instanceof Error ? error.message : error}`);
-      
+      console.error(
+        `Error flushing buffered errors: ${error instanceof Error ? error.message : error}`
+      );
+
       // If flush fails, try to reinsert the errors back into the buffer
       // but only up to the flush size to prevent overwhelming the buffer
       const reinsertCount = Math.min(errorsToProcess.length, this.flushSize);
@@ -111,31 +133,34 @@ export class ErrorBufferService {
       this.isProcessing = false;
     }
   }
-
+  //------------------------------------------------------
   /**
    * Get the current number of errors in the buffer
    */
   public getBufferSize(): number {
     return this.errorBuffer.length;
   }
-
+  //------------------------------------------------------
   /**
    * Force flush all remaining errors - should be called at job completion
    */
   public async flushAll(): Promise<void> {
+    if (!this.isLoggingEnabled || this.errorBuffer.length === 0) {
+      return;
+    }
     if (this.errorBuffer.length > 0) {
       // Force flush regardless of batch size
       await this.flush();
-      
+
       // If there are still errors that weren't processed (due to concurrent operations)
       // try once more after a short delay
       if (this.errorBuffer.length > 0) {
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 100));
         await this.flush();
       }
     }
   }
-
+  //------------------------------------------------------
   /**
    * Reset the buffer - useful for testing or when switching between jobs
    */

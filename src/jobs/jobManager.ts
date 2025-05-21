@@ -1,4 +1,5 @@
 import { DatabaseService } from "../services/databaseService";
+import { configService } from "../config/configService"; //DB
 import { v4 as uuidv4 } from "uuid";
 import { processBatches } from "../jobs/job";
 import ProgressTracker from "../utils/progressTracker";
@@ -16,6 +17,7 @@ interface JobRequest {
   priorityIdField: string;
   priorityLinkedField?: string;
   priorityJobTypeId?: number;
+  logErrors?: boolean;
 }
 
 interface ChildJob {
@@ -99,11 +101,26 @@ class JobManager {
   async startJob(jobId: string, jobRequest: JobRequest): Promise<any> {
     const jobStartTime = Date.now();
     let results;
+    const systemConfig = await configService.getConfig();
+
+    // Use the explicit value from jobRequest if provided, otherwise use the system config
+    const logErrors =
+      jobRequest.logErrors !== undefined
+        ? jobRequest.logErrors
+        : !(
+            systemConfig.LOG_ERROR === 0 ||
+            systemConfig.LOG_ERROR === "0" ||
+            systemConfig.LOG_ERROR === false
+          );
+
+    // Configure ErrorBufferService based on the logging flag
+    ErrorBufferService.getInstance().setLoggingEnabled(logErrors);
 
     console.log(`Job ${jobId} starting with request:`, {
       recordCount: jobRequest.recordCount,
       tableName: jobRequest.tableName,
       processingType: jobRequest.processingType || "default not set",
+      logErrors: logErrors,
     });
 
     console.log(`Job ${jobId} starting at: ${adjustTimeZone(new Date())}`);
@@ -189,7 +206,8 @@ class JobManager {
           results = await this.executeStandardProcessing(
             jobId,
             jobRequest,
-            processingType
+            processingType,
+            logErrors
           );
         }
       } else {
@@ -200,7 +218,8 @@ class JobManager {
         results = await this.executeStandardProcessing(
           jobId,
           jobRequest,
-          processingType
+          processingType,
+          logErrors
         );
       }
 
@@ -272,9 +291,12 @@ class JobManager {
   private async executeStandardProcessing(
     jobId: string,
     jobRequest: JobRequest,
-    processingType: string
+    processingType: string,
+    logErrors: boolean = false
   ): Promise<any> {
-    console.log(`Job ${jobId} starting ${processingType} processing`);
+    console.log(
+      `Job ${jobId} starting ${processingType} processing with error logging ${logErrors ? "enabled" : "disabled"}`
+    );
 
     // אתחול מעקב התקדמות
     ProgressTracker.initJob(jobId, jobRequest.recordCount);
@@ -295,7 +317,8 @@ class JobManager {
         jobRequest.priorityScreenName,
         jobRequest.jobType,
         jobId,
-        jobRequest.priorityIdField
+        jobRequest.priorityIdField,
+        logErrors
       );
     } else {
       // עיבוד רגיל במנות (ברירת המחדל)

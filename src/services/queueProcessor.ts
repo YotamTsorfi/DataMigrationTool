@@ -193,18 +193,18 @@ export class QueueProcessor {
       this.processing = false;
     }
   }
-
+  //-------------------------
   private progressListener:
     | ((successCount: number, failureCount: number) => void)
     | null = null;
-
+  //-------------------------
   // הוספת שיטה להגדרת מאזין התקדמות
   public setProgressListener(
     listener: (successCount: number, failureCount: number) => void
   ): void {
     this.progressListener = listener;
   }
-
+  //------------------------------------------------------
   // Process a single item in the queue
   private async processItem(item: QueueItem): Promise<void> {
     try {
@@ -314,7 +314,7 @@ export class QueueProcessor {
       });
     }
   }
-
+  //------------------------------------------------------
   // Format error message to be more user friendly
   private formatErrorMessage(errorMessage: string, status: number): string {
     // Check for specific error messages
@@ -386,7 +386,7 @@ export class QueueProcessor {
 
     return cleanedError || "Unknown error occurred";
   }
-
+  //------------------------------------------------------
   // Send a request to the Priority API for a single item
   private async sendRequest(item: QueueItem): Promise<QueueItemResponse> {
     const maxRetries = 3;
@@ -488,7 +488,7 @@ export class QueueProcessor {
       row: item.row,
     };
   }
-
+  //------------------------------------------------------
   // Apply rate limiting between requests
   private async applyRateLimit(): Promise<void> {
     const queueLength = this.queue.length;
@@ -504,7 +504,7 @@ export class QueueProcessor {
   //   const delay = Math.max(1000 / this.rateLimit, this.minDelay);
   //   await new Promise((resolve) => setTimeout(resolve, delay));
   // }
-
+  //------------------------------------------------------
   // Update the progress tracker
   private updateProgress(): void {
     ProgressTracker.updateProgress(
@@ -518,7 +518,7 @@ export class QueueProcessor {
       this.progressListener(this.successCount, this.failureCount);
     }
   }
-
+  //------------------------------------------------------
   // Get result data for database updates
   public getResultData() {
     return {

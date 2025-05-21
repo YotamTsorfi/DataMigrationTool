@@ -21,7 +21,8 @@ export async function processWithQueues(
   priorityScreenName: string,
   jobType: string,
   jobId: string,
-  priorityIdField?: string
+  priorityIdField?: string,
+  logErrors: boolean = false
 ): Promise<any[]> {
   // Get system configuration
   const config = await configService.getConfig();
@@ -168,7 +169,7 @@ export async function processWithQueues(
         // Get the result data for this queue to update the database
         const resultData = horizontalQueues[qIndex].getResultData();
         // Update the database with the results
-        await processQueueResults(resultData, tableName);
+        await processQueueResults(resultData, tableName, logErrors);
       }
 
       progressUpdates.clear();
@@ -219,7 +220,8 @@ async function processQueueResults(
     failureCount: number;
     lastProcessedIndex: number;
   },
-  tableName: string
+  tableName: string,
+  logErrors: boolean
 ): Promise<void> {
   const perfMonitor = new PerformanceMonitor();
   perfMonitor.startOperation();
@@ -351,7 +353,7 @@ async function processQueueResults(
   }
 
   // Insert error logs
-  if (resultData.errorRows.length > 0) {
+  if (resultData.errorRows.length > 0 && logErrors) {
     try {
       ErrorBufferService.getInstance().addErrors(resultData.errorRows);
       // await performBulkErrorInsertWithService(
