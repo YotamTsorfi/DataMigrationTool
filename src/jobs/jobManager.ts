@@ -6,6 +6,8 @@ import ProgressTracker from "../utils/progressTracker";
 import { processWithQueues } from "../jobs/queueJob";
 import { processParentChildBatches } from "../jobs/jobParentAndChilds";
 import { ErrorBufferService } from "../utils/errorBufferService";
+import { JobCancellationService } from "../utils/jobCancellationService";
+import { EmailNotificationService } from "../utils/emailNotificationService";
 
 interface JobRequest {
   recordCount: number;
@@ -35,7 +37,13 @@ interface JobResult {
   success?: boolean;
 }
 
-type JobStatus = "Queued" | "Running" | "Completed" | "Failed";
+type JobStatus =
+  | "Queued"
+  | "Running"
+  | "Completed"
+  | "Failed"
+  | "Cancelled"
+  | "Cancelling";
 
 const adjustTimeZone = (date: Date): Date => {
   const offset = date.getTimezoneOffset() * 60000; // offset in milliseconds
@@ -43,6 +51,11 @@ const adjustTimeZone = (date: Date): Date => {
 };
 
 class JobManager {
+  private emailService: EmailNotificationService;
+
+  constructor() {
+    this.emailService = EmailNotificationService.getInstance();
+  }
   //   ----------------------------
   async createJob(jobRequest: JobRequest): Promise<string> {
     const jobId = uuidv4();
@@ -67,6 +80,7 @@ class JobManager {
     return jobId;
   }
   //   ----------------------------
+
   async updateJobStatus(
     jobId: string,
     status: JobStatus,
@@ -74,21 +88,35 @@ class JobManager {
     totalFailures?: number,
     errorMessage?: string
   ): Promise<void> {
-    await DatabaseService.executeQuery(
-      `
-      UPDATE PriorityJobsHistory
-      SET Status = @Status, SuccessCount = @SuccessCount, FailureCount = @FailureCount, ErrorMessage = @ErrorMessage, EndTime = @EndTime
-      WHERE JobId = @JobId
-    `,
-      {
-        JobId: jobId,
-        Status: status,
-        SuccessCount: totalSuccess ?? 0,
-        FailureCount: totalFailures ?? 0,
-        ErrorMessage: errorMessage ?? null,
-        EndTime: adjustTimeZone(new Date()),
-      }
-    );
+    // עדכון זמן סיום רק כאשר העבודה מסתיימת
+    const isCompleted = status === "Completed" || status === "Failed";
+
+    let query = `
+    UPDATE PriorityJobsHistory 
+    SET Status = @Status, SuccessCount = @SuccessCount, FailureCount = @FailureCount, ErrorMessage = @ErrorMessage
+  `;
+
+    // הוסף את EndTime לשאילתה רק אם העבודה מסתיימת
+    if (isCompleted) {
+      query += `, EndTime = @EndTime`;
+    }
+
+    query += ` WHERE JobId = @JobId`;
+
+    const params: any = {
+      JobId: jobId,
+      Status: status,
+      SuccessCount: totalSuccess ?? 0,
+      FailureCount: totalFailures ?? 0,
+      ErrorMessage: errorMessage ?? null,
+    };
+
+    // הוסף פרמטר EndTime רק אם העבודה מסתיימת
+    if (isCompleted) {
+      params.EndTime = adjustTimeZone(new Date());
+    }
+
+    await DatabaseService.executeQuery(query, params);
   }
 
   //   ----------------------------
@@ -123,10 +151,17 @@ class JobManager {
       logErrors: logErrors,
     });
 
-    console.log(`Job ${jobId} starting at: ${adjustTimeZone(new Date())}`);
-
     // עדכון סטטוס העבודה ל-"מתבצעת"
     await this.updateJobStatus(jobId, "Running");
+
+    // שליחת התראה על תחילת ג'וב
+    await this.emailService.sendJobStartNotification({
+      jobId,
+      jobType: jobRequest.jobType,
+      tableName: jobRequest.tableName,
+      screenName: jobRequest.priorityScreenName,
+      totalRecords: jobRequest.recordCount,
+    });
 
     // קביעת סוג העיבוד (batch או queue)
     const processingType =
@@ -227,6 +262,45 @@ class JobManager {
       // Ensure all buffered errors are flushed before completing the job
       await ErrorBufferService.getInstance().flushAll();
 
+      //------------------
+      // Check if job was cancelled during execution
+      if (JobCancellationService.isCancellationRequested(jobId)) {
+        console.log(`Job ${jobId} was cancelled by user request - cleaning up`);
+
+        // Update job status to "Cancelled" (you'll need to add this status to your JobStatus type)
+        await this.updateJobStatus(
+          jobId,
+          "Cancelled",
+          results
+            ? results.reduce(
+                (acc: number, result: JobResult) =>
+                  acc +
+                  (typeof result.successCount === "number"
+                    ? result.successCount
+                    : 0),
+                0
+              )
+            : 0,
+          results
+            ? results.reduce(
+                (acc: number, result: JobResult) =>
+                  acc +
+                  (typeof result.failureCount === "number"
+                    ? result.failureCount
+                    : 0),
+                0
+              )
+            : 0,
+          "Job cancelled by user request"
+        );
+
+        // Clean up cancellation status
+        JobCancellationService.clearCancellationRequest(jobId);
+
+        return { cancelled: true, results };
+      }
+      //------------------
+
       // חישוב סטטיסטיקות הצלחה וכישלון
       const totalSuccess = results.reduce((acc: number, result: JobResult) => {
         // Use only explicit successCount and avoid fallback to result.success
@@ -247,6 +321,20 @@ class JobManager {
       // סיום המעקב אחר התקדמות העבודה
       ProgressTracker.completeJob(jobId, totalSuccess, totalFailures);
 
+      // שליחת התראה על סיום ג'וב
+      const jobDurationSec = ((Date.now() - jobStartTime) / 1000).toFixed(2);
+      await this.emailService.sendJobCompletionNotification({
+        jobId,
+        jobType: jobRequest.jobType,
+        tableName: jobRequest.tableName,
+        screenName: jobRequest.priorityScreenName,
+        totalRecords: jobRequest.recordCount,
+        successCount: totalSuccess,
+        failureCount: totalFailures,
+        status: "Completed",
+        duration: `${jobDurationSec} שניות`,
+      });
+
       // עדכון סטטוס העבודה ל-"הושלמה"
       await this.updateJobStatus(
         jobId,
@@ -257,8 +345,9 @@ class JobManager {
       );
 
       // הדפסת סטטיסטיקות ביצועים
-      const jobEndTime = Date.now();
-      const jobDurationSec = ((jobEndTime - jobStartTime) / 1000).toFixed(2);
+      // const jobEndTime = Date.now();
+      // const jobDurationSec = ((jobEndTime - jobStartTime) / 1000).toFixed(2);
+
       console.log(
         `Job ${jobId} completed in ${jobDurationSec} seconds. Results: Success: ${totalSuccess}, Failures: ${totalFailures}`
       );
@@ -284,6 +373,26 @@ class JobManager {
         error instanceof Error ? error.message : "Unknown error"
       );
 
+      // Clean up cancellation status even on error
+      if (JobCancellationService.isCancellationRequested(jobId)) {
+        JobCancellationService.clearCancellationRequest(jobId);
+      }
+
+      // שליחת התראה על כישלון ג'וב
+      const jobDurationSec = ((Date.now() - jobStartTime) / 1000).toFixed(2);
+      await this.emailService.sendJobCompletionNotification({
+        jobId,
+        jobType: jobRequest.jobType,
+        tableName: jobRequest.tableName,
+        screenName: jobRequest.priorityScreenName,
+        totalRecords: jobRequest.recordCount,
+        successCount: 0,
+        failureCount: jobRequest.recordCount,
+        status: "Failed",
+        duration: `${jobDurationSec} שניות`,
+        // בעתיד ניתן להוסיף את פרטי השגיאה כאן
+      });
+
       throw error;
     }
   }
@@ -296,7 +405,7 @@ class JobManager {
     logErrors: boolean = false
   ): Promise<any> {
     console.log(
-      `Job ${jobId} starting ${processingType} processing with error logging ${logErrors ? "enabled" : "disabled"}`
+      `Job ${jobId} starting ${processingType} processing with error logging: ${logErrors ? "enabled" : "disabled"}`
     );
 
     // אתחול מעקב התקדמות

@@ -1,4 +1,4 @@
-import { config } from "../config/config";
+import { configService } from "../config/configService"; // DB
 import { v4 as uuidv4 } from "uuid";
 import pLimit from "p-limit";
 import PerformanceMonitor from "../utils/performanceMonitor";
@@ -59,6 +59,7 @@ export async function sendParentChildBatch(
 ): Promise<BatchSendResult> {
   // יצירת מזהה ייחודי למנה
   const batchId = uuidv4();
+  const config = await configService.getConfig();
 
   // הגדרת מונה ביצועים
   const perfMonitor = new PerformanceMonitor();
@@ -97,7 +98,7 @@ export async function sendParentChildBatch(
     // יצירת כותרות HTTP עם אימות
     const headers = createBatchHeaders(
       boundary,
-      `Basic ${Buffer.from(`${config.priorityPAT}:${config.priorityPassword}`).toString("base64")}`
+      `Basic ${Buffer.from(`${config.PRIORITY_PAT}:${config.PRIORITY_PASSWORD}`).toString("base64")}`
     );
     perfMonitor.endBatchBuild();
 
@@ -236,7 +237,16 @@ export async function sendParentChildBatchesInParallel(
         logErrors
       );
       // console.log(`Completed batch ${index + 1}/${batches.length}`);
-      return result;
+      return {
+        ...result,
+        performanceMetrics: result.performanceMetrics || {
+          dbFetchTime: "0ms",
+          dbUpdateTime: "0ms",
+          batchBuildTime: "0ms",
+          requestTime: "0ms",
+          totalDuration: "0ms",
+        },
+      };
     })
   );
 

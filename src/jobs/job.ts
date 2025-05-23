@@ -23,6 +23,7 @@ import {
   measureResponsePerformance,
 } from "../services/requestSender";
 import { ErrorBufferService } from "../utils/errorBufferService";
+import { JobCancellationService } from "../utils/jobCancellationService";
 
 interface BatchCreateRowsResult {
   success: boolean;
@@ -299,32 +300,17 @@ async function processBatches(
 ): Promise<any[]> {
   const config = await configService.getConfig();
   const BATCH_SIZE = config.BATCH_SIZE;
-  const CONCURRENT_BATCHES = config.CONCURRENT_BATCHES;
-  const DELAY_BETWEEN_BATCHES = config.DELAY_BETWEEN_BATCHES;
-  const MIN_DELAY = config.MIN_DELAY || 100; // Minimum delay in milliseconds
-  const MAX_DELAY = config.MAX_DELAY || 500; // Maximum delay in milliseconds
+  const CONCURRENT_BATCHES = config.CONCURRENT_BATCHES || 30;
   const limit = pLimit(CONCURRENT_BATCHES);
+  console.log(`Using concurrency of ${CONCURRENT_BATCHES} batches`);
 
-  // Configure error buffer service with appropriate size based on configuration
+  // Configure error buffer service
   const errorBuffer = ErrorBufferService.getInstance();
   errorBuffer.configure({
-    flushSize: 1000, // או 2000 אם יש מספיק זיכרון
-    minFlushSize: 200, // אפשר להעלות גם ל-500
-    flushInterval: 30000, // 30 שניות
+    flushSize: 1000,
+    minFlushSize: 200,
+    flushInterval: 30000,
   });
-  // errorBuffer.configure({
-  //   flushSize: Math.max(5000, BATCH_SIZE * 10), // Appropriate buffer size based on batch size
-  //   flushInterval: 5000, // Flush at least every 5 seconds if not triggered by size
-  // });
-
-  // const memoryMonitor = setInterval(() => {
-  //   const memoryUsage = process.memoryUsage();
-  //   if (memoryUsage.heapUsed / memoryUsage.heapTotal > 0.9) {
-  //     // 90% memory usage
-  //     console.warn("Memory usage is high, consider reducing batch size");
-  //     // Optionally implement some throttling mechanism
-  //   }
-  // }, 10000); // Check every 10 seconds
 
   // Initialize progress tracking for this job
   ProgressTracker.initJob(jobId, recordCount);
@@ -342,9 +328,15 @@ async function processBatches(
 
   try {
     while (processedCount < recordCount) {
+      // Check for cancellation before processing each chunk
+      if (JobCancellationService.isCancellationRequested(jobId)) {
+        console.log(`Job ${jobId} cancelled - stopping processing`);
+        break;
+      }
+
       const chunkSize = Math.min(CHUNK_SIZE, recordCount - processedCount);
 
-      // Measure DB fetch time - Now properly measured for the chunk
+      // Measure DB fetch time
       const perfMonitor = new PerformanceMonitor();
       perfMonitor.startDbFetch();
 
@@ -352,16 +344,14 @@ async function processBatches(
       const rows = await fetchDataChunk(tableName, lastRowId, chunkSize);
       perfMonitor.endDbFetch();
 
-      // console.log(
-      //   `Fetched ${rows.length} rows from database in ${perfMonitor.metrics.dbFetchTime?.toFixed(2)}ms`
-      // );
-
       if (rows.length === 0) break;
 
+      // Create batch promises
       const batchPromises = [];
       for (let i = 0; i < rows.length; i += BATCH_SIZE) {
         const batch = rows.slice(i, i + BATCH_SIZE);
         const batchId = uuidv4();
+
         batchPromises.push(
           limit(() =>
             processBatch(
@@ -379,12 +369,24 @@ async function processBatches(
         );
       }
 
-      let currentDelay = DELAY_BETWEEN_BATCHES;
-      for (const batchPromise of batchPromises) {
-        try {
-          const startTime = Date.now();
-          const result = await batchPromise;
-          const processingTime = Date.now() - startTime;
+      // Process all batches concurrently
+      console.log(
+        `Processing ${batchPromises.length} batches with max concurrency of ${CONCURRENT_BATCHES}`
+      );
+      const startTime = Date.now();
+
+      try {
+        // Wait for all batches to complete in parallel (respecting the concurrency limit)
+        const batchResults = await Promise.all(batchPromises);
+        const totalProcessingTime = Date.now() - startTime;
+
+        // Process results after all batches complete
+        for (const result of batchResults) {
+          // Check for cancellation
+          if (JobCancellationService.isCancellationRequested(jobId)) {
+            console.log(`Job ${jobId} cancelled while processing results`);
+            break;
+          }
 
           // Store only essential information from the result
           results.push({
@@ -395,48 +397,20 @@ async function processBatches(
             duration: result.duration,
           });
 
-          // Update progress metrics after each batch completes
-          // if (result.success) {
-          //   totalProcessedRecords += result.rowsCount || 0;
-          //   totalSuccessCount += result.responseStats?.successCount || 0;
-          //   totalFailureCount += result.responseStats?.failureCount || 0;
-          // }
+          // Update progress metrics
           totalProcessedRecords += result.rowsCount || 0;
           totalSuccessCount += result.responseStats?.successCount || 0;
           totalFailureCount += result.responseStats?.failureCount || 0;
 
-          // Help garbage collector by clearing references to the full result
+          // Help garbage collector
           Object.keys(result).forEach((key) => {
             if (key !== "success" && key !== "error") {
               result[key] = null;
             }
           });
-
-          // Adjust delay based on processing time
-          if (processingTime > currentDelay) {
-            currentDelay = Math.min(currentDelay * 1.5, MAX_DELAY); // Slow down
-          } else if (processingTime < currentDelay / 2) {
-            currentDelay = Math.max(currentDelay * 0.8, MIN_DELAY); // Speed up
-          }
-        } catch (error) {
-          console.error("Batch processing failed:", error);
-          // Add the failed result with error details
-          const failedBatchSize = BATCH_SIZE;
-          results.push({
-            success: false,
-            error:
-              error instanceof Error ? error.message : "Unknown batch error",
-            rowsCount: failedBatchSize,
-          });
-
-          // Continue with next batch instead of failing the entire job
-          // totalFailureCount += BATCH_SIZE; // Estimate failure count
-          // Update both processedRecords and failures
-          totalProcessedRecords += failedBatchSize;
-          totalFailureCount += failedBatchSize;
         }
 
-        // Update progress tracker (moved outside try/catch to ensure it always runs)
+        // Update progress tracker once after processing all batches in this chunk
         ProgressTracker.updateProgress(
           jobId,
           totalProcessedRecords,
@@ -444,9 +418,15 @@ async function processBatches(
           totalFailureCount
         );
 
-        await new Promise((resolve) => setTimeout(resolve, currentDelay));
+        console.log(
+          `Processed ${batchResults.length} batches in ${totalProcessingTime}ms. Success: ${totalSuccessCount}, Failures: ${totalFailureCount}`
+        );
+      } catch (error) {
+        console.error("Error processing batch set:", error);
+        // Continue with the next chunk instead of failing the entire job
       }
 
+      // Update for next iteration
       lastRowId = (rows[rows.length - 1] as { RowId: number }).RowId;
       processedCount += rows.length;
 
@@ -474,5 +454,4 @@ async function processBatches(
     throw error;
   }
 }
-
 export { processBatch, processBatches };

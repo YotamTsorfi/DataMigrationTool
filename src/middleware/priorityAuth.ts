@@ -1,36 +1,46 @@
 import { Request, Response, NextFunction } from "express";
 import axios, { AxiosInstance } from "axios";
-import { config } from "../config/config";
-// import { url } from "inspector";
+import { configService } from "../config/configService"; // DB
 
 // set up global namespace for Express Request
-declare global {
-  namespace Express {
-    interface Request {
-      priorityAxios?: AxiosInstance;
-      priorityBatchAxios?: AxiosInstance;
-    }
+// Module augmentation instead of namespace
+declare module "express" {
+  interface Request {
+    priorityAxios?: AxiosInstance;
+    priorityBatchAxios?: AxiosInstance;
   }
 }
 
-export function priorityAuthMiddleware(
+export async function priorityAuthMiddleware(
   req: Request,
   res: Response,
   next: NextFunction
 ) {
   try {
+    // Get configuration from database instead of environment variables
+    const config = await configService.getConfig();
+
+    // Check if the base URL ends with a slash and the screen name starts with one
+    let baseUrl = config.PRIORITY_BASE_URL;
+    if (!baseUrl.endsWith("/")) baseUrl += "/";
+    let company = config.PRIORITY_COMPANY;
+    if (company.endsWith("/")) company = company.slice(0, -1);
+
+    // Construct the full URL for the request
+    const url = `${baseUrl}${company}`;
+
     const priorityAxios = axios.create({
-      baseURL: config.priorityDEVBaseUrl,
+      baseURL: url,
       auth: {
-        username: config.priorityPAT,
-        password: config.priorityPassword,
+        username: config.PRIORITY_PAT,
+        password: config.PRIORITY_PASSWORD,
       },
       headers: {
         "Content-Type": "application/json",
         "OData-Version": "4.0",
         Accept: "application/json",
       },
-      timeout: 120000, // 60 seconds
+      timeout: config.TIME_OUT,
       proxy: false,
       maxRedirects: 5,
       validateStatus: function (status) {
@@ -39,16 +49,16 @@ export function priorityAuthMiddleware(
     });
 
     const priorityBatchAxios = axios.create({
-      baseURL: config.priorityDEVBaseUrl.replace(/\/$/, ""), // remove trailing slash
+      baseURL: url,
       auth: {
-        username: config.priorityPAT,
-        password: config.priorityPassword,
+        username: config.PRIORITY_PAT,
+        password: config.PRIORITY_PASSWORD,
       },
       headers: {
         "Content-Type": "multipart/mixed",
         "OData-Version": "4.0",
       },
-      timeout: 120000,
+      timeout: config.TIME_OUT,
     });
 
     // add interceptors for request logging
@@ -75,7 +85,6 @@ export function priorityAuthMiddleware(
           console.log("Priority Axios Response:", {
             status: response.status,
             url: response.config.url,
-            // data: response.data
           });
           return response;
         },

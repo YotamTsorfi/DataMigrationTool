@@ -54,6 +54,7 @@ interface QueueItemResponse {
   success: boolean;
   status: number;
   error?: string;
+  errorData?: any;
   data?: any;
   row: any;
 }
@@ -220,16 +221,35 @@ export class QueueProcessor {
           typeof response.data === "object" &&
           item.priorityIdField
         ) {
-          // If direct field is available at the top level
-          if (response.data[item.priorityIdField]) {
-            priorityId = response.data[item.priorityIdField].toString();
-          }
-          // For batch responses that might have nested structure
-          else if (
-            response.data.body &&
-            response.data.body[item.priorityIdField]
-          ) {
-            priorityId = response.data.body[item.priorityIdField].toString();
+          try {
+            // If direct field is available at the top level
+            if (response.data[item.priorityIdField] !== undefined) {
+              const idValue = response.data[item.priorityIdField];
+              priorityId =
+                idValue !== null && idValue !== undefined
+                  ? String(idValue)
+                  : null;
+            }
+            // For batch responses that might have nested structure
+            else if (
+              response.data.body &&
+              response.data.body[item.priorityIdField] !== undefined
+            ) {
+              const idValue = response.data.body[item.priorityIdField];
+              priorityId =
+                idValue !== null && idValue !== undefined
+                  ? String(idValue)
+                  : null;
+            }
+          } catch (err) {
+            if (err && typeof err === "object" && "message" in err) {
+              console.warn(
+                `Error extracting priority_id: ${(err as any).message}`
+              );
+            } else {
+              console.warn(`Error extracting priority_id:`, err);
+            }
+            priorityId = null;
           }
         }
 
@@ -248,7 +268,8 @@ export class QueueProcessor {
         // Update the error rows with a cleaned error message
         const cleanErrorMessage = this.formatErrorMessage(
           response.error || "",
-          response.status
+          response.status,
+          response.errorData
         );
 
         this.updateRows.push({
@@ -284,14 +305,17 @@ export class QueueProcessor {
       console.error(`Error processing item in queue ${this.queueId}:`, error);
       this.failureCount++;
 
+      // Also extract errorData from caught errors
+      const errorData = axios.isAxiosError(error) ? error.response?.data : null;
+      const errorMessage = this.formatErrorMessage(
+        error instanceof Error ? error.message : "Unknown error",
+        axios.isAxiosError(error) ? error.response?.status || 0 : 0,
+        errorData // Add this parameter
+      );
+
       if (this.progressListener) {
         this.progressListener(this.successCount, this.failureCount);
       }
-
-      const errorMessage = this.formatErrorMessage(
-        error instanceof Error ? error.message : "Unknown error",
-        0
-      );
 
       this.updateRows.push({
         RowId: item.row.RowId,
@@ -316,8 +340,97 @@ export class QueueProcessor {
   }
   //------------------------------------------------------
   // Format error message to be more user friendly
-  private formatErrorMessage(errorMessage: string, status: number): string {
-    // Check for specific error messages
+  private formatErrorMessage(
+    errorMessage: string,
+    status: number,
+    errorData?: any
+  ): string {
+    // First check if we have errorData to extract detailed messages from
+    if (errorData) {
+      // Handle Priority's XML/FORM format (most common business validation errors)
+      if (errorData.FORM?.InterfaceErrors?.text) {
+        return errorData.FORM.InterfaceErrors.text;
+      }
+
+      // Handle alternative XML structure
+      if (errorData["?xml"] && errorData.FORM) {
+        // Handle the format exactly as shown in the example
+        if (
+          errorData.FORM.InterfaceErrors?.["@XmlFormat"] === "0" &&
+          errorData.FORM.InterfaceErrors?.text
+        ) {
+          return errorData.FORM.InterfaceErrors.text;
+        }
+
+        if (typeof errorData.FORM.InterfaceErrors === "string") {
+          return errorData.FORM.InterfaceErrors;
+        }
+
+        if (errorData.FORM.InterfaceErrors?.["#text"]) {
+          return errorData.FORM.InterfaceErrors["#text"];
+        }
+      }
+      // Handle common error message patterns
+      if (errorData.error?.message) {
+        return errorData.error.message;
+      }
+
+      if (errorData.message) {
+        return errorData.message;
+      }
+
+      // Handle OData format errors
+      if (errorData["odata.error"]?.message?.value) {
+        return errorData["odata.error"].message.value;
+      }
+
+      // Try to find any error messages in nested objects
+      if (errorData.error?.innererror?.message) {
+        return errorData.error.innererror.message;
+      }
+
+      // If errorData is a simple string
+      if (typeof errorData === "string") {
+        return errorData;
+      }
+
+      // If it's an object, try to extract something useful
+      try {
+        if (typeof errorData === "object" && errorData !== null) {
+          const stringified = JSON.stringify(errorData);
+          if (stringified && stringified !== "{}" && stringified !== "[]") {
+            return stringified;
+          }
+        }
+      } catch (e) {
+        // Ignore stringify errors and continue
+      }
+    }
+
+    // Try to parse error message as JSON to extract more details
+    try {
+      const jsonStartIndex = errorMessage.indexOf("{");
+      if (jsonStartIndex >= 0) {
+        const errorJson = errorMessage.substring(jsonStartIndex);
+        const errorObj = JSON.parse(errorJson);
+
+        // Check for common error message patterns in parsed JSON
+        if (errorObj.FORM?.InterfaceErrors?.text) {
+          return errorObj.FORM.InterfaceErrors.text;
+        }
+
+        const detailedMessage =
+          errorObj.error?.message || errorObj.message || errorObj.error || null;
+
+        if (detailedMessage && typeof detailedMessage === "string") {
+          return detailedMessage;
+        }
+      }
+    } catch (parseError) {
+      // Silent fail and continue
+    }
+
+    // Check for 409 Conflict (this is a special case worth keeping)
     if (
       status === 409 ||
       (errorMessage && errorMessage.includes("status code 409"))
@@ -325,64 +438,17 @@ export class QueueProcessor {
       return "Conflict: A record with the specified key already exists";
     }
 
-    // Check if the error message contains a status code in a known format
-    const statusMatch = errorMessage.match(/status code (\d+)/);
-    if (statusMatch) {
-      const statusCode = parseInt(statusMatch[1], 10);
-
-      // Handle specific status codes with custom messages
-      switch (statusCode) {
-        case 400:
-          return "Bad Request: The request is malformed or contains invalid data";
-        case 401:
-          return "Unauthorized: Authentication is required or has failed";
-        case 403:
-          return "Forbidden: The server understood the request but refuses to authorize it";
-        case 404:
-          return "Not Found: The requested resource was not found";
-        case 429:
-          return "Too Many Requests: Rate limit exceeded, please retry later";
-        case 500:
-          return "Server Error: An internal server error occurred";
-        case 503:
-          return "Service Unavailable: The server is currently unable to handle the request";
-        default:
-          return `Error ${statusCode}: An error occurred while processing the request`;
-      }
-    }
-
-    // Try to parse the error message as JSON to extract more details
-    try {
-      const jsonStartIndex = errorMessage.indexOf("{");
-      if (jsonStartIndex >= 0) {
-        const errorJson = errorMessage.substring(jsonStartIndex);
-        const errorObj = JSON.parse(errorJson);
-
-        // Extract detailed error message from the parsed JSON
-        const detailedMessage =
-          errorObj?.error?.message ||
-          errorObj?.message ||
-          errorObj?.error ||
-          null;
-
-        if (detailedMessage && typeof detailedMessage === "string") {
-          return detailedMessage;
-        }
-      }
-    } catch (parseError) {
-      console.error("Failed to parse error message as JSON:", parseError);
-    }
-
-    // If the error message contains a URL, clean it
+    // Clean up URLs from error messages
     if (errorMessage.includes("http")) {
       const urlRegex = /(https?:\/\/[^\s)]+)/g;
       errorMessage = errorMessage.replace(urlRegex, "[API_URL]");
     }
 
-    // Remove common error prefixes and clean up the message
+    // Clean error message of common prefixes
     const cleanedError = errorMessage
       .replace(/ERR_BAD_REQUEST:?\s*/i, "")
-      .replace(/Request failed with/i, "Error:");
+      .replace(/Request failed with/i, "")
+      .trim();
 
     return cleanedError || "Unknown error occurred";
   }
@@ -439,7 +505,11 @@ export class QueueProcessor {
       } catch (error: any) {
         retryCount++;
         const errorMessage = formatAxiosError(error);
-        // let errorStatus = error.response?.status || 500;
+
+        // Extract the full error response data
+        const errorData = axios.isAxiosError(error)
+          ? error.response?.data
+          : null;
 
         // Handle rate limiting (HTTP 429)
         if (axios.isAxiosError(error) && error.response?.status === 429) {
@@ -475,6 +545,7 @@ export class QueueProcessor {
             success: false,
             status: error.response?.status || 0,
             error: errorMessage,
+            errorData: errorData, // Include the full response data
             row: item.row,
           };
         }
