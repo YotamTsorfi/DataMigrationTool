@@ -10,21 +10,17 @@ import { formatAxiosError } from "../utils/errorHandler";
 import { recordBatchProcessing } from "./dataService";
 
 const httpAgent = new http.Agent({
-  keepAlive: true,
-  maxSockets: 4000, // הגדלה משמעותית לתמיכה ב-40 תורים × עד 100 בקשות במקביל
-  keepAliveMsecs: 30000,
-  timeout: 240000, // 4 דקות - חשוב למנוע "תקיעת" חיבורים
-  maxFreeSockets: 1000, // שימור חיבורים פנויים לשימוש חוזר מהיר
-  scheduling: "fifo", // סדר השימוש בחיבורים
+  keepAlive: true, // Enable connection pooling
+  keepAliveMsecs: 1000, // Keep connections alive for 1 second
+  maxSockets: Infinity,
+  timeout: 240000,
 });
 
 const httpsAgent = new https.Agent({
-  keepAlive: true,
-  maxSockets: 4000, // זהה לhttpAgent
-  keepAliveMsecs: 30000,
+  keepAlive: true, // Enable connection pooling
+  keepAliveMsecs: 1000, // Keep connections alive for 1 second
+  maxSockets: Infinity,
   timeout: 240000,
-  maxFreeSockets: 1000,
-  scheduling: "fifo",
 });
 
 // Interface for queue items
@@ -92,6 +88,16 @@ export class QueueProcessor {
     this.performanceMonitor.startOperation();
   }
 
+  public addItem(item: QueueItem): void {
+    this.queue.push(item);
+  }
+
+  // Set custom concurrency for this queue
+  private concurrencyLimit = 100; // default
+  public setConcurrency(limit: number): void {
+    this.concurrencyLimit = limit;
+  }
+
   // Get the number of items in the queue
   public hasItems(): boolean {
     return this.queue.length > 0;
@@ -116,10 +122,9 @@ export class QueueProcessor {
     this.minDelay = parseInt(systemConfig.QUEUE_MIN_DELAY || "30", 10); // בסיס 10 - דצימלי
 
     // Number of items to process concurrently
-    const QUEUE_CONCURRENT_ITEMS = parseInt(
-      systemConfig.QUEUE_CONCURRENT_ITEMS || "1000",
-      10
-    );
+    const QUEUE_CONCURRENT_ITEMS =
+      this.concurrencyLimit ||
+      parseInt(systemConfig.QUEUE_CONCURRENT_ITEMS || "500", 10);
     const startTime = Date.now();
     const batchId = uuidv4();
 
@@ -147,7 +152,7 @@ export class QueueProcessor {
         await Promise.all(batchPromises);
 
         // רק השהיה אחת בין אצוות, לא בין כל פריט
-        //await this.applyRateLimit();
+        await this.applyRateLimit();
 
         // עדכן progress אחרי כל אצווה
         this.updateProgress();
@@ -457,6 +462,11 @@ export class QueueProcessor {
   //------------------------------------------------------
   // Send a request to the Priority API for a single item
   private async sendRequest(item: QueueItem): Promise<QueueItemResponse> {
+    // const requestStartTime = Date.now();
+    // console.log(
+    //   `[${this.queueId}] Starting request #${this.successCount + this.failureCount + 1}`
+    // );
+
     const maxRetries = 3;
     let retryCount = 0;
     const config = await configService.getConfig();
@@ -498,6 +508,9 @@ export class QueueProcessor {
           httpsAgent,
         });
 
+        // console.log(
+        //   `[${this.queueId}] Completed request in ${Date.now() - requestStartTime}ms`
+        // );
         return {
           success: true,
           status: response.status,
@@ -563,6 +576,16 @@ export class QueueProcessor {
   }
   //------------------------------------------------------
   // Apply rate limiting between requests
+  private async applyRateLimit(): Promise<void> {
+    // Skip rate limiting for small batches
+    if (this.queue.length < 500) {
+      return; // No delay for small queues
+    }
+
+    // Use a much smaller delay for large queues
+    const delay = Math.max(5, Math.min(this.minDelay, 10));
+    await new Promise((resolve) => setTimeout(resolve, delay));
+  }
   // private async applyRateLimit(): Promise<void> {
   //   const queueLength = this.queue.length;
   //   // אם נשארו מעט פריטים בתור או שקצב השליחה נמוך, לא צריך להמתין

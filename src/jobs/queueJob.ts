@@ -38,7 +38,7 @@ export async function processWithQueues(
 
   // Set horizontal batch size from configuration or use default
   const HORIZONTAL_BATCH_SIZE = parseInt(
-    config.HORIZONTAL_BATCH_SIZE || "20",
+    config.HORIZONTAL_BATCH_SIZE || "40",
     10
   );
   // Set vertical batch size from configuration or use default
@@ -50,7 +50,7 @@ export async function processWithQueues(
   // TODO - Check CHUNK_SIZE
   // Set chunk size for processing
   // This is the number of rows to process in each database fetch operation
-  const CHUNK_SIZE = 2000;
+  const CHUNK_SIZE = 5000;
 
   // Initialize progress tracking for this job
   ProgressTracker.initJob(jobId, recordCount);
@@ -342,9 +342,9 @@ async function performDatabaseUpdatesAsync(
           } else {
             // הסרת תווים בעייתיים ובדיקת תקינות
             const sanitized = strValue
-              .replace(/[\x00-\x1F\x7F-\x9F]/g, "") // הסרת תווי בקרה
+              .replace(/\p{C}/gu, "") // הסרת תווי בקרה (כלליים, כולל Unicode)
               .replace(/[\\"']/g, "") // הסרת תווים מיוחדים
-              .substring(0, 50); // קיצוץ לאורך מקסימלי
+              .substring(0, 50);
             row.priority_id = sanitized || null;
 
             // וידוא שהערך עדיין תקין אחרי הניקוי
