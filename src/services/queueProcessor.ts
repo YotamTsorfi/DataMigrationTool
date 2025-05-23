@@ -117,7 +117,7 @@ export class QueueProcessor {
 
     // Number of items to process concurrently
     const QUEUE_CONCURRENT_ITEMS = parseInt(
-      systemConfig.QUEUE_CONCURRENT_ITEMS || "40",
+      systemConfig.QUEUE_CONCURRENT_ITEMS || "1000",
       10
     );
     const startTime = Date.now();
@@ -147,7 +147,7 @@ export class QueueProcessor {
         await Promise.all(batchPromises);
 
         // רק השהיה אחת בין אצוות, לא בין כל פריט
-        await this.applyRateLimit();
+        //await this.applyRateLimit();
 
         // עדכן progress אחרי כל אצווה
         this.updateProgress();
@@ -458,7 +458,7 @@ export class QueueProcessor {
     const maxRetries = 3;
     let retryCount = 0;
     const config = await configService.getConfig();
-    const timeout = config.TIME_OUT || 180000;
+    const timeout = config.TIME_OUT || 240000;
 
     // Instead of preparing the data, we send it as is
     // just remove internal fields from the object
@@ -561,16 +561,16 @@ export class QueueProcessor {
   }
   //------------------------------------------------------
   // Apply rate limiting between requests
-  private async applyRateLimit(): Promise<void> {
-    const queueLength = this.queue.length;
-    // אם נשארו מעט פריטים בתור או שקצב השליחה נמוך, לא צריך להמתין
-    if (queueLength < 10 && this.successCount + this.failureCount < 100) {
-      return; // דילוג על ההשהייה כשאין עומס
-    }
+  // private async applyRateLimit(): Promise<void> {
+  //   const queueLength = this.queue.length;
+  //   // אם נשארו מעט פריטים בתור או שקצב השליחה נמוך, לא צריך להמתין
+  //   if (queueLength < 10 && this.successCount + this.failureCount < 100) {
+  //     return; // דילוג על ההשהייה כשאין עומס
+  //   }
 
-    const delay = Math.max(1000 / this.rateLimit, this.minDelay);
-    await new Promise((resolve) => setTimeout(resolve, delay));
-  }
+  //   const delay = Math.max(1000 / this.rateLimit, this.minDelay);
+  //   await new Promise((resolve) => setTimeout(resolve, delay));
+  // }
   // private async applyRateLimit(): Promise<void> {
   //   const delay = Math.max(1000 / this.rateLimit, this.minDelay);
   //   await new Promise((resolve) => setTimeout(resolve, delay));

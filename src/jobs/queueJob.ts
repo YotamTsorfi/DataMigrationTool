@@ -38,15 +38,19 @@ export async function processWithQueues(
 
   // Set horizontal batch size from configuration or use default
   const HORIZONTAL_BATCH_SIZE = parseInt(
-    config.HORIZONTAL_BATCH_SIZE || "10",
+    config.HORIZONTAL_BATCH_SIZE || "20",
     10
   );
   // Set vertical batch size from configuration or use default
-  const VERTICAL_BATCH_SIZE = parseInt(config.VERTICAL_BATCH_SIZE || "5", 10);
+  const VERTICAL_BATCH_SIZE = parseInt(
+    config.VERTICAL_BATCH_SIZE || "1000",
+    10
+  );
 
+  // TODO - Check CHUNK_SIZE
   // Set chunk size for processing
   // This is the number of rows to process in each database fetch operation
-  const CHUNK_SIZE = 1000;
+  const CHUNK_SIZE = 7000;
 
   // Initialize progress tracking for this job
   ProgressTracker.initJob(jobId, recordCount);
@@ -236,7 +240,8 @@ export async function processWithQueues(
 }
 
 // Process queue results by updating the database and inserting error logs
-async function processQueueResults(
+// Process queue results by updating the database and inserting error logs
+function processQueueResults(
   resultData: {
     updateRows: any[];
     errorRows: any[];
@@ -247,197 +252,241 @@ async function processQueueResults(
   tableName: string,
   logErrors: boolean
 ): Promise<void> {
+  // Start a performance monitor for metrics
   const perfMonitor = new PerformanceMonitor();
   perfMonitor.startOperation();
 
-  // 1. נשמור את מבנה הטבלה בתחילת הפונקציה במקום לשאול שוב ושוב
-  let tableColumns;
-  const availableColumns = new Set();
-  let errorColumn: string | null = null;
-  let hasPriorityId = false;
+  // Start database operations in the background but don't wait for them
+  performDatabaseUpdatesAsync(resultData, tableName, logErrors, perfMonitor);
 
+  // Return immediately without awaiting database operations
+  return Promise.resolve();
+}
+
+// Background database update function that runs independently
+async function performDatabaseUpdatesAsync(
+  resultData: {
+    updateRows: any[];
+    errorRows: any[];
+    successCount: number;
+    failureCount: number;
+    lastProcessedIndex: number;
+  },
+  tableName: string,
+  logErrors: boolean,
+  perfMonitor: PerformanceMonitor
+): Promise<void> {
   try {
-    // בדיקת מבנה טבלה - פעם אחת בלבד
-    tableColumns = await DatabaseService.executeQuery(
-      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tableName`,
-      { tableName }
-    );
+    // 1. נשמור את מבנה הטבלה בתחילת הפונקציה במקום לשאול שוב ושוב
+    let tableColumns;
+    const availableColumns = new Set();
+    let errorColumn: string | null = null;
+    let hasPriorityId = false;
 
-    // יצירת מפת שמות עמודות לחיפוש מהיר
-    tableColumns.forEach((col: any) => {
-      availableColumns.add(col.COLUMN_NAME);
-    });
+    try {
+      // בדיקת מבנה טבלה - פעם אחת בלבד
+      tableColumns = await DatabaseService.executeQuery(
+        `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tableName`,
+        { tableName }
+      );
 
-    // בדיקה אם קיימת עמודת הודעת שגיאה ומה שמה
-    errorColumn = availableColumns.has("ErrorMessage")
-      ? "ErrorMessage"
-      : availableColumns.has("Error")
-        ? "Error"
-        : null;
+      // יצירת מפת שמות עמודות לחיפוש מהיר
+      tableColumns.forEach((col: any) => {
+        availableColumns.add(col.COLUMN_NAME);
+      });
 
-    hasPriorityId = availableColumns.has("priority_id");
-  } catch (error) {
-    console.error(`Error fetching table structure for ${tableName}:`, error);
-    // אפילו אם נכשלנו בשליפת מבנה הטבלה, ננסה להמשיך עם ברירות מחדל סבירות
-    errorColumn = "ErrorMessage"; // ברירת מחדל סבירה
-  }
+      // בדיקה אם קיימת עמודת הודעת שגיאה ומה שמה
+      errorColumn = availableColumns.has("ErrorMessage")
+        ? "ErrorMessage"
+        : availableColumns.has("Error")
+          ? "Error"
+          : null;
 
-  // 2. עדכון במסה עם טיפול בשגיאות משופר
-  const MAX_BULK_RETRIES = 3;
-  let bulkUpdateSuccessful = false;
-  let bulkRetryCount = 0;
-
-  // קיצוץ הודעות שגיאה ארוכות מדי
-  resultData.updateRows.forEach((row) => {
-    // Sanitize ErrorMessage
-    if (row.ErrorMessage && row.ErrorMessage.length > 3800) {
-      row.ErrorMessage = row.ErrorMessage.substring(0, 3800);
+      hasPriorityId = availableColumns.has("priority_id");
+    } catch (error) {
+      console.error(`Error fetching table structure for ${tableName}:`, error);
+      // אפילו אם נכשלנו בשליפת מבנה הטבלה, ננסה להמשיך עם ברירות מחדל סבירות
+      errorColumn = "ErrorMessage"; // ברירת מחדל סבירה
     }
 
-    // Sanitize priority_id - ensure it's always a valid string or null
-    if (row.priority_id !== null && row.priority_id !== undefined) {
-      try {
-        // Ensure it's a valid string
-        row.priority_id = String(row.priority_id);
+    // 2. עדכון במסה עם טיפול בשגיאות משופר
+    const MAX_BULK_RETRIES = 3;
+    let bulkUpdateSuccessful = false;
+    let bulkRetryCount = 0;
 
-        // Truncate if too long for SQL nvarchar(50)
-        if (row.priority_id.length > 50) {
-          row.priority_id = row.priority_id.substring(0, 50);
+    resultData.updateRows.forEach((row) => {
+      // Sanitize ErrorMessage
+      if (row.ErrorMessage && row.ErrorMessage.length > 3800) {
+        row.ErrorMessage = row.ErrorMessage.substring(0, 3800);
+      }
+
+      // טיפול מחמיר יותר ב-priority_id
+      try {
+        if (
+          row.priority_id === undefined ||
+          row.priority_id === null ||
+          row.priority_id === "" ||
+          typeof row.priority_id !== "string"
+        ) {
+          // console.log(`RowId ${row.RowId} priority_id:`, {
+          //   value: row.priority_id,
+          //   type: typeof row.priority_id,
+          //   length: row.priority_id?.length ?? 0,
+          // });
+          row.priority_id = null;
+        } else {
+          // המרה לstring ובדיקה שהערך תקין
+          const strValue = String(row.priority_id).trim();
+          if (!strValue) {
+            row.priority_id = null;
+          } else {
+            // הסרת תווים בעייתיים ובדיקת תקינות
+            const sanitized = strValue
+              .replace(/[\x00-\x1F\x7F-\x9F]/g, "") // הסרת תווי בקרה
+              .replace(/[\\"']/g, "") // הסרת תווים מיוחדים
+              .substring(0, 50); // קיצוץ לאורך מקסימלי
+            row.priority_id = sanitized || null;
+
+            // וידוא שהערך עדיין תקין אחרי הניקוי
+            if (!sanitized || sanitized.length === 0) {
+              row.priority_id = null;
+            } else {
+              row.priority_id = sanitized;
+            }
+          }
         }
       } catch (e) {
-        const errorMsg =
-          e && typeof e === "object" && "message" in e
-            ? (e as any).message
-            : String(e);
-        console.warn(
-          `Invalid priority_id value for RowId ${row.RowId}: ${errorMsg}`
+        console.error(
+          `Failed to sanitize priority_id for RowId ${row.RowId}:`,
+          e
         );
         row.priority_id = null;
       }
-    } else {
-      row.priority_id = null; // Explicitly set null for undefined values
-    }
-  });
+    });
 
-  while (!bulkUpdateSuccessful && bulkRetryCount < MAX_BULK_RETRIES) {
-    try {
-      await performBulkUpdateWithService(
-        tableName,
-        resultData.updateRows,
-        perfMonitor,
-        1000,
-        3,
-        true
-      );
-      bulkUpdateSuccessful = true;
-    } catch (error) {
-      bulkRetryCount++;
-      console.error(
-        `Bulk update attempt ${bulkRetryCount}/${MAX_BULK_RETRIES} failed:`,
-        error
-      );
-
-      if (bulkRetryCount < MAX_BULK_RETRIES) {
-        // המתנה הדרגתית בין ניסיונות
-        console.log(`Waiting before retry ${bulkRetryCount}...`);
-        await new Promise((resolve) =>
-          setTimeout(resolve, 1000 * bulkRetryCount)
+    while (!bulkUpdateSuccessful && bulkRetryCount < MAX_BULK_RETRIES) {
+      try {
+        await performBulkUpdateWithService(
+          tableName,
+          resultData.updateRows,
+          perfMonitor,
+          1000,
+          3,
+          true
         );
-      }
-    }
-  }
+        bulkUpdateSuccessful = true;
+      } catch (error) {
+        bulkRetryCount++;
+        console.error(
+          `Bulk update attempt ${bulkRetryCount}/${MAX_BULK_RETRIES} failed:`,
+          error
+        );
 
-  // 3. אם העדכון במסה נכשל, ננסה עדכונים בודדים עם ניסיונות חוזרים
-  if (!bulkUpdateSuccessful) {
-    console.warn(
-      `Bulk update failed after ${MAX_BULK_RETRIES} attempts, trying individual updates...`
-    );
-
-    // שמירת רשימת מזהי השורות שעודכנו בהצלחה כדי למנוע כפילויות
-    const successfullyUpdatedRowIds = new Set<number>();
-
-    // עיבוד כל השורות בנפרד
-    for (const row of resultData.updateRows) {
-      if (!row.RowId || successfullyUpdatedRowIds.has(row.RowId)) continue;
-
-      const MAX_INDIVIDUAL_RETRIES = 2;
-      let individualRetryCount = 0;
-      let individualUpdateSuccess = false;
-
-      while (
-        !individualUpdateSuccess &&
-        individualRetryCount < MAX_INDIVIDUAL_RETRIES
-      ) {
-        try {
-          let query = `
-            UPDATE ${tableName}
-            SET Status = @Status, 
-                BatchId = @BatchId, 
-                JobName = @JobName`;
-
-          if (errorColumn) {
-            query += `, ${errorColumn} = @ErrorValue`;
-          }
-
-          if (hasPriorityId && row.priority_id != null) {
-            query += `, priority_id = @PriorityId`;
-          }
-
-          query += ` WHERE RowId = @RowId`;
-
-          const params: any = {
-            Status: row.Status,
-            BatchId: row.BatchId,
-            JobName: row.JobName,
-            RowId: row.RowId,
-          };
-
-          if (errorColumn) {
-            const errorValue = row.ErrorMessage || row.Error || null;
-            params.ErrorValue =
-              errorValue && errorValue.length > 3800
-                ? errorValue.substring(0, 3800)
-                : errorValue;
-          }
-
-          if (hasPriorityId && row.priority_id != null) {
-            params.PriorityId = row.priority_id;
-          }
-
-          await DatabaseService.executeQuery(query, params);
-          individualUpdateSuccess = true;
-          successfullyUpdatedRowIds.add(row.RowId);
-        } catch (innerError) {
-          individualRetryCount++;
-          console.error(
-            `Individual update attempt ${individualRetryCount}/${MAX_INDIVIDUAL_RETRIES} for row ${row.RowId} failed:`,
-            innerError
+        if (bulkRetryCount < MAX_BULK_RETRIES) {
+          // המתנה הדרגתית בין ניסיונות
+          console.log(`Waiting before retry ${bulkRetryCount}...`);
+          await new Promise((resolve) =>
+            setTimeout(resolve, 1000 * bulkRetryCount)
           );
-
-          if (individualRetryCount < MAX_INDIVIDUAL_RETRIES) {
-            await new Promise((resolve) =>
-              setTimeout(resolve, 500 * individualRetryCount)
-            );
-          }
         }
       }
+    }
 
-      if (!individualUpdateSuccess) {
-        console.error(
-          `Failed to update row ${row.RowId} after ${MAX_INDIVIDUAL_RETRIES} attempts`
-        );
+    // 3. אם העדכון במסה נכשל, ננסה עדכונים בודדים עם ניסיונות חוזרים
+    if (!bulkUpdateSuccessful) {
+      console.warn(
+        `Bulk update failed after ${MAX_BULK_RETRIES} attempts, trying individual updates...`
+      );
+
+      // שמירת רשימת מזהי השורות שעודכנו בהצלחה כדי למנוע כפילויות
+      const successfullyUpdatedRowIds = new Set<number>();
+
+      // עיבוד כל השורות בנפרד
+      for (const row of resultData.updateRows) {
+        if (!row.RowId || successfullyUpdatedRowIds.has(row.RowId)) continue;
+
+        const MAX_INDIVIDUAL_RETRIES = 2;
+        let individualRetryCount = 0;
+        let individualUpdateSuccess = false;
+
+        while (
+          !individualUpdateSuccess &&
+          individualRetryCount < MAX_INDIVIDUAL_RETRIES
+        ) {
+          try {
+            let query = `
+              UPDATE ${tableName}
+              SET Status = @Status, 
+                  BatchId = @BatchId, 
+                  JobName = @JobName`;
+
+            if (errorColumn) {
+              query += `, ${errorColumn} = @ErrorValue`;
+            }
+
+            if (hasPriorityId && row.priority_id != null) {
+              query += `, priority_id = @PriorityId`;
+            }
+
+            query += ` WHERE RowId = @RowId`;
+
+            const params: any = {
+              Status: row.Status,
+              BatchId: row.BatchId,
+              JobName: row.JobName,
+              RowId: row.RowId,
+            };
+
+            if (errorColumn) {
+              const errorValue = row.ErrorMessage || row.Error || null;
+              params.ErrorValue =
+                errorValue && errorValue.length > 3800
+                  ? errorValue.substring(0, 3800)
+                  : errorValue;
+            }
+
+            if (hasPriorityId && row.priority_id != null) {
+              params.PriorityId = row.priority_id;
+            }
+
+            await DatabaseService.executeQuery(query, params);
+            individualUpdateSuccess = true;
+            successfullyUpdatedRowIds.add(row.RowId);
+          } catch (innerError) {
+            individualRetryCount++;
+            console.error(
+              `Individual update attempt ${individualRetryCount}/${MAX_INDIVIDUAL_RETRIES} for row ${row.RowId} failed:`,
+              innerError
+            );
+
+            if (individualRetryCount < MAX_INDIVIDUAL_RETRIES) {
+              await new Promise((resolve) =>
+                setTimeout(resolve, 500 * individualRetryCount)
+              );
+            }
+          }
+        }
+
+        if (!individualUpdateSuccess) {
+          console.error(
+            `Failed to update row ${row.RowId} after ${MAX_INDIVIDUAL_RETRIES} attempts`
+          );
+        }
       }
     }
-  }
 
-  // 4. רישום לוג שגיאות
-  if (resultData.errorRows.length > 0 && logErrors) {
-    try {
-      ErrorBufferService.getInstance().addErrors(resultData.errorRows);
-    } catch (error) {
-      console.error("Error buffering error logs:", error);
+    // 4. רישום לוג שגיאות
+    if (resultData.errorRows.length > 0 && logErrors) {
+      try {
+        ErrorBufferService.getInstance().addErrors(resultData.errorRows);
+      } catch (error) {
+        console.error("Error buffering error logs:", error);
+      }
     }
+  } catch (error) {
+    console.error("Unhandled error during async database update:", error);
+  } finally {
+    // Always end the performance monitor operation
+    perfMonitor.endOperation();
   }
-
-  perfMonitor.endOperation();
 }
