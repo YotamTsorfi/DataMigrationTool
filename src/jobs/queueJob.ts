@@ -50,7 +50,7 @@ export async function processWithQueues(
   // TODO - Check CHUNK_SIZE
   // Set chunk size for processing
   // This is the number of rows to process in each database fetch operation
-  const CHUNK_SIZE = 7000;
+  const CHUNK_SIZE = 2000;
 
   // Initialize progress tracking for this job
   ProgressTracker.initJob(jobId, recordCount);

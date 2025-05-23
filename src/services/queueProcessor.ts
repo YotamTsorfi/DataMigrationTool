@@ -113,7 +113,7 @@ export class QueueProcessor {
     this.processing = true;
     const systemConfig = await configService.getConfig();
     this.rateLimit = parseInt(systemConfig.QUEUE_RATE_LIMIT || "1000", 10); // בסיס 10 - דצימלי
-    this.minDelay = parseInt(systemConfig.QUEUE_MIN_DELAY || "5", 10); // בסיס 10 - דצימלי
+    this.minDelay = parseInt(systemConfig.QUEUE_MIN_DELAY || "30", 10); // בסיס 10 - דצימלי
 
     // Number of items to process concurrently
     const QUEUE_CONCURRENT_ITEMS = parseInt(
@@ -279,6 +279,7 @@ export class QueueProcessor {
           Status: "Failed",
           ErrorMessage: cleanErrorMessage,
           JobId: item.jobId,
+          priority_id: null,
           is_new: 1,
         });
 
@@ -324,6 +325,7 @@ export class QueueProcessor {
         Status: "Failed",
         ErrorMessage: errorMessage,
         JobId: item.jobId,
+        priority_id: null,
         is_new: 1,
       });
 
