@@ -322,7 +322,7 @@ async function processBatches(
   const results = [];
 
   // Process in chunks
-  const CHUNK_SIZE = 1000;
+  const CHUNK_SIZE = 3000;
   let processedCount = 0;
   let lastRowId = startRow - 1;
 

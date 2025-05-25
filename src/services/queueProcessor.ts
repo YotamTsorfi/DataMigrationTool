@@ -12,14 +12,14 @@ import { recordBatchProcessing } from "./dataService";
 const httpAgent = new http.Agent({
   keepAlive: true, // Enable connection pooling
   keepAliveMsecs: 1000, // Keep connections alive for 1 second
-  maxSockets: Infinity,
+  maxSockets: 1000,
   timeout: 240000,
 });
 
 const httpsAgent = new https.Agent({
   keepAlive: true, // Enable connection pooling
   keepAliveMsecs: 1000, // Keep connections alive for 1 second
-  maxSockets: Infinity,
+  maxSockets: 1000,
   timeout: 240000,
 });
 
@@ -73,6 +73,14 @@ export class QueueProcessor {
   private lastProcessedIndex = 0;
   private jobType: string;
   private tableName: string;
+  private consecutiveSuccesses = 0;
+  private backoffActive = false;
+  private normalConcurrency: number = 100;
+  private totalRequests = 0;
+  private total503Errors = 0;
+  private concurrencyLimit = 100; // default
+  private errorCount503 = 0;
+  private lastErrorTimeStamp = 0;
 
   constructor(
     queueId: string,
@@ -93,7 +101,7 @@ export class QueueProcessor {
   }
 
   // Set custom concurrency for this queue
-  private concurrencyLimit = 100; // default
+
   public setConcurrency(limit: number): void {
     this.concurrencyLimit = limit;
   }
@@ -117,14 +125,26 @@ export class QueueProcessor {
     }
 
     this.processing = true;
+    this.errorCount503 = 0; // Reset error count for each new processing
     const systemConfig = await configService.getConfig();
     this.rateLimit = parseInt(systemConfig.QUEUE_RATE_LIMIT || "1000", 10); // בסיס 10 - דצימלי
     this.minDelay = parseInt(systemConfig.QUEUE_MIN_DELAY || "30", 10); // בסיס 10 - דצימלי
 
+    // Store normal concurrency value
+    const configConcurrency = parseInt(
+      systemConfig.QUEUE_CONCURRENT_ITEMS || "500",
+      10
+    );
+    this.normalConcurrency = this.concurrencyLimit || configConcurrency;
+
+    const QUEUE_CONCURRENT_ITEMS = this.backoffActive
+      ? Math.floor(this.normalConcurrency * 0.7)
+      : this.normalConcurrency;
+
     // Number of items to process concurrently
-    const QUEUE_CONCURRENT_ITEMS =
-      this.concurrencyLimit ||
-      parseInt(systemConfig.QUEUE_CONCURRENT_ITEMS || "500", 10);
+    // const QUEUE_CONCURRENT_ITEMS =
+    //   this.concurrencyLimit ||
+    //   parseInt(systemConfig.QUEUE_CONCURRENT_ITEMS || "500", 10);
     const startTime = Date.now();
     const batchId = uuidv4();
 
@@ -175,6 +195,9 @@ export class QueueProcessor {
         this.failureCount > 0 ? "PartialSync" : "Completed",
         null,
         this.tableName
+      );
+      console.log(
+        `Queue ${this.queueId} stats: ${this.total503Errors}/${this.totalRequests} requests resulted in 503 errors (${((this.total503Errors / this.totalRequests) * 100).toFixed(2)}%)`
       );
 
       return {
@@ -511,6 +534,7 @@ export class QueueProcessor {
         // console.log(
         //   `[${this.queueId}] Completed request in ${Date.now() - requestStartTime}ms`
         // );
+        this.totalRequests++;
         return {
           success: true,
           status: response.status,
@@ -526,6 +550,26 @@ export class QueueProcessor {
           ? error.response?.data
           : null;
 
+        // Handle service unavailable (HTTP 503)
+        // If the error is a 503, we will retry with exponential backoff
+        if (axios.isAxiosError(error) && error.response?.status === 503) {
+          this.total503Errors++;
+          this.totalRequests++;
+          this.errorCount503++;
+          this.lastErrorTimeStamp = Date.now();
+
+          const retryAfter = error.response.headers["retry-after"];
+          let delayMs = retryAfter
+            ? parseInt(retryAfter) * 1000
+            : 1000 * Math.pow(2, retryCount);
+          delayMs += Math.floor(Math.random() * 500);
+
+          console.log(
+            `Service unavailable (503). Retry attempt ${retryCount} after ${delayMs}ms delay. ${errorMessage}`
+          );
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+          continue;
+        }
         // Handle rate limiting (HTTP 429)
         if (axios.isAxiosError(error) && error.response?.status === 429) {
           const retryAfter = error.response.headers["retry-after"];
@@ -576,16 +620,60 @@ export class QueueProcessor {
   }
   //------------------------------------------------------
   // Apply rate limiting between requests
+
   private async applyRateLimit(): Promise<void> {
     // Skip rate limiting for small batches
-    if (this.queue.length < 500) {
-      return; // No delay for small queues
+    if (this.queue.length < 1000) {
+      return;
     }
 
-    // Use a much smaller delay for large queues
-    const delay = Math.max(5, Math.min(this.minDelay, 10));
+    const recentErrors = Date.now() - this.lastErrorTimeStamp < 10000;
+
+    // Track consecutive successes to recover from backoff
+    if (!recentErrors) {
+      this.consecutiveSuccesses++;
+
+      // After 200 consecutive successes without 503s, exit backoff mode
+      if (this.backoffActive && this.consecutiveSuccesses > 200) {
+        console.log(
+          "Exiting backoff mode after consecutive successful requests"
+        );
+        this.backoffActive = false;
+        this.errorCount503 = 0;
+      }
+    } else {
+      this.consecutiveSuccesses = 0;
+
+      // Enter backoff mode if we get multiple 503s
+      if (this.errorCount503 > 5 && !this.backoffActive) {
+        console.log("Entering backoff mode due to multiple 503 errors");
+        this.backoffActive = true;
+      }
+    }
+
+    // Adaptive delay based on error rate
+    let delay = Math.max(2, Math.min(this.minDelay, 5));
+
+    if (recentErrors && this.errorCount503 > 0) {
+      // Use logarithmic scaling for smoother response
+      delay = Math.min(150, 5 * Math.log(this.errorCount503 + 1) * 5);
+      console.log(
+        `Applying adaptive throttling delay: ${delay}ms due to 503 errors`
+      );
+    }
+
     await new Promise((resolve) => setTimeout(resolve, delay));
   }
+  // private async applyRateLimit(): Promise<void> {
+  //   // Skip rate limiting for small batches
+  //   if (this.queue.length < 1000) {
+  //     return; // No delay for small queues
+  //   }
+
+  //   // Use a much smaller delay for large queues
+  //   const delay = Math.max(5, Math.min(this.minDelay, 5));
+  //   await new Promise((resolve) => setTimeout(resolve, delay));
+  // }
   // private async applyRateLimit(): Promise<void> {
   //   const queueLength = this.queue.length;
   //   // אם נשארו מעט פריטים בתור או שקצב השליחה נמוך, לא צריך להמתין
