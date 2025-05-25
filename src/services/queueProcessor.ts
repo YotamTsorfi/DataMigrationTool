@@ -81,6 +81,7 @@ export class QueueProcessor {
   private concurrencyLimit = 100; // default
   private errorCount503 = 0;
   private lastErrorTimeStamp = 0;
+  private logRetries: boolean = false;
 
   constructor(
     queueId: string,
@@ -564,9 +565,13 @@ export class QueueProcessor {
             : 1000 * Math.pow(2, retryCount);
           delayMs += Math.floor(Math.random() * 500);
 
-          console.log(
-            `Service unavailable (503). Retry attempt ${retryCount} after ${delayMs}ms delay. ${errorMessage}`
-          );
+          // Only log if we're in verbose mode
+          if (this.logRetries) {
+            console.log(
+              `Service unavailable (503). Retry attempt ${retryCount} after ${delayMs}ms delay. ${errorMessage}`
+            );
+          }
+
           await new Promise((resolve) => setTimeout(resolve, delayMs));
           continue;
         }
@@ -578,9 +583,11 @@ export class QueueProcessor {
             : 500 * Math.pow(2, retryCount);
           delayMs += Math.floor(Math.random() * 500);
 
-          console.log(
-            `Rate limit exceeded (429). Retry attempt ${retryCount} after ${delayMs}ms delay. ${errorMessage}`
-          );
+          if (this.logRetries) {
+            console.log(
+              `Rate limit exceeded (429). Retry attempt ${retryCount} after ${delayMs}ms delay. ${errorMessage}`
+            );
+          }
           await new Promise((resolve) => setTimeout(resolve, delayMs));
           continue;
         }
@@ -594,9 +601,11 @@ export class QueueProcessor {
             (error.response?.status && error.response.status >= 500))
         ) {
           const delay = 1000 * Math.pow(2, retryCount);
-          console.log(
-            `Retry attempt ${retryCount} after error: ${errorMessage}. Delay: ${delay}ms`
-          );
+          if (this.logRetries) {
+            console.log(
+              `Retry attempt ${retryCount} after error: ${errorMessage}. Delay: ${delay}ms`
+            );
+          }
           await new Promise((resolve) => setTimeout(resolve, delay));
         } else {
           // If the error is not a retryable error, log it and return the error response

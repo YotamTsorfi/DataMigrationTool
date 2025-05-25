@@ -96,7 +96,9 @@ export async function processWithQueues(
         i + HORIZONTAL_BATCH_SIZE * VERTICAL_BATCH_SIZE
       );
 
-      // Create queue processors for horizontal batches by the number of horizontal batches
+      // Enhanced load-balancing implementation
+
+      // Create queue processors for horizontal batches
       const horizontalQueues: QueueProcessor[] = [];
       for (let h = 0; h < HORIZONTAL_BATCH_SIZE; h++) {
         horizontalQueues.push(
@@ -104,9 +106,19 @@ export async function processWithQueues(
         );
       }
 
+      // Initialize tracking for workload distribution
+      const queueWorkloads = new Map<number, number>();
+      for (let q = 0; q < horizontalQueues.length; q++) {
+        queueWorkloads.set(q, 0);
+      }
+
       // Divide the horizontal batch into vertical batches
-      for (let h = 0; h < HORIZONTAL_BATCH_SIZE; h++) {
-        const startIndex = h * VERTICAL_BATCH_SIZE;
+      for (
+        let v = 0;
+        v < Math.ceil(horizontalBatch.length / VERTICAL_BATCH_SIZE);
+        v++
+      ) {
+        const startIndex = v * VERTICAL_BATCH_SIZE;
         const verticalBatch = horizontalBatch.slice(
           startIndex,
           startIndex + VERTICAL_BATCH_SIZE
@@ -114,14 +126,26 @@ export async function processWithQueues(
 
         if (verticalBatch.length === 0) continue;
 
-        // Add all rows from the vertical batch to the appropriate queue
+        // Find the queue with the least workload
+        let targetQueueIndex = 0;
+        let minWorkload = Number.MAX_SAFE_INTEGER;
+
+        for (let q = 0; q < horizontalQueues.length; q++) {
+          const workload = queueWorkloads.get(q) || 0;
+          if (workload < minWorkload) {
+            minWorkload = workload;
+            targetQueueIndex = q;
+          }
+        }
+
+        // Add all rows from the vertical batch to the selected queue
         const queueItems: QueueItem[] = verticalBatch.map((row, vIndex) => {
           const batchId = uuidv4();
 
           return {
             row: row,
             index: i + startIndex + vIndex + processedCount,
-            queueId: `queue-${h}`,
+            queueId: `queue-${targetQueueIndex}`,
             jobId,
             batchId,
             jobType,
@@ -131,7 +155,14 @@ export async function processWithQueues(
           };
         });
 
-        horizontalQueues[h].addItems(queueItems);
+        // Add the items to the queue
+        horizontalQueues[targetQueueIndex].addItems(queueItems);
+
+        // Update workload tracker
+        queueWorkloads.set(
+          targetQueueIndex,
+          (queueWorkloads.get(targetQueueIndex) || 0) + verticalBatch.length
+        );
       }
 
       //
