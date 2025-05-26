@@ -82,6 +82,7 @@ export class QueueProcessor {
   private errorCount503 = 0;
   private lastErrorTimeStamp = 0;
   private logRetries: boolean = false;
+  private enableRateLimit: boolean = true; // Enable rate limiting by default
 
   constructor(
     queueId: string,
@@ -97,6 +98,12 @@ export class QueueProcessor {
     this.performanceMonitor.startOperation();
   }
 
+  public setRateLimitEnabled(enabled: boolean): void {
+    this.enableRateLimit = enabled;
+    console.log(
+      `Queue ${this.queueId}: Rate limiting ${enabled ? "enabled" : "disabled"}`
+    );
+  }
   public addItem(item: QueueItem): void {
     this.queue.push(item);
   }
@@ -173,7 +180,10 @@ export class QueueProcessor {
         await Promise.all(batchPromises);
 
         // רק השהיה אחת בין אצוות, לא בין כל פריט
-        await this.applyRateLimit();
+        // Only apply rate limiting if enabled
+        if (this.enableRateLimit) {
+          await this.applyRateLimit();
+        }
 
         // עדכן progress אחרי כל אצווה
         this.updateProgress();
@@ -631,9 +641,13 @@ export class QueueProcessor {
   // Apply rate limiting between requests
 
   private async applyRateLimit(): Promise<void> {
-    // Skip rate limiting for small batches
-    if (this.queue.length < 1000) {
-      return;
+    console.log(
+      `Queue ${this.queueId}: queue.length=${this.queue.length}, errorCount503=${this.errorCount503}, backoffActive=${this.backoffActive}`
+    );
+
+    // REDUCED THRESHOLD: Apply rate limiting to smaller batches too
+    if (this.queue.length < 300) {
+      return; // Only skip very small batches
     }
 
     const recentErrors = Date.now() - this.lastErrorTimeStamp < 10000;
@@ -642,7 +656,6 @@ export class QueueProcessor {
     if (!recentErrors) {
       this.consecutiveSuccesses++;
 
-      // After 200 consecutive successes without 503s, exit backoff mode
       if (this.backoffActive && this.consecutiveSuccesses > 200) {
         console.log(
           "Exiting backoff mode after consecutive successful requests"
@@ -653,19 +666,19 @@ export class QueueProcessor {
     } else {
       this.consecutiveSuccesses = 0;
 
-      // Enter backoff mode if we get multiple 503s
-      if (this.errorCount503 > 5 && !this.backoffActive) {
+      // REDUCED THRESHOLD: Enter backoff sooner
+      if (this.errorCount503 > 2 && !this.backoffActive) {
         console.log("Entering backoff mode due to multiple 503 errors");
         this.backoffActive = true;
       }
     }
 
-    // Adaptive delay based on error rate
+    // Gentler adaptive delay based on error rate
     let delay = Math.max(2, Math.min(this.minDelay, 5));
 
     if (recentErrors && this.errorCount503 > 0) {
-      // Use logarithmic scaling for smoother response
-      delay = Math.min(150, 5 * Math.log(this.errorCount503 + 1) * 5);
+      // More moderate scaling formula
+      delay = Math.min(100, 3 * Math.log(this.errorCount503 + 1) * 3);
       console.log(
         `Applying adaptive throttling delay: ${delay}ms due to 503 errors`
       );
