@@ -11,14 +11,14 @@ import { recordBatchProcessing } from "./dataService";
 
 const httpAgent = new http.Agent({
   keepAlive: true, // Enable connection pooling
-  keepAliveMsecs: 1000, // Keep connections alive for 1 second
+  keepAliveMsecs: 30000, // Keep connections alive
   maxSockets: 1000,
   timeout: 240000,
 });
 
 const httpsAgent = new https.Agent({
   keepAlive: true, // Enable connection pooling
-  keepAliveMsecs: 1000, // Keep connections alive for 1 second
+  keepAliveMsecs: 30000, // Keep connections alive
   maxSockets: 1000,
   timeout: 240000,
 });
@@ -32,8 +32,10 @@ export interface QueueItem {
   batchId: string;
   jobType: string;
   tableName: string;
-  priorityScreenName: string;
+  priorityScreenName?: string;
   priorityIdField?: string;
+  childJobs?: any[];
+  childTableNames?: string[];
 }
 
 // Interface for queue processor results
@@ -44,6 +46,18 @@ export interface QueueProcessorResult {
   failureCount: number;
   duration: number;
 }
+
+export type ItemProcessorFunction = (item: QueueItem) => Promise<{
+  success: boolean;
+  error?: any;
+  responseStats?: {
+    successCount: number;
+    failureCount: number;
+    priorityId?: string | null;
+    status?: number;
+    errorData?: any;
+  };
+}>;
 
 // Interface for queue response
 interface QueueItemResponse {
@@ -83,6 +97,7 @@ export class QueueProcessor {
   private lastErrorTimeStamp = 0;
   private logRetries: boolean = false;
   private enableRateLimit: boolean = true; // Enable rate limiting by default
+  private startTime: number | null = null;
 
   constructor(
     queueId: string,
@@ -96,6 +111,15 @@ export class QueueProcessor {
     this.tableName = tableName;
     this.performanceMonitor = new PerformanceMonitor();
     this.performanceMonitor.startOperation();
+  }
+
+  private itemProcessor: ItemProcessorFunction | null = null;
+
+  /**
+   * Set custom item processor function
+   */
+  public setItemProcessor(processor: ItemProcessorFunction): void {
+    this.itemProcessor = processor;
   }
 
   public setRateLimitEnabled(enabled: boolean): void {
@@ -248,6 +272,213 @@ export class QueueProcessor {
   // Process a single item in the queue
   private async processItem(item: QueueItem): Promise<void> {
     try {
+      // Track when processing started
+      const itemStartTime = Date.now();
+      this.startTime = this.startTime || itemStartTime;
+
+      // Use custom processor if provided (for parent-child relationships)
+      if (this.itemProcessor) {
+        const result = await this.itemProcessor(item);
+
+        if (result.success) {
+          this.successCount += result.responseStats?.successCount || 1;
+
+          // If we have priority ID information, add it to update rows
+          let priorityId = null;
+          if (result.responseStats?.priorityId) {
+            priorityId = result.responseStats.priorityId;
+          }
+
+          // Add success row
+          this.updateRows.push({
+            RowId: item.row.RowId,
+            BatchId: item.batchId,
+            JobName: item.jobType,
+            Status: "Completed",
+            ErrorMessage: null,
+            JobId: item.jobId,
+            priority_id: priorityId,
+            is_new: 0,
+          });
+        } else {
+          this.failureCount += result.responseStats?.failureCount || 1;
+
+          // Format error message
+          const cleanErrorMessage = this.formatErrorMessage(
+            result.error || "Unknown error",
+            typeof result.responseStats?.status === "number"
+              ? result.responseStats.status
+              : 0,
+            result.responseStats?.errorData
+          );
+
+          // Add failure row
+          this.updateRows.push({
+            RowId: item.row.RowId,
+            BatchId: item.batchId,
+            JobName: item.jobType,
+            Status: "Failed",
+            ErrorMessage: cleanErrorMessage,
+            Error: cleanErrorMessage,
+            JobId: item.jobId,
+            priority_id: null,
+            is_new: 1,
+          });
+
+          // Add error row
+          this.errorRows.push({
+            JobName: item.jobType,
+            BatchId: item.batchId,
+            TableName: item.tableName,
+            RowId: item.row.RowId,
+            Error: cleanErrorMessage,
+            JobId: item.jobId,
+            ErrorStatus: result.responseStats?.status
+              ? String(result.responseStats.status)
+              : null,
+          });
+        }
+      }
+      // Standard process for parent-only items
+      else {
+        const response = await this.sendRequest(item);
+
+        if (response.success) {
+          this.successCount++;
+
+          // Extract Priority ID from successful response using the dynamic field
+          let priorityId = null;
+          if (
+            response.data &&
+            typeof response.data === "object" &&
+            item.priorityIdField
+          ) {
+            try {
+              // If direct field is available at the top level
+              if (response.data[item.priorityIdField] !== undefined) {
+                const idValue = response.data[item.priorityIdField];
+                priorityId =
+                  idValue !== null && idValue !== undefined
+                    ? String(idValue)
+                    : null;
+              }
+              // For batch responses that might have nested structure
+              else if (
+                response.data.body &&
+                response.data.body[item.priorityIdField] !== undefined
+              ) {
+                const idValue = response.data.body[item.priorityIdField];
+                priorityId =
+                  idValue !== null && idValue !== undefined
+                    ? String(idValue)
+                    : null;
+              }
+            } catch (err) {
+              if (err && typeof err === "object" && "message" in err) {
+                console.warn(
+                  `Error extracting priority_id: ${(err as any).message}`
+                );
+              } else {
+                console.warn(`Error extracting priority_id:`, err);
+              }
+              priorityId = null;
+            }
+          }
+
+          this.updateRows.push({
+            RowId: item.row.RowId,
+            BatchId: item.batchId,
+            JobName: item.jobType,
+            Status: "Completed",
+            ErrorMessage: null,
+            JobId: item.jobId,
+            priority_id: priorityId,
+            is_new: 0,
+          });
+        } else {
+          this.failureCount++;
+          // Update the error rows with a cleaned error message
+          const cleanErrorMessage = this.formatErrorMessage(
+            response.error || "",
+            response.status,
+            response.errorData
+          );
+
+          this.updateRows.push({
+            RowId: item.row.RowId,
+            BatchId: item.batchId,
+            JobName: item.jobType,
+            Status: "Failed",
+            ErrorMessage: cleanErrorMessage,
+            Error: cleanErrorMessage,
+            JobId: item.jobId,
+            priority_id: null,
+            is_new: 1,
+          });
+
+          this.errorRows.push({
+            JobName: item.jobType,
+            BatchId: item.batchId,
+            TableName: item.tableName,
+            RowId: item.row.RowId,
+            Error: cleanErrorMessage,
+            JobId: item.jobId,
+            ErrorStatus: response.status ? String(response.status) : null,
+          });
+        }
+      }
+
+      // Update tracking for progress
+      this.lastProcessedIndex = Math.max(
+        this.lastProcessedIndex,
+        item.row.RowId
+      );
+
+      // Update progress
+      if (this.progressListener) {
+        this.progressListener(this.successCount, this.failureCount);
+      }
+    } catch (error) {
+      console.error(`Error processing item in queue ${this.queueId}:`, error);
+      this.failureCount++;
+
+      // Also extract errorData from caught errors
+      const errorData = axios.isAxiosError(error) ? error.response?.data : null;
+      const errorMessage = this.formatErrorMessage(
+        error instanceof Error ? error.message : "Unknown error",
+        axios.isAxiosError(error) ? error.response?.status || 0 : 0,
+        errorData
+      );
+
+      if (this.progressListener) {
+        this.progressListener(this.successCount, this.failureCount);
+      }
+
+      this.updateRows.push({
+        RowId: item.row.RowId,
+        BatchId: item.batchId,
+        JobName: item.jobType,
+        Status: "Failed",
+        ErrorMessage: errorMessage,
+        JobId: item.jobId,
+        priority_id: null,
+        is_new: 1,
+      });
+
+      this.errorRows.push({
+        JobName: item.jobType,
+        BatchId: item.batchId,
+        TableName: item.tableName,
+        RowId: item.row.RowId,
+        Error: errorMessage,
+        JobId: item.jobId,
+        ErrorStatus: "Error",
+      });
+    }
+  }
+  /*
+  private async processItem(item: QueueItem): Promise<void> {
+    try {
       const response = await this.sendRequest(item);
 
       if (response.success) {
@@ -379,6 +610,7 @@ export class QueueProcessor {
       });
     }
   }
+  */
   //------------------------------------------------------
   // Format error message to be more user friendly
   private formatErrorMessage(

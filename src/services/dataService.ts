@@ -20,7 +20,7 @@ export async function fetchDataChunk(
     AND
     is_eligible = 1
     AND is_new = 1
-    AND (Status IS NULL OR Status = 'Failed')
+    AND (Status IS NULL OR Status = 'Failed')    
   `;
 
   try {

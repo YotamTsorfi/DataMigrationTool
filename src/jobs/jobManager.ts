@@ -4,7 +4,8 @@ import { v4 as uuidv4 } from "uuid";
 import { processBatches } from "../jobs/job";
 import ProgressTracker from "../utils/progressTracker";
 import { processWithQueues } from "../jobs/queueJob";
-import { processParentChildBatches } from "../jobs/jobParentAndChilds";
+// import { processParentChildBatches } from "../jobs/jobParentAndChilds";
+import { processParentChildGridBatches } from "../jobs/parentChildsGridProcess";
 import { ErrorBufferService } from "../utils/errorBufferService";
 import { JobCancellationService } from "../utils/jobCancellationService";
 import { EmailNotificationService } from "../utils/emailNotificationService";
@@ -192,7 +193,8 @@ class JobManager {
         const childJobCount = childJobs.length;
 
         // אם יש עבודות ילד ומדובר בעיבוד מסוג batch, הפעלת מעבד הורה-ילד
-        if (childJobCount > 0 && processingType === "batch") {
+        // 26_05_2025 if (childJobCount > 0 && processingType === "batch") {
+        if (childJobCount > 0) {
           console.log(`Job ${jobId} executing parent-child batch processing`);
 
           // סימון הג'וב כאב-בן כדי למנוע יצירת ג'ובים נפרדים לטבלאות הילדים
@@ -215,7 +217,22 @@ class JobManager {
             flushInterval: 60000, // Longer interval for parent-child operations
           });
 
-          results = await processParentChildBatches(
+          // ** Perform parent-child batch processing **
+          // results = await processParentChildBatches(
+          //   jobRequest.recordCount,
+          //   jobRequest.startRow,
+          //   jobRequest.tableName,
+          //   jobRequest.priorityScreenName,
+          //   jobRequest.jobType,
+          //   jobId,
+          //   jobRequest.priorityIdField,
+          //   jobRequest.priorityLinkedField,
+          //   childJobs,
+          //   logErrors
+          // );
+
+          // Perform parent-child grid processing
+          results = await processParentChildGridBatches(
             jobRequest.recordCount,
             jobRequest.startRow,
             jobRequest.tableName,
