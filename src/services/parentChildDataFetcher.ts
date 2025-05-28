@@ -36,11 +36,12 @@ export async function* streamParentChildData(
   while (processedRows < maxRows) {
     const currentBatchSize = Math.min(batchSize, maxRows - processedRows);
 
-    // console.log(
-    //   `Fetching parent records from ${parentTableName}: offset=${currentOffset}, limit=${currentBatchSize}`
-    // );
+    // הדפס רק אם עברה כמות מסוימת של זמן או רשומות:
+    const shouldLog = processedRows % 1000 === 0; // לוג רק כל 1000 רשומות
+    if (shouldLog) {
+      console.time(`Fetch parent records ${currentOffset}`);
+    }
 
-    // שליפת רשומות האב
     const parentRecords = await fetchEligibleParentRecords(
       parentTableName,
       currentOffset,
@@ -48,10 +49,9 @@ export async function* streamParentChildData(
       linkedField,
       startRow
     );
-
-    // console.log(
-    //   `Found ${parentRecords.length} eligible parent records at offset ${currentOffset}`
-    // );
+    if (shouldLog) {
+      console.timeEnd(`Fetch parent records ${currentOffset}`);
+    }
 
     if (parentRecords.length === 0) {
       console.log(
@@ -64,15 +64,21 @@ export async function* streamParentChildData(
     const linkedValues = parentRecords.map((record) => record[linkedField]);
     // console.log(`Extracted ${linkedValues.length} linked values from parent records`);
 
+    const label = `Fetch child data for ${linkedValues.length} parents`;
+    console.time(label);
     // שליפת נתוני ילדים לכל סוגי הילדים
     const childDataMap = await fetchAllChildData(
       childJobs,
       linkedValues,
       linkedField
     );
+    console.timeEnd(label);
 
     // עיבוד כל רשומת אב בנפרד ויצירת JSON מוכן
     for (const parent of parentRecords) {
+      const mergeLabel = `Merge parent-child JSON for parent ${parent.RowId}`;
+      console.time(mergeLabel);
+
       const linkValue = parent[linkedField];
       const parsedParentData = parseJsonData(parent.Data);
 
@@ -177,6 +183,8 @@ export async function* streamParentChildData(
       // Add console log to inspect if child RowIds are preserved
       // console.log('Priority object with tracking:', JSON.stringify(priorityObjectWithTracking, null, 2));
       // Yield the enriched object
+      console.timeEnd(mergeLabel);
+
       yield priorityObjectWithTracking;
 
       processedRows++;

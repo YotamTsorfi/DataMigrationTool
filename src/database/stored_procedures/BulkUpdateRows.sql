@@ -1,7 +1,7 @@
 USE [CarmeltonDB_STG]
 GO
 
-/****** Object:  StoredProcedure [dbo].[BulkUpdateRows]    Script Date: 10/05/2025 08:54:19 ******/
+/****** Object:  StoredProcedure [dbo].[BulkUpdateRows]    Script Date: 23/05/2025 11:33:05 ******/
 SET ANSI_NULLS ON
 GO
 

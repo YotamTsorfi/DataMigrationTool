@@ -7,6 +7,17 @@ interface SystemConfig {
   DB_BATCH_SIZE: number;
   MAX_RETRIES: number;
   [key: string]: any;
+
+  // Email notification settings
+  EMAIL_NOTIFICATIONS_ENABLED: boolean;
+  EMAIL_NOTIFICATION_INTERVAL: number; // ms
+  EMAIL_HOST: string;
+  EMAIL_PORT: number;
+  EMAIL_SECURE: boolean;
+  EMAIL_USER: string;
+  EMAIL_PASSWORD: string;
+  EMAIL_FROM: string;
+  EMAIL_TO: string;
 }
 
 class ConfigurationService {
@@ -17,6 +28,17 @@ class ConfigurationService {
     DELAY_BETWEEN_BATCHES: 800,
     DB_BATCH_SIZE: 1000,
     MAX_RETRIES: 3,
+
+    // Default email notification settings
+    EMAIL_NOTIFICATIONS_ENABLED: true, // Default to true
+    EMAIL_NOTIFICATION_INTERVAL: 7200000, // 2 hours
+    EMAIL_HOST: "smtp.company.com",
+    EMAIL_PORT: 587,
+    EMAIL_SECURE: false,
+    EMAIL_USER: "",
+    EMAIL_PASSWORD: "",
+    EMAIL_FROM: "Priority Job System <noreply@carmelton-migration.com>",
+    EMAIL_TO: "<yotamt@one1.co.il>",
   };
   private lastLoaded: Date = new Date(0);
   private cacheExpiryMs: number = 60000; // 1 minute cache
@@ -46,38 +68,6 @@ class ConfigurationService {
       setTimeout(() => this.initializeConfig(), 5000);
     }
   }
-
-  // Write a comment explaining why we don't need to poll
-  // Polling is not needed in this case because we are using a database trigger
-  // private startPolling(): void {
-  //   // Check for updates every 15 seconds
-  //   this.pollingInterval = setInterval(() => {
-  //     this.checkForConfigUpdates();
-  //   }, 60000); // 60 seconds
-
-  //   // console.log("Configuration polling started");
-  // }
-
-  // private async checkForConfigUpdates(): Promise<void> {
-  //   if (!this.isInitialized) return;
-
-  //   try {
-  //     // Check if any config has been updated since last load
-  //     const updated = await DatabaseService.executeQuery(
-  //       `SELECT TOP 1 1 FROM PrioritySystemConfig WHERE LastUpdated > @LastLoaded`,
-  //       { LastLoaded: this.lastLoaded }
-  //     );
-
-  //     if (updated && updated.length > 0) {
-  //       console.log("Configuration changes detected, reloading...");
-  //       await this.loadConfigFromDb();
-  //       this.lastLoaded = new Date();
-  //       // console.log("Configuration reloaded with latest changes");
-  //     }
-  //   } catch (error) {
-  //     console.error("Error checking for configuration updates:", error);
-  //   }
-  // }
 
   public static getInstance(): ConfigurationService {
     if (!ConfigurationService.instance) {

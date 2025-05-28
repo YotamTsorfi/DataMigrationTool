@@ -63,7 +63,7 @@ export async function processParentChildResponse(
 ): Promise<ProcessResponseResult> {
   try {
     // Start measuring DB update time
-    // const dbUpdateStart = Date.now();
+    const dbUpdateStart = performance.now();
 
     // Measure response performance
     measureResponsePerformance(response, perfMonitor);
@@ -139,7 +139,11 @@ export async function processParentChildResponse(
             const jobTypeName = job.JobTypeName;
 
             // Try to get child records with flexible lookup
-            const childRecords = getChildRecords(record, jobTypeName);
+            const childRecords = getChildRecords(
+              record,
+              jobTypeName,
+              childTableName
+            );
 
             if (
               childRecords &&
@@ -277,7 +281,7 @@ export async function processParentChildResponse(
         // Continue with error logging despite errors in child updates
       }
     } else {
-      console.log(`No child updates to process for batch ${batchId}`);
+      // console.log(`No child updates to process for batch ${batchId}`);
     }
 
     // Insert error logs using the buffer instead of direct insertion
@@ -302,6 +306,9 @@ export async function processParentChildResponse(
     // Complete the operation and get metrics
     perfMonitor.endOperation();
     const formattedMetrics = perfMonitor.getFormattedMetrics();
+
+    totalDbUpdateTime = performance.now() - dbUpdateStart;
+    perfMonitor.setDbUpdateTime(totalDbUpdateTime);
 
     // Record batch processing results
     await recordBatchProcessing(
@@ -463,7 +470,11 @@ async function forceErrorDatabaseUpdates(
     records.forEach((record) => {
       if (record.childRecords) {
         childJobs.forEach((job) => {
-          const childRecords = getChildRecords(record, job.JobTypeName);
+          const childRecords = getChildRecords(
+            record,
+            job.JobTypeName,
+            job.DBTableName
+          );
 
           if (childRecords && Array.isArray(childRecords)) {
             childRecords.forEach((childRecord) => {
@@ -870,7 +881,11 @@ function processApiResponse(
           const jobTypeName = job.JobTypeName;
 
           // Use our enhanced lookup function
-          const childRecords = getChildRecords(record, jobTypeName);
+          const childRecords = getChildRecords(
+            record,
+            jobTypeName,
+            childTableName
+          );
 
           if (childRecords && Array.isArray(childRecords)) {
             childRecords.forEach((childRecord) => {

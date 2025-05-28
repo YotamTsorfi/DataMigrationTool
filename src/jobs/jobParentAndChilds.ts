@@ -1,11 +1,13 @@
 import { DatabaseService } from "../services/databaseService";
 import { streamParentChildData } from "../services/parentChildDataFetcher";
-import { sendParentChildBatchesInParallel } from "../services/priorityParentChildSender";
+import { sendParentChildBatch } from "../services/priorityParentChildSender";
 import ProgressTracker from "../utils/progressTracker";
 import PerformanceMonitor from "../utils/performanceMonitor";
 import { performBulkUpdateWithService } from "../services/dataService";
 import { ErrorBufferService } from "../utils/errorBufferService";
 import { configService } from "../config/configService";
+import pLimit from "p-limit";
+import { JobCancellationService } from "../utils/jobCancellationService";
 // import { writeToLogFile } from "../config/logger";
 
 export interface ChildJob {
@@ -59,6 +61,17 @@ async function processParentChildBatches(
   });
   console.log("---------------END DEBUG ---------------------");
 
+  const lastProgressUpdate = { time: Date.now(), records: 0 };
+  const logInterval = 1000; // הדפס לוג רק כל 1000 רשומות
+  let lastLogTime = Date.now();
+  const logIntervalTime = 30000; // או כל 30 שניות, מה שקורה קודם
+
+  const phaseMetrics = {
+    dbFetch: { total: 0, count: 0 },
+    apiRequest: { total: 0, count: 0 },
+    responseProcessing: { total: 0, count: 0 },
+  };
+
   // Initialize job tracking
   ProgressTracker.initJob(jobId, totalRecords);
   const overallPerformance = new PerformanceMonitor();
@@ -76,16 +89,33 @@ async function processParentChildBatches(
   // Get concurrency setting from database
   const config = await configService.getConfig();
   const maxConcurrentBatches = config.CONCURRENT_BATCHES;
-  console.log(
-    `Using concurrency of ${maxConcurrentBatches} batches from system configuration`
+
+  // סט מירבי של באצ'ים לשרת (מגבלה יעילה)
+  const maxBatchesPerServer = 8;
+  const serverCount = 4; // מספר השרתים בלואד-באלאנסר
+
+  // ערך מירבי של מקביליות - לפי כמות השרתים והערך שהוגדר
+  const effectiveConcurrency = Math.min(
+    maxConcurrentBatches,
+    maxBatchesPerServer * serverCount
   );
+
+  console.log(
+    `Using concurrency of ${effectiveConcurrency} batches (${serverCount} servers with ${maxBatchesPerServer} batches per server)`
+  );
+
+  // יצירת בריכת העובדים המקבילים - לפי הערך האפקטיבי שחישבנו
+  const workerPool = pLimit(effectiveConcurrency);
+
+  // רשימת העבודות הפעילות
+  const activeJobs = new Set();
 
   // Configure error buffer for more efficient error logging
   const errorBuffer = ErrorBufferService.getInstance();
   errorBuffer.configure({
-    flushSize: 1000, // או 2000 אם יש מספיק זיכרון
-    minFlushSize: 200, // אפשר להעלות גם ל-500
-    flushInterval: 30000, // 30 שניות
+    flushSize: 1000,
+    minFlushSize: 200,
+    flushInterval: 30000,
   });
   // Set the logging state based on the parameter
   errorBuffer.setLoggingEnabled(logErrors);
@@ -94,136 +124,150 @@ async function processParentChildBatches(
   let consecutiveFailedBatches = 0;
   const maxConsecutiveFailures = 3;
 
-  try {
-    // Process all data in manageable chunks to avoid memory issues
-    let currentRow = 0;
-    let currentStartRow = startRow;
+  // נקודת התחלה ומעקב אחר התקדמות
+  let currentRow = 0;
+  let currentStartRow = startRow;
 
-    // Instead of loading all batches at once, process in groups
-    while (currentRow < totalRecords) {
-      const batchGroup: any[][] = [];
-      let currentBatch: any[] = [];
-      let groupRecordCount = 0;
-      const maxRecordsPerGroup = maxBatchSizeForApi * maxConcurrentBatches;
-      const remainingRecords = Math.min(
-        maxRecordsPerGroup,
-        totalRecords - currentRow
-      );
+  // Prepare child table names for response processor
+  const childTableNames = childJobs.map((job) => job.DBTableName);
 
+  // פונקציה לטיפול בסיום באצ'
+  const handleBatchCompletion = (promise: Promise<any>) => {
+    activeJobs.delete(promise);
+
+    // אם יש עוד רשומות לעיבוד ויש מקום בבריכת העובדים, נמשיך לשלוף ולשלוח
+    if (currentRow < totalRecords) {
+      fetchAndProcessBatch();
+    }
+  };
+
+  // פונקציה לשליפה ושליחה של באצ' בודד
+  async function fetchAndProcessBatch() {
+    // Check for cancellation before processing each batch
+    if (JobCancellationService.isCancellationRequested(jobId)) {
+      console.log(`Job ${jobId} cancelled - stopping processing`);
+      return; // Exit the function
+    }
+    // אם הגענו לסוף הרשומות, נסיים
+    if (currentRow >= totalRecords) return;
+
+    // נשלוף כמות רשומות המתאימה לבאצ' אחד (100 רשומות)
+    const batchRemaining = Math.min(
+      maxBatchSizeForApi,
+      totalRecords - currentRow
+    );
+
+    console.log(
+      `Fetching next batch at offset ${currentStartRow}, remaining: ${batchRemaining}`
+    );
+
+    // 1. התחלת מדידת זמן שליפה
+    const fetchMonitor = new PerformanceMonitor();
+    fetchMonitor.startDbFetch();
+
+    // 2. יצירת הסטרים ושליפת הנתונים
+    const dataStream = streamParentChildData(
+      parentTableName,
+      batchSize,
+      currentStartRow,
+      batchRemaining,
+      linkedField,
+      childJobs
+    );
+
+    // 3. עיבוד הסטרים וקריאת הנתונים
+    const records: any[] = [];
+    let lastRowId = currentStartRow;
+
+    for await (const record of dataStream) {
+      if (!record || typeof record !== "object") {
+        console.warn(`Skipping invalid record: ${JSON.stringify(record)}`);
+        continue;
+      }
+
+      // שמירת ה-RowId הגבוה ביותר
+      if (record.RowId && record.RowId > lastRowId) {
+        lastRowId = record.RowId;
+      }
+
+      records.push(record);
+      processedRecords++;
+      currentRow++;
+
+      // אם הגענו לגודל באצ' מלא, נפסיק את הלולאה
+      if (records.length >= maxBatchSizeForApi) break;
+    }
+
+    // 4. סיום מדידת זמן שליפה
+    fetchMonitor.endDbFetch();
+    phaseMetrics.dbFetch.total += fetchMonitor.metrics.dbFetchTime || 0;
+    phaseMetrics.dbFetch.count++;
+
+    if (
+      processedRecords % logInterval === 0 ||
+      Date.now() - lastLogTime > logIntervalTime
+    ) {
       console.log(
-        `Creating new data stream at offset ${currentStartRow}, remaining: ${remainingRecords}`
+        `Progress: ${processedRecords}/${totalRecords} (${Math.floor((processedRecords / totalRecords) * 100)}%) | ` +
+          `Average fetch: ${(phaseMetrics.dbFetch.total / phaseMetrics.dbFetch.count).toFixed(2)}ms | ` +
+          `Average API: ${(phaseMetrics.apiRequest.total / phaseMetrics.apiRequest.count).toFixed(2)}ms | ` +
+          `Active batches: ${activeJobs.size}`
       );
+      lastLogTime = Date.now();
+    }
 
-      // KEY FIX: Create a NEW data stream for each batch group
-      const perfMonitor = new PerformanceMonitor();
-      perfMonitor.startDbFetch();
+    // עדכון נקודת ההתחלה לבאצ' הבא
+    currentStartRow = lastRowId + 1;
 
-      const dataStream = streamParentChildData(
-        parentTableName,
-        batchSize,
-        currentStartRow, // Use the current position as the start row
-        remainingRecords, // Only request what we need for this group
-        linkedField,
-        childJobs
-      );
-      //-----------------------------------------------------------------------------
-      // ***** DEV ONLY ***** //
-      //-----------------------------------------------------------------------------
-      // ------ DEBUGGING: Write the raw data to a file for inspection ------
-      // for await (const record of dataStream) {
-      //   // Create a clean copy without tracking fields
-      //   const { RowId, childRecords, ...cleanRecord } = record;
+    // אם אין יותר רשומות, נסיים
+    if (records.length === 0) {
+      console.log(`No more records available at offset ${currentStartRow}`);
+      return;
+    }
 
-      //   // Write the clean record with proper formatting (indentation of 2 spaces)
-      //   writeToLogFile(
-      //     "parentChildData_clean.json",
-      //     `${JSON.stringify(cleanRecord, null, 2)}\n\n`
-      //   );
-
-      //   // הוסף גם את המבנה המלא כולל childRecords
-      //   writeToLogFile(
-      //     "parentChildData_full.json",
-      //     `${JSON.stringify(record, null, 2)}\n\n`
-      //   );
-      // }
-      //-----------------------------------------------------------------------------
-      //-----------------------------------------------------------------------------
-
-      // Build a group of batches (max 10 batches of 100 records each = 1000 records)
-      let lastRowId = currentStartRow;
-      for await (const record of dataStream) {
-        if (!record || typeof record !== "object") {
-          console.warn(`Skipping invalid record: ${JSON.stringify(record)}`);
-          continue;
-        }
-
-        // Track the highest RowId we've seen
-        if (record.RowId && record.RowId > lastRowId) {
-          lastRowId = record.RowId;
-        }
-
-        currentBatch.push(record);
-        processedRecords++;
-        groupRecordCount++;
-        currentRow++;
-
-        // When a batch reaches exactly 100 records, add it to the batch group
-        if (currentBatch.length >= maxBatchSizeForApi) {
-          batchGroup.push([...currentBatch]);
-          currentBatch = [];
-        }
-
-        // We don't need to break early - consume the entire stream we requested
-      }
-
-      // Update our position for the next batch group
-      currentStartRow = lastRowId + 1;
-      // console.log(`Next batch will start at RowId ${currentStartRow}`);
-
-      // Add any remaining records as a final batch in this group
-      if (currentBatch.length > 0) {
-        batchGroup.push(currentBatch);
-      }
-
-      if (batchGroup.length === 0) {
-        console.log(
-          `No more records available, ending process at ${processedRecords}/${totalRecords} records`
-        );
-        break; // No more records to process
-      }
-
-      // Prepare child table names for response processor
-      const childTableNames = childJobs.map((job) => job.DBTableName);
-      console.log(
-        `Processing group of ${batchGroup.length} batches with total ${groupRecordCount} records (${processedRecords}/${totalRecords} total)`
-      );
+    // 5. שליחת הבאצ' דרך בריכת העובדים
+    const sendPromise = workerPool(async () => {
+      // 5.1 מדידת זמן שליחה לAPI
+      const apiStartTime = performance.now();
 
       try {
-        const batchResults = await sendParentChildBatchesInParallel(
-          batchGroup,
-          maxConcurrentBatches,
+        // 5.2 שליחת הבאצ' לAPI
+        const result = await sendParentChildBatch(
+          records,
           jobType,
           parentTableName,
           parentScreenName,
           jobId,
           parentIdField,
           childTableNames,
-          childJobs
+          childJobs,
+          logErrors
         );
 
-        // Process batch results
-        const batchSuccessCount = batchResults.reduce(
-          (sum, res) => sum + (res.successCount || 0),
-          0
-        );
-        const batchFailureCount = batchResults.reduce(
-          (sum, res) => sum + (res.failureCount || 0),
-          0
+        // 5.3 מדידת זמן סיום API
+        const apiTime = performance.now() - apiStartTime;
+        phaseMetrics.apiRequest.total += apiTime;
+        phaseMetrics.apiRequest.count++;
+
+        console.log(
+          `Batch API request completed in ${apiTime.toFixed(2)}ms for ${records.length} records`
         );
 
-        // Update tracking statistics
-        totalSuccessCount += batchSuccessCount;
-        totalFailureCount += batchFailureCount;
+        // 5.4 עיבוד התוצאות ועדכון הסטטיסטיקה
+        if (result.performanceMetrics?.dbUpdateTime) {
+          const dbUpdateTimeStr = result.performanceMetrics.dbUpdateTime;
+          const dbUpdateTime = parseFloat(dbUpdateTimeStr.replace("ms", ""));
+          if (!isNaN(dbUpdateTime)) {
+            phaseMetrics.responseProcessing.total += dbUpdateTime;
+            phaseMetrics.responseProcessing.count++;
+          }
+        }
+
+        // עדכון סטטיסטיקות הצלחה וכישלון
+        totalSuccessCount += result.successCount || 0;
+        totalFailureCount += result.failureCount || 0;
+
+        // עדכון מעקב התקדמות
         ProgressTracker.updateProgress(
           jobId,
           totalSuccessCount + totalFailureCount,
@@ -231,102 +275,180 @@ async function processParentChildBatches(
           totalFailureCount
         );
 
-        // Check for consecutive failures
-        if (batchFailureCount > 0 && batchSuccessCount === 0) {
+        // בדיקת כישלונות רצופים
+        if (
+          (result.failureCount || 0) > 0 &&
+          (result.successCount || 0) === 0
+        ) {
           consecutiveFailedBatches++;
           console.warn(
-            `Batch group completely failed (${consecutiveFailedBatches}/${maxConsecutiveFailures} consecutive failures)`
+            `Batch completely failed (${consecutiveFailedBatches} consecutive failures) - continuing anyway`
           );
 
           if (consecutiveFailedBatches >= maxConsecutiveFailures) {
-            console.error(
-              `Stopping job after ${maxConsecutiveFailures} consecutive failed batch groups`
+            console.warn(
+              `${maxConsecutiveFailures}+ consecutive failed batches detected, but continuing per configuration`
             );
-            // Still add the results to the overall results
-            results.push(...batchResults);
-            break;
           }
         } else {
-          // Reset consecutive failures counter on any success
+          // איפוס מונה כישלונות רצופים בהצלחה כלשהי
           consecutiveFailedBatches = 0;
         }
 
-        results.push(...batchResults);
+        // הוספת התוצאות למערך הכולל
+        results.push({
+          success: result.success,
+          successCount: result.successCount,
+          failureCount: result.failureCount,
+          error: result.error,
+        });
+
+        return result;
       } catch (error) {
-        // Handle batch group-level errors
-        console.error(`Error processing batch group:`, error);
+        // 5.5 טיפול בשגיאות
+        console.error(`Error processing batch:`, error);
         consecutiveFailedBatches++;
 
-        // Force database updates even when API call fails - for all batches in the group
-        for (const batch of batchGroup) {
-          await forceErrorRecordUpdates(batch, jobId, error);
+        // עדכוני DB במקרה של שגיאה
+        await forceErrorRecordUpdates(records, jobId, error);
 
-          totalFailureCount += batch.length;
-          ProgressTracker.updateProgress(
-            jobId,
-            totalSuccessCount + totalFailureCount,
-            totalSuccessCount,
-            totalFailureCount
-          );
-
-          results.push({
-            success: false,
-            successCount: 0,
-            failureCount: batch.length,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-
-        if (consecutiveFailedBatches >= maxConsecutiveFailures) {
-          console.error(
-            `Stopping job after ${maxConsecutiveFailures} consecutive failed batch groups`
-          );
-          break;
-        }
-      } finally {
-        // IMPORTANT: Help garbage collection by clearing the batch group
-        for (let i = 0; i < batchGroup.length; i++) {
-          if (batchGroup[i]) {
-            batchGroup[i].length = 0;
-          }
-        }
-        batchGroup.length = 0;
-
-        // Force garbage collection if available
-        if (global.gc) {
-          try {
-            global.gc();
-          } catch (e) {
-            // Ignore errors if gc is not available
-          }
-        }
-      }
-
-      // Log progress for large jobs
-      if (processedRecords % 10000 === 0 || processedRecords >= totalRecords) {
-        console.log(
-          `Progress: ${processedRecords}/${totalRecords} records processed (${Math.floor((processedRecords / totalRecords) * 100)}%)`
+        totalFailureCount += records.length;
+        ProgressTracker.updateProgress(
+          jobId,
+          totalSuccessCount + totalFailureCount,
+          totalSuccessCount,
+          totalFailureCount
         );
+
+        // הוספת שגיאה לתוצאות
+        const errorResult = {
+          success: false,
+          successCount: 0,
+          failureCount: records.length,
+          error: error instanceof Error ? error.message : String(error),
+        };
+
+        results.push(errorResult);
+        return errorResult;
+      } finally {
+        // עזרה ל-garbage collection
+        records.length = 0;
+      }
+    });
+
+    // הוספת הפרומיס למעקב
+    activeJobs.add(sendPromise);
+
+    // טיפול בסיום העבודה
+    sendPromise
+      .then(() => handleBatchCompletion(sendPromise))
+      .catch(() => handleBatchCompletion(sendPromise));
+  }
+
+  try {
+    // התחלת התהליך - אתחול של מספר עבודות בהתאם למקביליות המותרת
+    const initialBatches = Math.min(
+      effectiveConcurrency,
+      Math.ceil(totalRecords / maxBatchSizeForApi)
+    );
+    console.log(`Initializing ${initialBatches} concurrent batches`);
+
+    for (let i = 0; i < initialBatches; i++) {
+      // Check for cancellation before processing each batch
+      if (JobCancellationService.isCancellationRequested(jobId)) {
+        console.log(`Job ${jobId} cancelled - stopping processing`);
+        break; // Exit the processing loop
+      }
+      if (currentRow < totalRecords) {
+        await fetchAndProcessBatch();
       }
     }
 
-    // Make sure to flush any remaining errors before completing
+    // המתנה לסיום כל העבודות הפעילות
+    while (activeJobs.size > 0) {
+      // Check for cancellation before processing each batch
+      if (JobCancellationService.isCancellationRequested(jobId)) {
+        console.log(`Job ${jobId} cancelled - stopping processing`);
+        break; // Exit the processing loop
+      }
+
+      await Promise.race(Array.from(activeJobs));
+      // המשך התהליך אוטומטית דרך handleBatchCompletion
+
+      // לוג התקדמות
+      // if (processedRecords % 10000 === 0 || processedRecords >= totalRecords) {
+      //   console.log(
+      //     `Progress: ${processedRecords}/${totalRecords} records processed (${Math.floor((processedRecords / totalRecords) * 100)}%)`
+      //   );
+      // }
+
+      // הוסף הצגת קצב עיבוד:
+      const now = Date.now();
+      const timeDiff = now - lastProgressUpdate.time;
+      if (timeDiff > 60000) {
+        // כל דקה
+        const recordDiff = processedRecords - lastProgressUpdate.records;
+        const recordsPerMinute = (recordDiff / timeDiff) * 60000;
+
+        console.log(
+          `Progress: ${processedRecords}/${totalRecords} (${Math.floor((processedRecords / totalRecords) * 100)}%) | ` +
+            `Speed: ${Math.round(recordsPerMinute)} records/minute | ` +
+            `ETA: ${formatTime(((totalRecords - processedRecords) / recordsPerMinute) * 60)} | ` +
+            `Active: ${activeJobs.size}`
+        );
+
+        lastProgressUpdate.time = now;
+        lastProgressUpdate.records = processedRecords;
+      }
+    }
+
+    // ריקון כל השגיאות שנותרו בבאפר
     await errorBuffer.flushAll();
 
-    // Complete the job with overall statistics
+    // סיום המדידה הכוללת
     overallPerformance.endOperation();
     const metrics = overallPerformance.getFormattedMetrics();
 
-    // Log job completion
+    // לוג סיום העבודה
     console.log(
       `Parent-child job completed: ${processedRecords} records (${totalSuccessCount} success, ${totalFailureCount} failed), duration: ${metrics.totalDuration}`
+    );
+
+    // סיכום ביצועים
+    const avgDbFetchTime =
+      phaseMetrics.dbFetch.count > 0
+        ? (phaseMetrics.dbFetch.total / phaseMetrics.dbFetch.count).toFixed(2)
+        : "0";
+    const avgApiTime =
+      phaseMetrics.apiRequest.count > 0
+        ? (
+            phaseMetrics.apiRequest.total / phaseMetrics.apiRequest.count
+          ).toFixed(2)
+        : "0";
+    const avgResponseProcessingTime =
+      phaseMetrics.responseProcessing.count > 0
+        ? (
+            phaseMetrics.responseProcessing.total /
+            phaseMetrics.responseProcessing.count
+          ).toFixed(2)
+        : "0";
+
+    console.log(`Performance summary:`);
+    console.log(
+      `- Avg DB Fetch Time: ${avgDbFetchTime}ms (${phaseMetrics.dbFetch.count} operations)`
+    );
+    console.log(
+      `- Avg API Request Time: ${avgApiTime}ms (${phaseMetrics.apiRequest.count} operations)`
+    );
+    console.log(
+      `- Avg Response Processing Time: ${avgResponseProcessingTime}ms (${phaseMetrics.responseProcessing.count} operations)`
     );
 
     return results;
   } catch (error) {
     console.error(`Fatal error in processParentChildBatches:`, error);
 
-    // Ensure all buffered errors are flushed even when the job fails
+    // ריקון הבאפר גם במקרה של שגיאה
     try {
       await errorBuffer.flushAll();
     } catch (flushError) {
@@ -346,6 +468,13 @@ async function processParentChildBatches(
     });
     return results;
   }
+}
+
+//---------------------------------------------------------------------------
+function formatTime(minutes: number): string {
+  const hrs = Math.floor(minutes / 60);
+  const mins = Math.floor(minutes % 60);
+  return `${hrs}h ${mins}m`;
 }
 //---------------------------------------------------------------------------
 async function forceErrorRecordUpdates(

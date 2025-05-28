@@ -4,6 +4,7 @@ import { getJobTypes } from "../controllers/jobController";
 import { JobManager } from "../jobs/jobManager";
 import ProgressTracker from "../utils/progressTracker";
 import { formatErrorMessage } from "../utils/errorHandler";
+import { JobCancellationService } from "../utils/jobCancellationService";
 
 const router: Router = express.Router();
 router.use(priorityAuthMiddleware);
@@ -91,9 +92,38 @@ router.post(
   }
 );
 
+// Endpoint to cancel a running job
+router.post("/cancel/:jobId", async (req, res) => {
+  try {
+    const jobId = req.params.jobId;
+    const jobManager = new JobManager();
+
+    // Request cancellation
+    JobCancellationService.requestCancellation(jobId);
+
+    // Update status in database to show cancellation is requested
+    await jobManager.updateJobStatus(
+      jobId,
+      "Cancelling",
+      undefined,
+      undefined,
+      "Cancellation requested by user"
+    );
+
+    res.json({
+      success: true,
+      message: `Cancellation requested for job ${jobId}`,
+    });
+  } catch (error) {
+    console.error("Error cancelling job:", error);
+    res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+});
 
 export default router;
-
 
 //----------------------Old code----------------------
 //router.post("/run-job", runJobWithInput);
@@ -187,9 +217,6 @@ export default router;
 // );
 //-----------------------------------
 
-
-
-
 //-----------------------------------
 // // Update system configuration
 // router.put(
@@ -264,6 +291,3 @@ export default router;
 //     }
 //   }
 // );
-
-
-
