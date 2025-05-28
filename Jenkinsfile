@@ -25,7 +25,8 @@ pipeline {
         stage('Stop Production Service') {
             steps {
                 // עצירת שירות PM2 עם טיפול בשגיאות
-                bat 'cd C:\\production\\carmelton-data-migration && npx pm2 stop all || echo "No processes running"'
+                // החשוב: השימוש ב-returnStatus: true כדי למנוע מהשלב להיכשל כאשר pm2 מחזיר קוד יציאה שאינו 0
+                bat(script: 'cd C:\\production\\carmelton-data-migration && npx pm2 stop all || echo "No processes running"', returnStatus: true)
             }
         }
         stage('Verify Files') {
@@ -57,6 +58,9 @@ pipeline {
                 bat 'if exist package-lock.json copy package-lock.json C:\\production\\carmelton-data-migration\\package-lock.json'
                 bat 'if exist C:\\carmelton_typescript\\.env.production copy C:\\carmelton_typescript\\.env.production C:\\production\\carmelton-data-migration\\.env.production'
                 
+                // יצירת קובץ עם רשימת קבצים להחרגה לפני העתקה
+                bat 'echo favicon.ico > exclude_list.txt'
+                
                 // העתקת קבצי הקליינט - החרגת favicon.ico
                 bat '''
                     if exist client\\build (
@@ -66,9 +70,6 @@ pipeline {
                         exit 1
                     )
                 '''
-                
-                // יצירת קובץ עם רשימת קבצים להחרגה
-                bat 'echo favicon.ico > exclude_list.txt'
                 
                 bat 'if exist client\\package.json copy client\\package.json C:\\production\\carmelton-data-migration\\client\\package.json'
                 bat 'if exist client\\package-lock.json copy client\\package-lock.json C:\\production\\carmelton-data-migration\\client\\package-lock.json'
@@ -81,7 +82,7 @@ pipeline {
         stage('Start Production Service') {
             steps {
                 // הפעלה מחדש של השירות
-                bat 'cd C:\\production\\carmelton-data-migration && npx pm2 start ecosystem.config.js || echo "Failed to start services"'
+                bat(script: 'cd C:\\production\\carmelton-data-migration && npx pm2 start ecosystem.config.js || echo "Failed to start services"', returnStatus: true)
             }
         }
     }
@@ -91,7 +92,7 @@ pipeline {
         }
         failure {
             // במקרה של כישלון, ננסה להפעיל את השירות בכל זאת
-            bat 'cd C:\\production\\carmelton-data-migration && npx pm2 start ecosystem.config.js || echo "Failed to restart services"'
+            bat(script: 'cd C:\\production\\carmelton-data-migration && npx pm2 start ecosystem.config.js || echo "Failed to restart services"', returnStatus: true)
             echo 'Deployment failed, attempted to restart services'
         }
         always {
