@@ -138,7 +138,7 @@ async function fetchEligibleParentRecords(
      FROM ${tableName}
      WHERE RowId > @startRow
      AND is_eligible = 1
-     AND Error like '%{"code":"400","message":"מסך NATF_ACCOUNTS אינו מוכן.","target":"","details":{},"innererror":{}}%'
+     AND (Status IS NULL OR Status = 'Failed')       
      ORDER BY RowId ASC
      OFFSET 0 ROWS
      FETCH NEXT @limit ROWS ONLY`,

@@ -20,6 +20,19 @@ export async function priorityAuthMiddleware(
     // Get configuration from database instead of environment variables
     const config = await configService.getConfig();
 
+    // Validate that required config values exist
+    if (!config) {
+      throw new Error("Configuration not found");
+    }
+
+    if (!config.PRIORITY_BASE_URL) {
+      throw new Error("PRIORITY_BASE_URL is missing in configuration");
+    }
+
+    if (!config.PRIORITY_COMPANY) {
+      throw new Error("PRIORITY_COMPANY is missing in configuration");
+    }
+
     // Check if the base URL ends with a slash and the screen name starts with one
     let baseUrl = config.PRIORITY_BASE_URL;
     if (!baseUrl.endsWith("/")) baseUrl += "/";
