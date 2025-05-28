@@ -79,6 +79,15 @@ pipeline {
                 bat 'del exclude_list.txt'
             }
         }
+        stage('Install Dependencies in Production') {
+            steps {
+                // התקנת תלויות בסביבת הייצור
+                bat '''
+                    cd C:\\production\\carmelton-data-migration
+                    npm install --production
+                '''
+            }
+        }
         stage('Start Production Service') {
             steps {
                 // הפעלה מחדש של השירות
