@@ -1,16 +1,20 @@
 USE [CarmeltonDB_STG]
 GO
 
-/****** Object:  UserDefinedTableType [dbo].[ErrorLogTableType]    Script Date: 10/05/2025 08:56:31 ******/
-CREATE TYPE [dbo].[ErrorLogTableType] AS TABLE(
-	[JobName] [nvarchar](255) NOT NULL,
-	[BatchId] [uniqueidentifier] NULL,
-	[TableName] [nvarchar](255) NOT NULL,
-	[RowId] [int] NULL,
-	[Error] [nvarchar](max) NOT NULL,
-	[JobId] [uniqueidentifier] NULL,
-	[ErrorStatus] [nvarchar](50) NULL
-)
+-- Drop the existing type first
+IF EXISTS (SELECT * FROM sys.types WHERE name = 'BatchUpdateTableType')
+    DROP TYPE [dbo].[BatchUpdateTableType]
 GO
 
-
+CREATE TYPE [dbo].[BatchUpdateTableType] AS TABLE(
+    [RowId] [int] NULL,
+    [BatchId] [uniqueidentifier] NULL,
+    [JobName] [nvarchar](255) NULL,
+    [Status] [nvarchar](100) NULL,
+    [Error] [nvarchar](max) NULL,
+    [JobId] [uniqueidentifier] NULL,
+    [priority_id] [nvarchar](50) NULL,
+    [is_new] [bit] NULL,
+    [StatusCode] [int] NULL
+)
+GO
