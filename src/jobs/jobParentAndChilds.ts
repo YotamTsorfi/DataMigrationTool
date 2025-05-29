@@ -497,6 +497,7 @@ async function forceErrorRecordUpdates(
       JobId: jobId,
       priority_id: null,
       is_new: 1,
+      StatusCode: error.status || 500, // Add status code with fallback
     }));
 
     // Prepare error rows for logging

@@ -319,6 +319,7 @@ async function performDatabaseUpdatesAsync(
     const availableColumns = new Set();
     let errorColumn: string | null = null;
     let hasPriorityId = false;
+    let hasStatusCode = false;
 
     try {
       // בדיקת מבנה טבלה - פעם אחת בלבד
@@ -340,6 +341,7 @@ async function performDatabaseUpdatesAsync(
           : null;
 
       hasPriorityId = availableColumns.has("priority_id");
+      hasStatusCode = availableColumns.has("StatusCode");
     } catch (error) {
       console.error(`Error fetching table structure for ${tableName}:`, error);
       // אפילו אם נכשלנו בשליפת מבנה הטבלה, ננסה להמשיך עם ברירות מחדל סבירות
@@ -465,6 +467,9 @@ async function performDatabaseUpdatesAsync(
               query += `, priority_id = @PriorityId`;
             }
 
+            if (hasStatusCode && row.StatusCode != null) {
+              query += `, StatusCode = @StatusCode`;
+            }
             query += ` WHERE RowId = @RowId`;
 
             const params: any = {
@@ -473,6 +478,10 @@ async function performDatabaseUpdatesAsync(
               JobName: row.JobName,
               RowId: row.RowId,
             };
+
+            if (hasStatusCode && row.StatusCode != null) {
+              params.StatusCode = row.StatusCode;
+            }
 
             if (errorColumn) {
               const errorValue = row.ErrorMessage || row.Error || null;

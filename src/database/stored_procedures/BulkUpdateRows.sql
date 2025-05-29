@@ -1,16 +1,12 @@
 USE [CarmeltonDB_STG]
 GO
 
-/****** Object:  StoredProcedure [dbo].[BulkUpdateRows]    Script Date: 29/05/2025 09:36:38 ******/
-SET ANSI_NULLS ON
+-- Drop existing procedure
+IF EXISTS (SELECT * FROM sys.procedures WHERE name = 'BulkUpdateRows')
+    DROP PROCEDURE [dbo].[BulkUpdateRows]
 GO
 
-SET QUOTED_IDENTIFIER ON
-GO
-
-
--- יצירת הפרוצדורה המעודכנת
-CREATE   PROCEDURE [dbo].[BulkUpdateRows]
+CREATE PROCEDURE [dbo].[BulkUpdateRows]
     @TableName NVARCHAR(255),
     @Updates dbo.BatchUpdateTableType READONLY
 AS
@@ -18,8 +14,9 @@ BEGIN
     DECLARE @sql NVARCHAR(MAX);
     DECLARE @hasPriorityId BIT = 0;
     DECLARE @hasIsNew BIT = 0;
+    DECLARE @hasStatusCode BIT = 0;
     
-    -- בדיקה האם העמודות קיימות בטבלה
+    -- Check if the columns exist in the table
     DECLARE @checkColumnSql NVARCHAR(MAX) = N'
         IF EXISTS (
             SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS 
@@ -34,13 +31,20 @@ BEGIN
             AND COLUMN_NAME = ''is_new''
         )
         SET @hasIsNew = 1;
+        
+        IF EXISTS (
+            SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS 
+            WHERE TABLE_NAME = @TableName 
+            AND COLUMN_NAME = ''StatusCode''
+        )
+        SET @hasStatusCode = 1;
     ';
     
     EXEC sp_executesql @checkColumnSql, 
-        N'@TableName NVARCHAR(255), @hasPriorityId BIT OUTPUT, @hasIsNew BIT OUTPUT', 
-        @TableName, @hasPriorityId OUTPUT, @hasIsNew OUTPUT;
+        N'@TableName NVARCHAR(255), @hasPriorityId BIT OUTPUT, @hasIsNew BIT OUTPUT, @hasStatusCode BIT OUTPUT', 
+        @TableName, @hasPriorityId OUTPUT, @hasIsNew OUTPUT, @hasStatusCode OUTPUT;
     
-    -- בניית פקודת SQL
+    -- Build the SQL statement
     SET @sql = 'UPDATE t
                 SET t.BatchId = u.BatchId,
                     t.JobName = u.JobName,
@@ -48,14 +52,21 @@ BEGIN
                     t.Error = u.Error,
                     t.JobId = u.JobId';
     
-    -- הוספת עמודת priority_id אם קיימת
+    -- Add priority_id if it exists
     IF @hasPriorityId = 1
     BEGIN
         SET @sql = @sql + ',
                     t.priority_id = u.priority_id';
     END
     
-    -- הוספת עדכון is_new אם קיימת - הגדרת 0 כאשר הסטטוס הוא Completed
+    -- Add StatusCode if it exists
+    IF @hasStatusCode = 1
+    BEGIN
+        SET @sql = @sql + ',
+                    t.StatusCode = u.StatusCode';
+    END
+    
+    -- Add is_new if it exists - set to 0 when Status is Completed
     IF @hasIsNew = 1
     BEGIN
         SET @sql = @sql + ',
@@ -66,9 +77,7 @@ BEGIN
                 FROM ' + QUOTENAME(@TableName) + ' t
                 INNER JOIN @Updates u ON t.RowId = u.RowId';
     
-    -- הרצת השאילתא
+    -- Execute the query
     EXEC sp_executesql @sql, N'@Updates dbo.BatchUpdateTableType READONLY', @Updates;
 END;
 GO
-
-

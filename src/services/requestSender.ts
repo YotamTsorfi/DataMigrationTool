@@ -152,6 +152,12 @@ export function processApiResponse(
       ? response.data.responses[index]
       : null;
 
+    let statusCode = null;
+    // Extract the actual HTTP status code
+    if (responseItem && responseItem.status) {
+      statusCode = responseItem.status;
+    }
+
     // Debug: Log individual record processing
     // console.log(`Processing row ${index} (RowId: ${row.RowId}):`);
 
@@ -286,6 +292,7 @@ export function processApiResponse(
       JobId: row.__jobId,
       priority_id: priorityId,
       is_new: status === "Completed" ? 0 : 1,
+      StatusCode: statusCode,
     });
 
     lastProcessedIndex = row.RowId;

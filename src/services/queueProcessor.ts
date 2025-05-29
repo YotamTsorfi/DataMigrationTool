@@ -292,6 +292,7 @@ export class QueueProcessor {
             JobId: item.jobId,
             priority_id: priorityId,
             is_new: 0,
+            StatusCode: result.responseStats?.status || 200,
           });
         } else {
           this.failureCount += result.responseStats?.failureCount || 1;
@@ -315,6 +316,7 @@ export class QueueProcessor {
             JobId: item.jobId,
             priority_id: null,
             is_new: 1,
+            StatusCode: result.responseStats?.status || 500,
           });
 
           // Add error row
@@ -386,6 +388,7 @@ export class QueueProcessor {
             JobId: item.jobId,
             priority_id: priorityId,
             is_new: 0,
+            StatusCode: response.status || 200,
           });
         } else {
           this.failureCount++;
@@ -405,6 +408,7 @@ export class QueueProcessor {
             JobId: item.jobId,
             priority_id: null,
             is_new: 1,
+            StatusCode: response.status || 500,
           });
 
           this.errorRows.push({
