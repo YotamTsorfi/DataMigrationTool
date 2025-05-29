@@ -98,6 +98,7 @@ export class QueueProcessor {
   private logRetries: boolean = false;
   private enableRateLimit: boolean = true; // Enable rate limiting by default
   private startTime: number | null = null;
+  private updateBatchTable: boolean = false; // Flag to control batch table updates
 
   constructor(
     queueId: string,
@@ -111,6 +112,10 @@ export class QueueProcessor {
     this.tableName = tableName;
     this.performanceMonitor = new PerformanceMonitor();
     this.performanceMonitor.startOperation();
+  }
+
+  public setUpdateBatchTable(update: boolean): void {
+    this.updateBatchTable = update;
   }
 
   private itemProcessor: ItemProcessorFunction | null = null;
@@ -173,10 +178,6 @@ export class QueueProcessor {
       ? Math.floor(this.normalConcurrency * 0.7)
       : this.normalConcurrency;
 
-    // Number of items to process concurrently
-    // const QUEUE_CONCURRENT_ITEMS =
-    //   this.concurrencyLimit ||
-    //   parseInt(systemConfig.QUEUE_CONCURRENT_ITEMS || "500", 10);
     const startTime = Date.now();
     const batchId = uuidv4();
 
@@ -186,17 +187,6 @@ export class QueueProcessor {
       //// - We process items in batches of CONCURRENT_ITEMS (40) to improve performance.
       //// - Each batch is processed in parallel using Promise.all.
       //// Process all items in the queue
-      // for (const item of this.queue) {
-      //   await this.processItem(item);
-
-      //// Apply rate limiting
-      //   await this.applyRateLimit();
-      //   // Update progress tracker every few items
-      //   if ((this.successCount + this.failureCount) % 10 === 0) {
-      //     this.updateProgress();
-      //   }
-      // }
-
       for (let i = 0; i < this.queue.length; i += QUEUE_CONCURRENT_ITEMS) {
         const batch = this.queue.slice(i, i + QUEUE_CONCURRENT_ITEMS);
 
@@ -217,20 +207,23 @@ export class QueueProcessor {
       this.performanceMonitor.endOperation();
 
       // Record batch processing results
-      await recordBatchProcessing(
-        this.jobType,
-        batchId,
-        this.jobId,
-        new Date(startTime),
-        new Date(endTime),
-        this.queue.length,
-        this.successCount,
-        this.failureCount,
-        this.lastProcessedIndex,
-        this.failureCount > 0 ? "PartialSync" : "Completed",
-        null,
-        this.tableName
-      );
+      if (this.updateBatchTable) {
+        await recordBatchProcessing(
+          this.jobType,
+          batchId,
+          this.jobId,
+          new Date(startTime),
+          new Date(endTime),
+          this.queue.length,
+          this.successCount,
+          this.failureCount,
+          this.lastProcessedIndex,
+          this.failureCount > 0 ? "PartialSync" : "Completed",
+          null,
+          this.tableName,
+          this.updateBatchTable
+        );
+      }
       console.log(
         `Queue ${this.queueId} stats: ${this.total503Errors}/${this.totalRequests} requests resulted in 503 errors (${((this.total503Errors / this.totalRequests) * 100).toFixed(2)}%)`
       );
@@ -295,7 +288,7 @@ export class QueueProcessor {
             BatchId: item.batchId,
             JobName: item.jobType,
             Status: "Completed",
-            ErrorMessage: null,
+            Error: null,
             JobId: item.jobId,
             priority_id: priorityId,
             is_new: 0,
@@ -318,7 +311,6 @@ export class QueueProcessor {
             BatchId: item.batchId,
             JobName: item.jobType,
             Status: "Failed",
-            ErrorMessage: cleanErrorMessage,
             Error: cleanErrorMessage,
             JobId: item.jobId,
             priority_id: null,
@@ -390,7 +382,7 @@ export class QueueProcessor {
             BatchId: item.batchId,
             JobName: item.jobType,
             Status: "Completed",
-            ErrorMessage: null,
+            Error: null,
             JobId: item.jobId,
             priority_id: priorityId,
             is_new: 0,
@@ -409,7 +401,6 @@ export class QueueProcessor {
             BatchId: item.batchId,
             JobName: item.jobType,
             Status: "Failed",
-            ErrorMessage: cleanErrorMessage,
             Error: cleanErrorMessage,
             JobId: item.jobId,
             priority_id: null,
@@ -459,7 +450,7 @@ export class QueueProcessor {
         BatchId: item.batchId,
         JobName: item.jobType,
         Status: "Failed",
-        ErrorMessage: errorMessage,
+        Error: errorMessage,
         JobId: item.jobId,
         priority_id: null,
         is_new: 1,
@@ -476,141 +467,6 @@ export class QueueProcessor {
       });
     }
   }
-  /*
-  private async processItem(item: QueueItem): Promise<void> {
-    try {
-      const response = await this.sendRequest(item);
-
-      if (response.success) {
-        this.successCount++;
-
-        // Extract Priority ID from successful response using the dynamic field
-        let priorityId = null;
-        if (
-          response.data &&
-          typeof response.data === "object" &&
-          item.priorityIdField
-        ) {
-          try {
-            // If direct field is available at the top level
-            if (response.data[item.priorityIdField] !== undefined) {
-              const idValue = response.data[item.priorityIdField];
-              priorityId =
-                idValue !== null && idValue !== undefined
-                  ? String(idValue)
-                  : null;
-            }
-            // For batch responses that might have nested structure
-            else if (
-              response.data.body &&
-              response.data.body[item.priorityIdField] !== undefined
-            ) {
-              const idValue = response.data.body[item.priorityIdField];
-              priorityId =
-                idValue !== null && idValue !== undefined
-                  ? String(idValue)
-                  : null;
-            }
-          } catch (err) {
-            if (err && typeof err === "object" && "message" in err) {
-              console.warn(
-                `Error extracting priority_id: ${(err as any).message}`
-              );
-            } else {
-              console.warn(`Error extracting priority_id:`, err);
-            }
-            priorityId = null;
-          }
-        }
-
-        this.updateRows.push({
-          RowId: item.row.RowId,
-          BatchId: item.batchId,
-          JobName: item.jobType,
-          Status: "Completed",
-          ErrorMessage: null,
-          JobId: item.jobId,
-          priority_id: priorityId,
-          is_new: 0,
-        });
-      } else {
-        this.failureCount++;
-        // Update the error rows with a cleaned error message
-        const cleanErrorMessage = this.formatErrorMessage(
-          response.error || "",
-          response.status,
-          response.errorData
-        );
-
-        this.updateRows.push({
-          RowId: item.row.RowId,
-          BatchId: item.batchId,
-          JobName: item.jobType,
-          Status: "Failed",
-          ErrorMessage: cleanErrorMessage,
-          JobId: item.jobId,
-          priority_id: null,
-          is_new: 1,
-        });
-
-        this.errorRows.push({
-          JobName: item.jobType,
-          BatchId: item.batchId,
-          TableName: item.tableName,
-          RowId: item.row.RowId,
-          Error: cleanErrorMessage,
-          JobId: item.jobId,
-          ErrorStatus: response.status ? String(response.status) : null,
-        });
-      }
-
-      if (this.progressListener) {
-        this.progressListener(this.successCount, this.failureCount);
-      }
-
-      this.lastProcessedIndex = Math.max(
-        this.lastProcessedIndex,
-        item.row.RowId
-      );
-    } catch (error) {
-      console.error(`Error processing item in queue ${this.queueId}:`, error);
-      this.failureCount++;
-
-      // Also extract errorData from caught errors
-      const errorData = axios.isAxiosError(error) ? error.response?.data : null;
-      const errorMessage = this.formatErrorMessage(
-        error instanceof Error ? error.message : "Unknown error",
-        axios.isAxiosError(error) ? error.response?.status || 0 : 0,
-        errorData // Add this parameter
-      );
-
-      if (this.progressListener) {
-        this.progressListener(this.successCount, this.failureCount);
-      }
-
-      this.updateRows.push({
-        RowId: item.row.RowId,
-        BatchId: item.batchId,
-        JobName: item.jobType,
-        Status: "Failed",
-        ErrorMessage: errorMessage,
-        JobId: item.jobId,
-        priority_id: null,
-        is_new: 1,
-      });
-
-      this.errorRows.push({
-        JobName: item.jobType,
-        BatchId: item.batchId,
-        TableName: item.tableName,
-        RowId: item.row.RowId,
-        Error: errorMessage,
-        JobId: item.jobId,
-        ErrorStatus: "Error",
-      });
-    }
-  }
-  */
   //------------------------------------------------------
   // Format error message to be more user friendly
   private formatErrorMessage(
@@ -918,30 +774,6 @@ export class QueueProcessor {
 
     await new Promise((resolve) => setTimeout(resolve, delay));
   }
-  // private async applyRateLimit(): Promise<void> {
-  //   // Skip rate limiting for small batches
-  //   if (this.queue.length < 1000) {
-  //     return; // No delay for small queues
-  //   }
-
-  //   // Use a much smaller delay for large queues
-  //   const delay = Math.max(5, Math.min(this.minDelay, 5));
-  //   await new Promise((resolve) => setTimeout(resolve, delay));
-  // }
-  // private async applyRateLimit(): Promise<void> {
-  //   const queueLength = this.queue.length;
-  //   // אם נשארו מעט פריטים בתור או שקצב השליחה נמוך, לא צריך להמתין
-  //   if (queueLength < 10 && this.successCount + this.failureCount < 100) {
-  //     return; // דילוג על ההשהייה כשאין עומס
-  //   }
-
-  //   const delay = Math.max(1000 / this.rateLimit, this.minDelay);
-  //   await new Promise((resolve) => setTimeout(resolve, delay));
-  // }
-  // private async applyRateLimit(): Promise<void> {
-  //   const delay = Math.max(1000 / this.rateLimit, this.minDelay);
-  //   await new Promise((resolve) => setTimeout(resolve, delay));
-  // }
   //------------------------------------------------------
   // Update the progress tracker
   private updateProgress(): void {

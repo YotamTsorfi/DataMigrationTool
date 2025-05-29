@@ -1,7 +1,7 @@
 USE [CarmeltonDB_STG]
 GO
 
-/****** Object:  StoredProcedure [dbo].[BulkUpdateRows]    Script Date: 23/05/2025 11:33:05 ******/
+/****** Object:  StoredProcedure [dbo].[BulkUpdateRows]    Script Date: 29/05/2025 09:36:38 ******/
 SET ANSI_NULLS ON
 GO
 
@@ -45,7 +45,7 @@ BEGIN
                 SET t.BatchId = u.BatchId,
                     t.JobName = u.JobName,
                     t.Status = u.Status,
-                    t.Error = u.ErrorMessage,
+                    t.Error = u.Error,
                     t.JobId = u.JobId';
     
     -- הוספת עמודת priority_id אם קיימת

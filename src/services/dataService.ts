@@ -19,8 +19,8 @@ export async function fetchDataChunk(
     RowId > ${lastRowId}
     AND
     is_eligible = 1
-    AND is_new = 1
-    AND (Status IS NULL OR Status = 'Failed')    
+    AND is_new = 1    
+    AND (Status IS NULL OR Status = 'Failed')        
   `;
 
   try {
@@ -56,27 +56,22 @@ export async function fetchDataChunk(
  */
 export function sanitizeForSqlUpdate(updates: any[]): any[] {
   return updates.map((update) => {
-    // Create a new object to avoid modifying the original
-    const sanitized = { ...update };
-
-    // Ensure priority_id is either a string or null (never undefined)
-    if (sanitized.priority_id === undefined) {
-      sanitized.priority_id = null;
-    } else if (sanitized.priority_id !== null) {
-      sanitized.priority_id = String(sanitized.priority_id);
-    }
-
-    // Ensure ErrorMessage is either a string or null
-    if (
-      sanitized.ErrorMessage !== null &&
-      sanitized.ErrorMessage !== undefined
-    ) {
-      sanitized.ErrorMessage = String(sanitized.ErrorMessage);
-    } else {
-      sanitized.ErrorMessage = null;
-    }
-
-    return sanitized;
+    // החזר אובייקט חדש עם רק השדות שאנחנו צריכים
+    return {
+      RowId: update.RowId,
+      BatchId: update.BatchId,
+      JobName: update.JobName,
+      Status: update.Status,
+      Error: update.Error || update.ErrorMessage || null,
+      JobId: update.JobId,
+      priority_id:
+        update.priority_id === undefined
+          ? null
+          : update.priority_id === null
+            ? null
+            : String(update.priority_id),
+      is_new: update.is_new,
+    };
   });
 }
 
@@ -193,7 +188,7 @@ export async function performBulkUpdateWithService(
             `
             UPDATE ${tableName}
             SET Status = 'Completed',
-              ErrorMessage = 'Completed after deadlock retry'
+              Error = 'Completed after deadlock retry'
             WHERE RowId = @RowId
           `,
             {
@@ -327,11 +322,16 @@ export async function recordBatchProcessing(
   lastProcessedIndex: number,
   status: string,
   errorMessage: string | null,
-  tableName: string
+  tableName: string,
+  updateBatchTable: boolean = false
 ): Promise<void> {
   // const recordStartTime = Date.now();
 
   try {
+    // If updateBatchTable is false, skip the database update
+    if (!updateBatchTable) {
+      return;
+    }
     // Ensure status is correct based on success/failure/PartialSync counts
     let finalStatus = status;
 
