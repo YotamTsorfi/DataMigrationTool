@@ -165,7 +165,7 @@ export function processApiResponse(
         BatchId: row.__batchId,
         JobName: row.__jobType,
         Status: "Failed",
-        ErrorMessage: "No response item found",
+        Error: "No response item found",
         JobId: row.__jobId,
       });
 
@@ -282,7 +282,7 @@ export function processApiResponse(
       BatchId: row.__batchId,
       JobName: row.__jobType,
       Status: status,
-      ErrorMessage: errorMessage,
+      Error: errorMessage,
       JobId: row.__jobId,
       priority_id: priorityId,
       is_new: status === "Completed" ? 0 : 1,

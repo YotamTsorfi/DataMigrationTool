@@ -23,7 +23,8 @@ export async function processWithQueues(
   jobType: string,
   jobId: string,
   priorityIdField?: string,
-  logErrors: boolean = false
+  logErrors: boolean = false,
+  updateBatchTable: boolean = false
 ): Promise<any[]> {
   // Get system configuration
   const config = await configService.getConfig();
@@ -101,9 +102,14 @@ export async function processWithQueues(
       // Create queue processors for horizontal batches
       const horizontalQueues: QueueProcessor[] = [];
       for (let h = 0; h < HORIZONTAL_BATCH_SIZE; h++) {
-        horizontalQueues.push(
-          new QueueProcessor(`queue-${h}`, jobId, jobType, tableName)
+        const queue = new QueueProcessor(
+          `queue-${h}`,
+          jobId,
+          jobType,
+          tableName
         );
+        queue.setUpdateBatchTable(updateBatchTable);
+        horizontalQueues.push(queue);
       }
 
       // Initialize tracking for workload distribution

@@ -493,7 +493,7 @@ async function forceErrorRecordUpdates(
       BatchId: record.__batchId,
       JobName: record.__jobType,
       Status: "Failed",
-      ErrorMessage: error instanceof Error ? error.message : String(error),
+      Error: error instanceof Error ? error.message : String(error),
       JobId: jobId,
       priority_id: null,
       is_new: 1,
@@ -562,8 +562,7 @@ async function forceErrorRecordUpdates(
                 BatchId: record.__batchId,
                 JobName: record.__jobType,
                 Status: "Failed",
-                ErrorMessage:
-                  error instanceof Error ? error.message : String(error),
+                Error: error instanceof Error ? error.message : String(error),
                 JobId: jobId,
                 priority_id: null,
                 is_new: 1,

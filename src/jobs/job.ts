@@ -64,7 +64,8 @@ async function processBatch(
   jobId: string,
   dbFetchTime?: number,
   priorityIdField?: string,
-  logErrors: boolean = false
+  logErrors: boolean = false,
+  updateBatchTable: boolean = false
 ): Promise<BatchCreateRowsResult> {
   //TODO
   // console.log(`processBatch called with priorityIdField: [${priorityIdField}]`);
@@ -229,23 +230,25 @@ async function processBatch(
     }
 
     // Record batch processing results with the appropriate status
-    await recordBatchProcessing(
-      jobType,
-      batchId,
-      jobId,
-      adjustTimeZone(new Date(perfMonitor.metrics.startTime)),
-      adjustTimeZone(new Date(perfMonitor.metrics.endTime)),
-      rows.length,
-      perfMonitor.metrics.successCount,
-      perfMonitor.metrics.failureCount,
-      perfMonitor.metrics.lastProcessedIndex,
-      batchStatus, // Completed or Failed
-      hadDeadlocks
-        ? "DB update had deadlocks but completed successfully"
-        : null,
-      tableName
-    );
-
+    if (updateBatchTable) {
+      await recordBatchProcessing(
+        jobType,
+        batchId,
+        jobId,
+        adjustTimeZone(new Date(perfMonitor.metrics.startTime)),
+        adjustTimeZone(new Date(perfMonitor.metrics.endTime)),
+        rows.length,
+        perfMonitor.metrics.successCount,
+        perfMonitor.metrics.failureCount,
+        perfMonitor.metrics.lastProcessedIndex,
+        batchStatus, // Completed or Failed
+        hadDeadlocks
+          ? "DB update had deadlocks but completed successfully"
+          : null,
+        tableName,
+        updateBatchTable
+      );
+    }
     // Clear large response data to help garbage collection
     if (response && response.data) {
       response.data = null;
@@ -296,7 +299,8 @@ async function processBatches(
   jobType: string,
   jobId: string,
   priorityIdField: string,
-  logErrors: boolean = false
+  logErrors: boolean = false,
+  updateBatchTable: boolean = false
 ): Promise<any[]> {
   const config = await configService.getConfig();
   const BATCH_SIZE = config.BATCH_SIZE;
@@ -363,7 +367,8 @@ async function processBatches(
               jobId,
               perfMonitor.metrics.dbFetchTime,
               priorityIdField,
-              logErrors
+              logErrors,
+              updateBatchTable
             )
           )
         );

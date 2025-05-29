@@ -59,7 +59,8 @@ export async function processParentChildResponse(
   priorityIdField?: string,
   childTableNames?: string[],
   childJobs?: ChildJob[],
-  logErrors: boolean = false
+  logErrors: boolean = false,
+  updateBatchTable: boolean = false
 ): Promise<ProcessResponseResult> {
   try {
     // Start measuring DB update time
@@ -311,22 +312,25 @@ export async function processParentChildResponse(
     perfMonitor.setDbUpdateTime(totalDbUpdateTime);
 
     // Record batch processing results
-    await recordBatchProcessing(
-      jobType,
-      batchId,
-      jobId,
-      adjustTimeZone(new Date(perfMonitor.metrics.startTime)),
-      adjustTimeZone(new Date(perfMonitor.metrics.endTime)),
-      enrichedRecords.length,
-      perfMonitor.metrics.successCount,
-      perfMonitor.metrics.failureCount,
-      perfMonitor.metrics.lastProcessedIndex,
-      batchStatus,
-      hadDeadlocks
-        ? "DB update had deadlocks but completed successfully"
-        : null,
-      parentTable
-    );
+    if (updateBatchTable) {
+      await recordBatchProcessing(
+        jobType,
+        batchId,
+        jobId,
+        adjustTimeZone(new Date(perfMonitor.metrics.startTime)),
+        adjustTimeZone(new Date(perfMonitor.metrics.endTime)),
+        enrichedRecords.length,
+        perfMonitor.metrics.successCount,
+        perfMonitor.metrics.failureCount,
+        perfMonitor.metrics.lastProcessedIndex,
+        batchStatus,
+        hadDeadlocks
+          ? "DB update had deadlocks but completed successfully"
+          : null,
+        parentTable,
+        updateBatchTable
+      );
+    }
 
     // Return success result
     return {

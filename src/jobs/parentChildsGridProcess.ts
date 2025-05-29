@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from "uuid";
-import { DatabaseService } from "../services/databaseService";
+// import { DatabaseService } from "../services/databaseService";
 import { fetchParentChildChunk } from "../services/parentChildChunkFetcher";
 import { configService } from "../config/configService";
 import PerformanceMonitor from "../utils/performanceMonitor";
@@ -39,7 +39,8 @@ export async function processParentChildGridBatches(
   parentIdField: string,
   linkedField: string,
   childJobs: ChildJob[],
-  logErrors: boolean = false
+  logErrors: boolean = false,
+  updateBatchTable: boolean = false
 ): Promise<BatchResult[]> {
   console.log(
     "------------- PARENT-CHILD GRID PROCESSING --------------------"
@@ -237,7 +238,8 @@ export async function processParentChildGridBatches(
                 parentIdField,
                 childTableNames,
                 childJobs,
-                logErrors
+                logErrors,
+                updateBatchTable
               );
               // Verify success based on detailed result inspection
               const isSuccessful =
@@ -396,7 +398,6 @@ async function forceErrorRecordUpdate(
       BatchId: batchId,
       JobName: jobType,
       Status: "Failed",
-      ErrorMessage: error instanceof Error ? error.message : String(error),
       Error: error instanceof Error ? error.message : String(error), // Add Error field
       JobId: jobId,
       priority_id: null,
@@ -443,8 +444,7 @@ async function forceErrorRecordUpdate(
               BatchId: batchId,
               JobName: jobType,
               Status: "Failed",
-              ErrorMessage:
-                error instanceof Error ? error.message : String(error),
+              Error: error instanceof Error ? error.message : String(error),
               JobId: jobId,
               priority_id: null,
               is_new: 1,
@@ -468,26 +468,26 @@ async function forceErrorRecordUpdate(
 /**
  * Helper function to get batch size from configuration
  */
-async function getBatchSize(): Promise<number> {
-  try {
-    const result = await DatabaseService.executeQuery(
-      `SELECT ConfigValue FROM PrioritySystemConfig WHERE ConfigKey = 'BATCH_SIZE'`
-    );
+// async function getBatchSize(): Promise<number> {
+//   try {
+//     const result = await DatabaseService.executeQuery(
+//       `SELECT ConfigValue FROM PrioritySystemConfig WHERE ConfigKey = 'BATCH_SIZE'`
+//     );
 
-    return result && result[0]
-      ? parseInt((result[0] as { ConfigValue: string }).ConfigValue, 10)
-      : 1000; // Default batch size
-  } catch (error) {
-    console.error("Error fetching batch size:", error);
-    return 1000; // Default batch size if we can't get the config
-  }
-}
+//     return result && result[0]
+//       ? parseInt((result[0] as { ConfigValue: string }).ConfigValue, 10)
+//       : 1000; // Default batch size
+//   } catch (error) {
+//     console.error("Error fetching batch size:", error);
+//     return 1000; // Default batch size if we can't get the config
+//   }
+// }
 
 /**
  * Format time for logging
  */
-function formatTime(minutes: number): string {
-  const hrs = Math.floor(minutes / 60);
-  const mins = Math.floor(minutes % 60);
-  return `${hrs}h ${mins}m`;
-}
+// function formatTime(minutes: number): string {
+//   const hrs = Math.floor(minutes / 60);
+//   const mins = Math.floor(minutes % 60);
+//   return `${hrs}h ${mins}m`;
+// }

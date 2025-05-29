@@ -21,6 +21,7 @@ interface JobRequest {
   priorityLinkedField?: string;
   priorityJobTypeId?: number;
   logErrors?: boolean;
+  updateBatchTable?: boolean;
 }
 
 interface ChildJob {
@@ -141,6 +142,15 @@ class JobManager {
             systemConfig.LOG_ERROR === "0" ||
             systemConfig.LOG_ERROR === false
           );
+    // Use this flag to determine if we should update the batch table
+    const updateBatchTable =
+      jobRequest.logErrors !== undefined
+        ? jobRequest.logErrors
+        : !(
+            systemConfig.LOG_BATCH_TABLE === 0 ||
+            systemConfig.LOG_BATCH_TABLE === "0" ||
+            systemConfig.LOG_BATCH_TABLE === false
+          );
 
     // Configure ErrorBufferService based on the logging flag
     ErrorBufferService.getInstance().setLoggingEnabled(logErrors);
@@ -242,7 +252,8 @@ class JobManager {
             jobRequest.priorityIdField,
             jobRequest.priorityLinkedField,
             childJobs,
-            logErrors
+            logErrors,
+            updateBatchTable
           );
 
           // Reset error buffer configuration to default after parent-child processing
@@ -260,7 +271,8 @@ class JobManager {
             jobId,
             jobRequest,
             processingType,
-            logErrors
+            logErrors,
+            updateBatchTable
           );
         }
       } else {
@@ -419,7 +431,8 @@ class JobManager {
     jobId: string,
     jobRequest: JobRequest,
     processingType: string,
-    logErrors: boolean = false
+    logErrors: boolean = false,
+    updateBatchTable: boolean = false
   ): Promise<any> {
     console.log(
       `Job ${jobId} starting ${processingType} processing with error logging: ${logErrors ? "enabled" : "disabled"}`
@@ -445,7 +458,8 @@ class JobManager {
         jobRequest.jobType,
         jobId,
         jobRequest.priorityIdField,
-        logErrors
+        logErrors,
+        updateBatchTable
       );
     } else {
       // עיבוד רגיל במנות (ברירת המחדל)
@@ -457,7 +471,8 @@ class JobManager {
         jobRequest.jobType,
         jobId,
         jobRequest.priorityIdField,
-        logErrors
+        logErrors,
+        updateBatchTable
       );
     }
 
