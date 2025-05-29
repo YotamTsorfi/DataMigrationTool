@@ -84,7 +84,7 @@ export async function performBulkUpdateWithService(
   tableName: string,
   updates: any[],
   perfMonitor?: PerformanceMonitor,
-  batchSize = 1000,
+  batchSize = 500,
   maxRetries = 3,
   sentToPriority = false
 ): Promise<{ updateTime: number; hadDeadlocks: boolean; successful: boolean }> {

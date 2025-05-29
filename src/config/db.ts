@@ -7,7 +7,7 @@ const poolConfig = {
   max: 20, // Increase max connections
   idleTimeoutMillis: 30000,
   connectionTimeout: 15000,
-  requestTimeout: 60000, // Increase request timeout
+  requestTimeout: 120000, // Increase request timeout
   pool: {
     acquireTimeoutMillis: 30000, // Timeout for acquiring a connection
     createTimeoutMillis: 30000, // Timeout for creating a new connection
