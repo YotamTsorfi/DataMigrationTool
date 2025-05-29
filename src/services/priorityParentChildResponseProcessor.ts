@@ -120,6 +120,7 @@ export async function processParentChildResponse(
           JobId: record.__jobId,
           priority_id: null,
           is_new: 1,
+          StatusCode: response?.status || 500,
         });
 
         // Add error record
@@ -162,6 +163,7 @@ export async function processParentChildResponse(
                   priority_id: null,
                   is_new: 1,
                   tableName: childTableName,
+                  StatusCode: response?.status || 500,
                 });
               });
             }
@@ -454,6 +456,7 @@ async function forceErrorDatabaseUpdates(
     JobId: jobId,
     priority_id: null,
     is_new: 1,
+    StatusCode: error.status || 500,
   }));
 
   // Create error logs
@@ -492,6 +495,7 @@ async function forceErrorDatabaseUpdates(
                 priority_id: null,
                 is_new: 1,
                 tableName: job.DBTableName,
+                StatusCode: error.status || 500,
               });
             });
           }
@@ -579,6 +583,7 @@ function processApiResponse(
     lastProcessedIndex = index;
     const record = enrichedRecords[index];
     const isSuccess = apiResponse.status >= 200 && apiResponse.status < 300;
+    const statusCode = apiResponse.status; // Extract HTTP status code
 
     if (isSuccess) {
       successCount++;
@@ -593,6 +598,7 @@ function processApiResponse(
         JobId: record.__jobId,
         priority_id: null as string | null, // Explicitly type as string|null for SQL compatibility
         is_new: 0,
+        StatusCode: statusCode,
       };
 
       // Extract Priority ID if available
@@ -668,6 +674,7 @@ function processApiResponse(
                 priority_id: null as string | null, // Explicitly type as string|null for SQL compatibility
                 is_new: 0,
                 tableName: childTableName,
+                StatusCode: statusCode,
               };
 
               // Extract Priority ID for child record if available
@@ -858,6 +865,13 @@ function processApiResponse(
         errorMessage = apiResponse.body || "Failed to parse error response";
       }
 
+      const statusCode =
+        apiResponse.status ||
+        (typeof apiResponse.body === "string" &&
+        apiResponse.body.includes('"code"')
+          ? JSON.parse(apiResponse.body).code
+          : "Unknown");
+
       // Ensure errorMessage is always a string for parent record
       const safeParentErrorMessage =
         typeof errorMessage === "string"
@@ -876,6 +890,7 @@ function processApiResponse(
         JobId: record.__jobId,
         priority_id: null, // Explicitly set to null for SQL compatibility
         is_new: 1,
+        StatusCode: statusCode,
       });
 
       // Update child records with the same error
@@ -912,6 +927,7 @@ function processApiResponse(
                 priority_id: null, // Explicitly set to null for SQL compatibility
                 is_new: 1,
                 tableName: childTableName,
+                StatusCode: statusCode,
               };
 
               childUpdateRows.push(childUpdate);
@@ -919,13 +935,6 @@ function processApiResponse(
           }
         });
       }
-
-      const statusCode =
-        apiResponse.status ||
-        (typeof apiResponse.body === "string" &&
-        apiResponse.body.includes('"code"')
-          ? JSON.parse(apiResponse.body).code
-          : "Unknown");
 
       // Add error log entry
       errorRows.push({

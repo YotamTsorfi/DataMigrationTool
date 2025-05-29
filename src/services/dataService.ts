@@ -19,7 +19,7 @@ export async function fetchDataChunk(
     RowId > ${lastRowId}
     AND
     is_eligible = 1
-    AND is_new = 1    
+    AND is_new = 1
     AND (Status IS NULL OR Status = 'Failed')        
   `;
 
@@ -71,6 +71,7 @@ export function sanitizeForSqlUpdate(updates: any[]): any[] {
             ? null
             : String(update.priority_id),
       is_new: update.is_new,
+      StatusCode: update.StatusCode || null,
     };
   });
 }

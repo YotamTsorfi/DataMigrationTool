@@ -139,7 +139,7 @@ async function fetchEligibleParentRecords(
      WHERE RowId > @startRow
      AND is_eligible = 1
      AND is_new = 1
-     AND (Status IS NULL OR Status = 'Failed')    
+     AND (Status IS NULL OR Status = 'Failed') 
      ORDER BY RowId ASC
      OFFSET 0 ROWS
      FETCH NEXT @limit ROWS ONLY`,
