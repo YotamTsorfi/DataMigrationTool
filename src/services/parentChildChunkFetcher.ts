@@ -138,10 +138,8 @@ async function fetchEligibleParentRecords(
      FROM ${tableName}
      WHERE RowId > @startRow
      AND is_eligible = 1
-     -- AND is_new = 1
-     -- AND (Status IS NULL OR Status = 'Failed')
-     AND isContactWasEmpty = 1 
-     AND Error like '%הכנסה לקובץ נכשלה%'
+     AND is_new = 1
+     AND (Status IS NULL OR Status = 'Failed')     
      ORDER BY RowId ASC
      OFFSET 0 ROWS
      FETCH NEXT @limit ROWS ONLY`,
