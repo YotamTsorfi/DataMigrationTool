@@ -1,0 +1,23 @@
+# Copilot Code Generation Instructions for TypeScript
+
+- Use TypeScript for all code examples.
+- Prefer `const` and `let` over `var`.
+- Use `async/await` syntax for asynchronous operations.
+- Always include explicit return types for functions and methods.
+- Utilize ES6+ features such as arrow functions, template literals, and destructuring.
+- Follow naming conventions:
+  - camelCase for variables and functions.
+  - PascalCase for classes and interfaces.
+  - UPPER_CASE for constants.
+- Organize imports: external libraries first, then internal modules.
+- Use single quotes for strings.
+- Include JSDoc comments for all public functions and classes.
+- Implement error handling using `try/catch` blocks.
+- For React components:
+  - Use functional components with hooks.
+  - Define prop types using TypeScript interfaces.
+  - Name components using PascalCase.
+- For API interactions:
+  - Use `fetch` or `axios` with typed request and response interfaces.
+  - Handle errors gracefully and provide user-friendly messages.
+- Ensure all code is formatted using Prettier with the project's configuration.
