@@ -82,7 +82,8 @@ const JobProgressTracker: React.FC<JobProgressTrackerProps> = ({ jobId }) => {
           updatedJobs[existingJobIndex] = progressData;
           return updatedJobs;
         } else {
-          return [...prev, progressData];
+          // Add new jobs at the beginning of the array instead of the end
+          return [progressData, ...prev];
         }
       });
     });
@@ -93,7 +94,11 @@ const JobProgressTracker: React.FC<JobProgressTrackerProps> = ({ jobId }) => {
         .then((res) => res.json())
         .then((data) => {
           if (data.success && data.activeJobs) {
-            setActiveJobs(data.activeJobs);
+            // Sort active jobs to ensure newest ones are at the top
+            const sortedJobs = [...data.activeJobs].sort(
+              (a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0)
+            );
+            setActiveJobs(sortedJobs);
           }
         })
         .catch((err) => console.error("Error fetching active jobs:", err));
