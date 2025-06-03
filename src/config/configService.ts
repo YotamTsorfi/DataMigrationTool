@@ -403,6 +403,40 @@ class ConfigurationService {
     // Replace with escaped version [Keyword] =
     return whereClause.replace(keywordPattern, "[$1] =");
   }
+  //------------------------------------------
+  /**
+   * Removes a custom WHERE clause for a specific job type by setting its value to empty
+   * @param jobType The job type identifier
+   * @returns Success status
+   */
+  public async removeWhereClauseForJobType(jobType: string): Promise<boolean> {
+    try {
+      // Format the configuration key
+      const configKey = `WHERE_CLAUSE_${jobType}`;
+
+      // Set to empty string rather than deleting the row
+      await DatabaseService.executeQuery(
+        `UPDATE PrioritySystemConfig 
+       SET ConfigValue = '', LastUpdated = GETDATE() 
+       WHERE ConfigKey = @configKey`,
+        { configKey }
+      );
+
+      // Update in-memory config to empty string (not null)
+      if (this.config.WHERE_CLAUSES) {
+        this.config.WHERE_CLAUSES[jobType] = "";
+      }
+
+      console.log(`Successfully cleared WHERE clause for job type ${jobType}`);
+      return true;
+    } catch (error) {
+      console.error(
+        `Failed to clear WHERE clause for job type ${jobType}:`,
+        error
+      );
+      return false;
+    }
+  }
 }
 
 export const configService = ConfigurationService.getInstance();

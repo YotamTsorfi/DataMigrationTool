@@ -92,6 +92,43 @@ const BatchProcessor: React.FC = () => {
     fetchProcessingType();
   }, []);
   //---------------------------------------------
+  /**
+   * Clears the WHERE clause for the selected job type
+   */
+  const clearWhereClause = async (): Promise<void> => {
+    if (!selectedJobType) {
+      toast.error("Please select a job type first");
+      return;
+    }
+
+    // Confirm deletion
+    if (
+      !window.confirm(
+        `Are you sure you want to remove the WHERE clause for ${selectedJobType}?`
+      )
+    ) {
+      return;
+    }
+
+    setIsSavingWhereClause(true);
+
+    try {
+      // Use null as a special indicator to remove the clause
+      const response = await axios.put(
+        `${process.env.REACT_APP_API_URL}/where-clause/${selectedJobType}`,
+        { whereClause: null }
+      );
+
+      // Clear the local state
+      setCustomWhereClause("");
+      setIsSavingWhereClause(false);
+      toast.success(`WHERE clause for ${selectedJobType} has been removed`);
+    } catch (error) {
+      console.error("Error clearing WHERE clause:", error);
+      toast.error("Failed to clear WHERE clause");
+      setIsSavingWhereClause(false);
+    }
+  };
   //---------------------------------------------
   /**
    * Fetches the WHERE clause for a specific job type
@@ -409,6 +446,13 @@ const BatchProcessor: React.FC = () => {
                     {isValidatingWhereClause
                       ? "Validating..."
                       : "Validate Syntax"}
+                  </SecureButton>
+                  <SecureButton
+                    onClick={clearWhereClause}
+                    disabled={isSavingWhereClause || disabled}
+                    style={{ backgroundColor: "#dc3545" }}
+                  >
+                    Clear WHERE Clause
                   </SecureButton>
                 </ButtonGroup>
               </WhereClauseContainer>

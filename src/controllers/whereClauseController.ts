@@ -72,7 +72,8 @@ export const whereClauseController = {
   },
 
   /**
-   * Sets a custom WHERE clause for a specific job type
+   * Sets a custom WHERE clause for a specific job type or removes it
+   * Handles both updating with a new clause and removing existing clauses
    */
   async setWhereClause(req: Request, res: Response): Promise<void> {
     try {
@@ -84,30 +85,47 @@ export const whereClauseController = {
         return;
       }
 
-      // Empty string is allowed (clears the custom WHERE clause)
-      const clauseToSet = whereClause || "";
+      // Special handling for clause removal
+      if (whereClause === null) {
+        console.log(`Request to clear WHERE clause for job type: ${jobType}`);
 
+        // Direct removal approach - use a special method specifically for removal
+        const success =
+          await configService.removeWhereClauseForJobType(jobType);
+
+        if (success) {
+          res.status(200).json({
+            message: `WHERE clause for ${jobType} has been removed`,
+            whereClause: "",
+          });
+        } else {
+          res.status(400).json({
+            error: "Failed to remove WHERE clause",
+          });
+        }
+        return;
+      }
+
+      // Normal WHERE clause update
       const success = await configService.setWhereClauseForJobType(
         jobType,
-        clauseToSet
+        whereClause
       );
 
       if (success) {
         res.status(200).json({
           message: `WHERE clause for ${jobType} updated successfully`,
-          whereClause: clauseToSet,
+          whereClause: whereClause,
         });
       } else {
-        res
-          .status(400)
-          .json({
-            error:
-              "Failed to update WHERE clause. It may contain invalid syntax.",
-          });
+        res.status(400).json({
+          error:
+            "Failed to update WHERE clause. It may contain invalid syntax.",
+        });
       }
     } catch (error) {
       console.error(
-        `Error setting WHERE clause for job type ${req.params.jobType}:`,
+        `Error processing WHERE clause for job type ${req.params.jobType}:`,
         error
       );
       res.status(500).json({
