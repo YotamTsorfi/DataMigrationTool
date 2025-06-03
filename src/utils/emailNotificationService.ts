@@ -60,7 +60,7 @@ export class EmailNotificationService {
   }
 
   public async sendJobStartNotification(
-    details: JobNotificationDetails
+    details: JobNotificationDetails,
   ): Promise<void> {
     if (this.isNotificationDisabled()) return;
 
@@ -117,7 +117,7 @@ export class EmailNotificationService {
   }
 
   public async sendJobCompletionNotification(
-    details: JobNotificationDetails
+    details: JobNotificationDetails,
   ): Promise<void> {
     if (this.isNotificationDisabled()) return;
 
@@ -190,7 +190,7 @@ export class EmailNotificationService {
       } catch (error) {
         console.error(
           `Error sending progress notification for job ${jobId}:`,
-          error
+          error,
         );
       }
     }, notificationInterval); // שעתיים במילישניות

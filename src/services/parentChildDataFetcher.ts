@@ -28,7 +28,7 @@ export async function* streamParentChildData(
   startRow: number,
   maxRows: number,
   linkedField: string,
-  childJobs: ChildJob[]
+  childJobs: ChildJob[],
 ): AsyncGenerator<any> {
   let processedRows = 0;
   let currentOffset = startRow;
@@ -47,7 +47,7 @@ export async function* streamParentChildData(
       currentOffset,
       currentBatchSize,
       linkedField,
-      startRow
+      startRow,
     );
     if (shouldLog) {
       console.timeEnd(`Fetch parent records ${currentOffset}`);
@@ -55,7 +55,7 @@ export async function* streamParentChildData(
 
     if (parentRecords.length === 0) {
       console.log(
-        `No more parent records available at offset ${currentOffset}`
+        `No more parent records available at offset ${currentOffset}`,
       );
       break; // אין עוד רשומות לעיבוד
     }
@@ -70,7 +70,7 @@ export async function* streamParentChildData(
     const childDataMap = await fetchAllChildData(
       childJobs,
       linkedValues,
-      linkedField
+      linkedField,
     );
     console.timeEnd(label);
 
@@ -156,7 +156,7 @@ export async function* streamParentChildData(
           if (parsedChildData.length > 0) {
             if (parsedChildData.length > 1) {
               console.warn(
-                `נמצאו ${parsedChildData.length} רשומות ילד עבור ${job.ScreenName}, אך HasSiblings=false. משתמש ברשומה הראשונה בלבד.`
+                `נמצאו ${parsedChildData.length} רשומות ילד עבור ${job.ScreenName}, אך HasSiblings=false. משתמש ברשומה הראשונה בלבד.`,
               );
             }
 
@@ -206,7 +206,7 @@ export async function* streamParentChildData(
 async function fetchAllChildData(
   childJobs: ChildJob[],
   linkedValues: any[],
-  linkedField: string
+  linkedField: string,
 ): Promise<Map<string, Map<any, ChildRecord[]>>> {
   const childDataMap = new Map<string, Map<any, ChildRecord[]>>();
 
@@ -217,7 +217,7 @@ async function fetchAllChildData(
       const childRecords = await fetchChildRecords(
         childJob.DBTableName,
         linkedField,
-        linkedValues
+        linkedValues,
       );
 
       const innerMap = new Map<any, ChildRecord[]>();
@@ -231,7 +231,7 @@ async function fetchAllChildData(
       }
 
       childDataMap.set(mapKey, innerMap);
-    })
+    }),
   );
 
   return childDataMap;
@@ -245,7 +245,7 @@ async function fetchEligibleParentRecords(
   offset: number,
   limit: number,
   linkedField: string,
-  startRow: number
+  startRow: number,
 ): Promise<ParentRecord[]> {
   try {
     // console.log(`Starting to fetch parent records from ${tableName}`);
@@ -276,7 +276,7 @@ async function fetchEligibleParentRecords(
 async function fetchChildRecords(
   tableName: string,
   linkFieldName: string,
-  linkValues: any[]
+  linkValues: any[],
 ): Promise<ChildRecord[]> {
   if (linkValues.length === 0) {
     return [];
@@ -287,7 +287,7 @@ async function fetchChildRecords(
     return await fetchChildRecordsWithTempTable(
       tableName,
       linkFieldName,
-      linkValues
+      linkValues,
     );
   }
 
@@ -317,7 +317,7 @@ async function fetchChildRecords(
 async function fetchChildRecordsWithTempTable(
   tableName: string,
   linkFieldName: string,
-  linkValues: any[]
+  linkValues: any[],
 ): Promise<ChildRecord[]> {
   const tempTableName = `#Temp_LinkValues_${Date.now()}`;
 
@@ -337,7 +337,7 @@ async function fetchChildRecordsWithTempTable(
         INSERT INTO ${tempTableName} (LinkValue)
         VALUES ${valuePlaceholders}
       `,
-        batch
+        batch,
       );
     }
 

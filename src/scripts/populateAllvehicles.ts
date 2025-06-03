@@ -1,4 +1,4 @@
-import { poolPromise } from '../config/db';
+import { poolPromise } from "../config/db";
 
 async function generateVehicles(count: number) {
   console.log(`Starting to generate ${count} vehicle records...`);
@@ -25,13 +25,13 @@ async function generateVehicles(count: number) {
     // Log progress every 200 records
     if (i > 0 && i % 200 === 0) {
       console.log(
-        `Generated ${i} of ${count} vehicle records (${Math.floor((i / count) * 100)}%)...`
+        `Generated ${i} of ${count} vehicle records (${Math.floor((i / count) * 100)}%)...`,
       );
     }
   }
 
   console.log(
-    `Vehicle generation complete. Total: ${vehicles.length} records.`
+    `Vehicle generation complete. Total: ${vehicles.length} records.`,
   );
   return vehicles;
 }
@@ -60,13 +60,13 @@ async function populateTable() {
       // Log progress every 100 insertions
       if (insertedCount % 100 === 0) {
         console.log(
-          `Progress: ${insertedCount} of ${vehicles.length} records inserted (${Math.floor((insertedCount / vehicles.length) * 100)}%)...`
+          `Progress: ${insertedCount} of ${vehicles.length} records inserted (${Math.floor((insertedCount / vehicles.length) * 100)}%)...`,
         );
       }
     }
 
     console.log(
-      `Insertion complete. Inserted ${vehicles.length} records into AllvehiclesTest`
+      `Insertion complete. Inserted ${vehicles.length} records into AllvehiclesTest`,
     );
   } catch (err) {
     console.error("Error populating table:", err);

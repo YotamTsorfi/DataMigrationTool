@@ -2,42 +2,50 @@ import { DatabaseService } from "./databaseService";
 import PerformanceMonitor from "../utils/performanceMonitor";
 //--------------------------------------------------------------------------------
 /**
- * Fetches a chunk of data from the database that needs processing
+ * Fetches and transforms eligible data chunks from the database for processing
+ *
+ * This function retrieves records from the specified table that meet the eligibility criteria,
+ * including any custom WHERE conditions. It transforms database records by parsing the JSON
+ * stored in the Data column and flattening it into the returned object structure.
  */
 export async function fetchDataChunk(
   tableName: string,
   lastRowId: number,
-  chunkSize: number
+  chunkSize: number,
+  customWhereClause?: string
 ): Promise<any[]> {
   const perfMonitor = new PerformanceMonitor();
   perfMonitor.startDbFetch();
-
-  const query = `
-    SELECT TOP (${chunkSize}) RowId, Data
-    FROM ${tableName}
-    WHERE           
-    RowId > ${lastRowId}
-    AND
-    is_eligible = 1
-    AND is_new = 1
-    AND (Status IS NULL OR Status = 'Failed')        
-  `;
-
+  console.log(
+    `fetchDataChunk called with customWhereClause: ${customWhereClause}`
+  );
   try {
-    // console.log(
-    //   `Fetching data chunk: lastRowId=${lastRowId}, chunkSize=${chunkSize}, table=${tableName}`
-    // );
-    // const startTime = Date.now();
+    // Get base WHERE clause and combine with custom clause if provided
+    const baseWhereClause =
+      "is_eligible = 1 AND is_new = 1 AND (Status IS NULL OR Status = 'Failed')";
+    let whereClause = `RowId > @lastRowId AND ${baseWhereClause}`;
 
-    const rowsData = await DatabaseService.executeQuery(query);
+    if (customWhereClause) {
+      whereClause = `${whereClause} AND (${customWhereClause})`;
+    }
 
-    // const fetchTime = Date.now() - startTime;
-    // console.log(
-    //   `Database query completed in ${fetchTime}ms, returned ${rowsData.length} rows`
-    // );
+    // Fix: Use consistent parameter naming in both query and params object
+    const query = `
+      SELECT TOP (@chunkSize) RowId, Data
+      FROM ${tableName}
+      WHERE ${whereClause}
+      ORDER BY RowId ASC
+    `;
+
+    const rowsData = await DatabaseService.executeQuery(query, {
+      lastRowId,
+      chunkSize,
+    });
 
     perfMonitor.endDbFetch();
 
+    // Transform each record by extracting the RowId and parsing the JSON data
+    // This flattens the nested JSON structure into the returned object
     return rowsData.map((record: any) => ({
       RowId: record.RowId,
       ...JSON.parse(record.Data),
@@ -84,7 +92,7 @@ export async function performBulkUpdateWithService(
   tableName: string,
   updates: any[],
   perfMonitor?: PerformanceMonitor,
-  batchSize = 1000,
+  batchSize = 500,
   maxRetries = 3,
   sentToPriority = false
 ): Promise<{ updateTime: number; hadDeadlocks: boolean; successful: boolean }> {

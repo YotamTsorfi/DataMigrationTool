@@ -253,10 +253,10 @@ class PerformanceMonitor {
     return {
       totalDuration: this.formatTime(this.metrics.duration),
       dbFetchTime: this.formatTime(
-        this.metrics.dbFetchTime || this.externalDbFetchTime
+        this.metrics.dbFetchTime || this.externalDbFetchTime,
       ),
       dbUpdateTime: this.formatTime(
-        this.metrics.dbUpdateTime || this.externalDbUpdateTime
+        this.metrics.dbUpdateTime || this.externalDbUpdateTime,
       ), // Add DB update time
       batchBuildTime: this.formatTime(this.metrics.batchBuildTime),
       requestTime: this.formatTime(this.metrics.requestTime),

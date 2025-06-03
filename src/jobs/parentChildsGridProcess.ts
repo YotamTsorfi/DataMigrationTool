@@ -40,7 +40,8 @@ export async function processParentChildGridBatches(
   linkedField: string,
   childJobs: ChildJob[],
   logErrors: boolean = false,
-  updateBatchTable: boolean = false
+  updateBatchTable: boolean = false,
+  customWhereClause?: string
 ): Promise<BatchResult[]> {
   console.log(
     "------------- PARENT-CHILD GRID PROCESSING --------------------"
@@ -77,7 +78,7 @@ export async function processParentChildGridBatches(
   const CHUNK_SIZE = 2000; // Number of rows to fetch in each database call
 
   // Initialize progress tracking
-  ProgressTracker.initJob(jobId, totalRecords);
+  ProgressTracker.initJob(jobId, totalRecords, jobType);
   const overallPerformance = new PerformanceMonitor();
   overallPerformance.startOperation();
 
@@ -101,6 +102,12 @@ export async function processParentChildGridBatches(
 
       const chunkSize = Math.min(CHUNK_SIZE, totalRecords - processedCount);
 
+      // Get custom WHERE clause from config if not provided directly
+      if (!customWhereClause) {
+        const clause = await configService.getWhereClauseForJobType(jobType);
+        customWhereClause = clause === null ? undefined : clause;
+      }
+
       // Fetch data chunk from database
       const perfMonitor = new PerformanceMonitor();
       perfMonitor.startDbFetch();
@@ -111,7 +118,8 @@ export async function processParentChildGridBatches(
         chunkSize,
         linkedField,
         childJobs,
-        perfMonitor
+        perfMonitor,
+        customWhereClause
       );
       perfMonitor.endDbFetch();
 
@@ -248,14 +256,14 @@ export async function processParentChildGridBatches(
                 (result.failureCount || 0) === 0;
 
               // Log failures when detected
-              if (!isSuccessful || result.failureCount) {
-                console.warn(
-                  `Item ${item.row.RowId} processing reported failures: ${result.failureCount}`
-                );
-                console.warn(
-                  `Error details: ${result.error || "No detailed error provided"}`
-                );
-              }
+              // if (!isSuccessful || result.failureCount) {
+              //   console.warn(
+              //     `Item ${item.row.RowId} processing reported failures: ${result.failureCount}`,
+              //   );
+              //   console.warn(
+              //     `Error details: ${result.error || "No detailed error provided"}`,
+              //   );
+              // }
 
               return {
                 success: isSuccessful, // Only mark as successful if no failures

@@ -106,23 +106,23 @@ export class ErrorBufferService {
       await performBulkErrorInsertWithService(
         errorsToProcess,
         this.perfMonitor,
-        5000 // Increased batch size from 500 to 1000
+        5000, // Increased batch size from 500 to 1000
       );
       this.perfMonitor.endOperation();
 
       // Only log details for larger batches, use debug for small ones
       if (errorsToProcess.length > 50) {
         console.log(
-          `Flushed ${errorsToProcess.length} buffered errors to database`
+          `Flushed ${errorsToProcess.length} buffered errors to database`,
         );
       } else {
         console.debug(
-          `Flushed ${errorsToProcess.length} buffered errors to database`
+          `Flushed ${errorsToProcess.length} buffered errors to database`,
         );
       }
     } catch (error) {
       console.error(
-        `Error flushing buffered errors: ${error instanceof Error ? error.message : error}`
+        `Error flushing buffered errors: ${error instanceof Error ? error.message : error}`,
       );
 
       // If flush fails, try to reinsert the errors back into the buffer
@@ -148,15 +148,36 @@ export class ErrorBufferService {
     if (!this.isLoggingEnabled || this.errorBuffer.length === 0) {
       return;
     }
-    if (this.errorBuffer.length > 0) {
-      // Force flush regardless of batch size
-      await this.flush();
 
-      // If there are still errors that weren't processed (due to concurrent operations)
-      // try once more after a short delay
-      if (this.errorBuffer.length > 0) {
-        await new Promise((resolve) => setTimeout(resolve, 100));
-        await this.flush();
+    // Process errors in smaller batches to avoid timeouts
+    const SAFE_BATCH_SIZE = 1000;
+
+    while (this.errorBuffer.length > 0) {
+      // Take just a portion of the errors
+      const batchToProcess = this.errorBuffer.slice(0, SAFE_BATCH_SIZE);
+      this.errorBuffer = this.errorBuffer.slice(SAFE_BATCH_SIZE);
+
+      // Create a new processing context for each batch
+      const tempProcessor = new ErrorBufferService();
+      tempProcessor.setLoggingEnabled(true);
+      tempProcessor.addErrors(batchToProcess);
+
+      try {
+        await tempProcessor.flush();
+        console.log(
+          `Flushed ${batchToProcess.length} errors, ${this.errorBuffer.length} remaining`,
+        );
+
+        // Small delay to let database recover
+        if (this.errorBuffer.length > 0) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+      } catch (error) {
+        console.error(`Error during batch error flush: ${error}`);
+        // Re-add failed errors to main buffer
+        this.errorBuffer = [...batchToProcess, ...this.errorBuffer];
+        // Take a longer break
+        await new Promise((resolve) => setTimeout(resolve, 1000));
       }
     }
   }

@@ -187,6 +187,15 @@ class JobManager {
       }
     );
 
+    // Get custom WHERE clause from config and convert null to undefined for type safety
+    const customWhereClauseResult =
+      await configService.getWhereClauseForJobType(jobRequest.jobType);
+    const customWhereClause =
+      customWhereClauseResult === null ? undefined : customWhereClauseResult;
+    // console.log(
+    //   `Job ${jobId} loaded WHERE clause for ${jobRequest.jobType}: ${customWhereClause || "(none)"}`
+    // );
+
     try {
       // בדיקה האם מדובר בעבודה עם קשרי הורה-ילד
       if (jobRequest.priorityLinkedField) {
@@ -253,7 +262,8 @@ class JobManager {
             jobRequest.priorityLinkedField,
             childJobs,
             logErrors,
-            updateBatchTable
+            updateBatchTable,
+            customWhereClause
           );
 
           // Reset error buffer configuration to default after parent-child processing
@@ -439,7 +449,7 @@ class JobManager {
     );
 
     // אתחול מעקב התקדמות
-    ProgressTracker.initJob(jobId, jobRequest.recordCount);
+    ProgressTracker.initJob(jobId, jobRequest.recordCount, jobRequest.jobType);
 
     const batchStartTime = Date.now();
     console.log(
@@ -448,6 +458,15 @@ class JobManager {
 
     let results;
 
+    // Get custom WHERE clause from config and convert null to undefined for type safety
+    const customWhereClauseResult =
+      await configService.getWhereClauseForJobType(jobRequest.jobType);
+    const customWhereClause =
+      customWhereClauseResult === null ? undefined : customWhereClauseResult;
+
+    // console.log(
+    //   `JobManager retrieved WHERE clause for ${jobRequest.jobType}: ${customWhereClause || "(none)"}`
+    // );
     if (processingType === "queue") {
       // עיבוד עם תורים
       results = await processWithQueues(
@@ -459,7 +478,8 @@ class JobManager {
         jobId,
         jobRequest.priorityIdField,
         logErrors,
-        updateBatchTable
+        updateBatchTable,
+        customWhereClause
       );
     } else {
       // עיבוד רגיל במנות (ברירת המחדל)
@@ -472,7 +492,8 @@ class JobManager {
         jobId,
         jobRequest.priorityIdField,
         logErrors,
-        updateBatchTable
+        updateBatchTable,
+        customWhereClause
       );
     }
 

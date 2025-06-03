@@ -1,5 +1,49 @@
 import styled from "styled-components";
 
+export const WhereClauseContainer = styled.div`
+  margin-top: 20px;
+  border-top: 1px solid #e0e0e0;
+  padding-top: 15px;
+`;
+
+export const WhereClauseTextarea = styled.textarea<{ $hasError?: boolean }>`
+  width: 100%;
+  padding: 8px;
+  border: 1px solid ${(props) => (props.$hasError ? "red" : "#ccc")};
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 14px;
+  resize: vertical;
+`;
+
+export const ErrorMessage = styled.div`
+  color: red;
+  font-size: 14px;
+  margin-top: 5px;
+`;
+
+export const InfoBox = styled.div`
+  background-color: #f8f9fa;
+  border: 1px solid #ddd;
+  padding: 10px;
+  margin-top: 10px;
+  font-size: 14px;
+  border-radius: 4px;
+
+  code {
+    background-color: #e9ecef;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-family: monospace;
+  }
+`;
+
+export const ButtonGroup = styled.div`
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+`;
+
 export const MainContainer = styled.div`
   display: flex;
   justify-content: space-between;

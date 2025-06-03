@@ -25,9 +25,11 @@
   "type": "commonjs",
   "devDependencies": {
     "@types/axios": "^0.14.4",
+    "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/jest": "^29.5.12",
+    "@types/jsonwebtoken": "^9.0.9",
     "@types/node": "^22.13.1",
     "@types/nodemailer": "^6.4.17",
     "@types/socket.io": "^3.0.1",
@@ -48,9 +50,11 @@
   "dependencies": {
     "@types/mssql": "^9.1.7",
     "axios": "^1.7.9",
+    "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
     "moment-timezone": "^0.5.47",
     "mssql": "^11.0.1",
     "nodemailer": "^7.0.3",

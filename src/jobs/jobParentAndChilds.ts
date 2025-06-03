@@ -73,7 +73,7 @@ async function processParentChildBatches(
   };
 
   // Initialize job tracking
-  ProgressTracker.initJob(jobId, totalRecords);
+  ProgressTracker.initJob(jobId, totalRecords, jobType);
   const overallPerformance = new PerformanceMonitor();
   overallPerformance.startOperation();
 

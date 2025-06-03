@@ -1,45 +1,45 @@
 /* client/src/styles/BatchProcessor.css */
 
 .batch-processor {
-    padding: 20px;
-    max-width: 600px;
-    margin: 0 auto;
+  padding: 20px;
+  max-width: 600px;
+  margin: 0 auto;
 }
 
 .process-button {
-    padding: 12px 24px;
-    font-size: 16px;
-    background-color: #4CAF50;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background-color 0.3s;
+  padding: 12px 24px;
+  font-size: 16px;
+  background-color: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.3s;
 }
 
 .process-button:hover {
-    background-color: #45a049;
+  background-color: #45a049;
 }
 
 .process-button.processing {
-    background-color: #cccccc;
-    cursor: not-allowed;
+  background-color: #cccccc;
+  cursor: not-allowed;
 }
 
 .result {
-    margin-top: 20px;
-    padding: 15px;
-    border-radius: 4px;
+  margin-top: 20px;
+  padding: 15px;
+  border-radius: 4px;
 }
 
 .result.success {
-    background-color: #dff0d8;
-    border: 1px solid #d6e9c6;
-    color: #3c763d;
+  background-color: #dff0d8;
+  border: 1px solid #d6e9c6;
+  color: #3c763d;
 }
 
 .result.error {
-    background-color: #f2dede;
-    border: 1px solid #ebccd1;
-    color: #a94442;
+  background-color: #f2dede;
+  border: 1px solid #ebccd1;
+  color: #a94442;
 }

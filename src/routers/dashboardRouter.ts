@@ -106,7 +106,7 @@ router.get(
         error: error instanceof Error ? error.message : "Unknown error",
       });
     }
-  }
+  },
 );
 
 //-----------------------------------
@@ -345,7 +345,7 @@ router.get(
         error: error instanceof Error ? error.message : "Unknown error",
       });
     }
-  }
+  },
 );
 
 export default router;

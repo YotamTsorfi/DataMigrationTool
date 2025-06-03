@@ -104,7 +104,7 @@ export class QueueProcessor {
     queueId: string,
     jobId: string,
     jobType: string,
-    tableName: string
+    tableName: string,
   ) {
     this.queueId = queueId;
     this.jobId = jobId;
@@ -130,7 +130,7 @@ export class QueueProcessor {
   public setRateLimitEnabled(enabled: boolean): void {
     this.enableRateLimit = enabled;
     console.log(
-      `Queue ${this.queueId}: Rate limiting ${enabled ? "enabled" : "disabled"}`
+      `Queue ${this.queueId}: Rate limiting ${enabled ? "enabled" : "disabled"}`,
     );
   }
   public addItem(item: QueueItem): void {
@@ -170,7 +170,7 @@ export class QueueProcessor {
     // Store normal concurrency value
     const configConcurrency = parseInt(
       systemConfig.QUEUE_CONCURRENT_ITEMS || "500",
-      10
+      10,
     );
     this.normalConcurrency = this.concurrencyLimit || configConcurrency;
 
@@ -221,11 +221,11 @@ export class QueueProcessor {
           this.failureCount > 0 ? "PartialSync" : "Completed",
           null,
           this.tableName,
-          this.updateBatchTable
+          this.updateBatchTable,
         );
       }
       console.log(
-        `Queue ${this.queueId} stats: ${this.total503Errors}/${this.totalRequests} requests resulted in 503 errors (${((this.total503Errors / this.totalRequests) * 100).toFixed(2)}%)`
+        `Queue ${this.queueId} stats: ${this.total503Errors}/${this.totalRequests} requests resulted in 503 errors (${((this.total503Errors / this.totalRequests) * 100).toFixed(2)}%)`,
       );
 
       return {
@@ -257,7 +257,7 @@ export class QueueProcessor {
   //-------------------------
   // הוספת שיטה להגדרת מאזין התקדמות
   public setProgressListener(
-    listener: (successCount: number, failureCount: number) => void
+    listener: (successCount: number, failureCount: number) => void,
   ): void {
     this.progressListener = listener;
   }
@@ -303,7 +303,7 @@ export class QueueProcessor {
             typeof result.responseStats?.status === "number"
               ? result.responseStats.status
               : 0,
-            result.responseStats?.errorData
+            result.responseStats?.errorData,
           );
 
           // Add failure row
@@ -370,7 +370,7 @@ export class QueueProcessor {
             } catch (err) {
               if (err && typeof err === "object" && "message" in err) {
                 console.warn(
-                  `Error extracting priority_id: ${(err as any).message}`
+                  `Error extracting priority_id: ${(err as any).message}`,
                 );
               } else {
                 console.warn(`Error extracting priority_id:`, err);
@@ -396,7 +396,7 @@ export class QueueProcessor {
           const cleanErrorMessage = this.formatErrorMessage(
             response.error || "",
             response.status,
-            response.errorData
+            response.errorData,
           );
 
           this.updateRows.push({
@@ -426,7 +426,7 @@ export class QueueProcessor {
       // Update tracking for progress
       this.lastProcessedIndex = Math.max(
         this.lastProcessedIndex,
-        item.row.RowId
+        item.row.RowId,
       );
 
       // Update progress
@@ -442,7 +442,7 @@ export class QueueProcessor {
       const errorMessage = this.formatErrorMessage(
         error instanceof Error ? error.message : "Unknown error",
         axios.isAxiosError(error) ? error.response?.status || 0 : 0,
-        errorData
+        errorData,
       );
 
       if (this.progressListener) {
@@ -476,7 +476,7 @@ export class QueueProcessor {
   private formatErrorMessage(
     errorMessage: string,
     status: number,
-    errorData?: any
+    errorData?: any,
   ): string {
     // First check if we have errorData to extract detailed messages from
     if (errorData) {
@@ -670,7 +670,7 @@ export class QueueProcessor {
           // Only log if we're in verbose mode
           if (this.logRetries) {
             console.log(
-              `Service unavailable (503). Retry attempt ${retryCount} after ${delayMs}ms delay. ${errorMessage}`
+              `Service unavailable (503). Retry attempt ${retryCount} after ${delayMs}ms delay. ${errorMessage}`,
             );
           }
 
@@ -687,7 +687,7 @@ export class QueueProcessor {
 
           if (this.logRetries) {
             console.log(
-              `Rate limit exceeded (429). Retry attempt ${retryCount} after ${delayMs}ms delay. ${errorMessage}`
+              `Rate limit exceeded (429). Retry attempt ${retryCount} after ${delayMs}ms delay. ${errorMessage}`,
             );
           }
           await new Promise((resolve) => setTimeout(resolve, delayMs));
@@ -705,7 +705,7 @@ export class QueueProcessor {
           const delay = 1000 * Math.pow(2, retryCount);
           if (this.logRetries) {
             console.log(
-              `Retry attempt ${retryCount} after error: ${errorMessage}. Delay: ${delay}ms`
+              `Retry attempt ${retryCount} after error: ${errorMessage}. Delay: ${delay}ms`,
             );
           }
           await new Promise((resolve) => setTimeout(resolve, delay));
@@ -734,7 +734,7 @@ export class QueueProcessor {
 
   private async applyRateLimit(): Promise<void> {
     console.log(
-      `Queue ${this.queueId}: queue.length=${this.queue.length}, errorCount503=${this.errorCount503}, backoffActive=${this.backoffActive}`
+      `Queue ${this.queueId}: queue.length=${this.queue.length}, errorCount503=${this.errorCount503}, backoffActive=${this.backoffActive}`,
     );
 
     // REDUCED THRESHOLD: Apply rate limiting to smaller batches too
@@ -750,7 +750,7 @@ export class QueueProcessor {
 
       if (this.backoffActive && this.consecutiveSuccesses > 200) {
         console.log(
-          "Exiting backoff mode after consecutive successful requests"
+          "Exiting backoff mode after consecutive successful requests",
         );
         this.backoffActive = false;
         this.errorCount503 = 0;
@@ -772,7 +772,7 @@ export class QueueProcessor {
       // More moderate scaling formula
       delay = Math.min(100, 3 * Math.log(this.errorCount503 + 1) * 3);
       console.log(
-        `Applying adaptive throttling delay: ${delay}ms due to 503 errors`
+        `Applying adaptive throttling delay: ${delay}ms due to 503 errors`,
       );
     }
 
@@ -785,7 +785,7 @@ export class QueueProcessor {
       this.jobId,
       this.successCount + this.failureCount,
       this.successCount,
-      this.failureCount
+      this.failureCount,
     );
 
     if (this.progressListener) {

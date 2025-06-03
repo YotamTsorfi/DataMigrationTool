@@ -5,7 +5,15 @@ export function buildBatchRequestBody(rows: any[], boundary: string): string {
   let batchBody = "";
 
   rows.forEach((row: any) => {
-    const { RowId, __batchId, __jobType, __tableName, __jobId, __priorityScreenName, ...rowData } = row; // Remove metadata from row object
+    const {
+      RowId,
+      __batchId,
+      __jobType,
+      __tableName,
+      __jobId,
+      __priorityScreenName,
+      ...rowData
+    } = row; // Remove metadata from row object
     batchBody += `--${boundary}\r\n`;
     batchBody += `Content-Type: application/http\r\n`;
     batchBody += `Content-Transfer-Encoding: binary\r\n\r\n`;
@@ -15,21 +23,24 @@ export function buildBatchRequestBody(rows: any[], boundary: string): string {
   });
 
   batchBody += `--${boundary}--\r\n`;
-  
+
   // DEBUG: Log the request body format
-//   console.log("===== BATCH REQUEST BODY FORMAT =====");
-//   console.log("First 500 chars:", batchBody.substring(0, 500) + "...");
-//   console.log("Last 200 chars:", "..." + batchBody.substring(batchBody.length - 200));
-//   console.log("Total length:", batchBody.length);
-//   console.log("=================================");
-  
+  //   console.log("===== BATCH REQUEST BODY FORMAT =====");
+  //   console.log("First 500 chars:", batchBody.substring(0, 500) + "...");
+  //   console.log("Last 200 chars:", "..." + batchBody.substring(batchBody.length - 200));
+  //   console.log("Total length:", batchBody.length);
+  //   console.log("=================================");
+
   return batchBody;
 }
 
 /**
  * Creates the headers needed for batch requests
  */
-export function createBatchHeaders(boundary: string, authToken: string): Record<string, string> {
+export function createBatchHeaders(
+  boundary: string,
+  authToken: string,
+): Record<string, string> {
   return {
     "Content-Type": `multipart/mixed;boundary=${boundary}`,
     Authorization: authToken,
