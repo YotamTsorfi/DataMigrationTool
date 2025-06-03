@@ -27,6 +27,12 @@ const allowedOrigins = [
   `http://localhost:${port}`,
   "http://localhost:3000",
   "http://localhost:3005",
+  "http://carmelton.dev",
+  "https://carmelton.dev",
+  "http://172.34.0.10",
+  "http://172.34.0.10:80",
+  "http://172.34.0.10:3000",
+  "https://172.34.0.10:3000",
 ];
 
 // Initialize Socket.IO
