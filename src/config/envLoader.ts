@@ -5,7 +5,7 @@ import dotenv from "dotenv";
 export default function loadEnvironmentVariables(): void {
   const isProduction = process.env.NODE_ENV === "production";
   console.log(
-    `🌍 Running in ${isProduction ? "PRODUCTION" : "DEVELOPMENT"} mode`
+    `🌍 Running in ${isProduction ? "PRODUCTION" : "DEVELOPMENT"} mode`,
   );
 
   const envFileName = isProduction ? ".env.production" : ".env.development";
@@ -23,6 +23,6 @@ export default function loadEnvironmentVariables(): void {
   }
 
   console.warn(
-    "⚠️ No .env file was loaded! Environment variables may be missing."
+    "⚠️ No .env file was loaded! Environment variables may be missing.",
   );
 }

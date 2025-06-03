@@ -1,4 +1,4 @@
-import { poolPromise } from '../config/db';
+import { poolPromise } from "../config/db";
 
 async function generateCustomers(count: number) {
   console.log(`Starting to generate ${count} customer records...`);
@@ -23,13 +23,13 @@ async function generateCustomers(count: number) {
 
     if (i > 0 && i % 200 === 0) {
       console.log(
-        `Generated ${i} of ${count} customer records (${Math.floor((i / count) * 100)}%)...`
+        `Generated ${i} of ${count} customer records (${Math.floor((i / count) * 100)}%)...`,
       );
     }
   }
 
   console.log(
-    `Customer generation complete. Total: ${customers.length} records.`
+    `Customer generation complete. Total: ${customers.length} records.`,
   );
   return customers;
 }
@@ -58,13 +58,13 @@ async function populateTable() {
       // Log progress every 100 insertions
       if (insertedCount % 100 === 0) {
         console.log(
-          `Progress: ${insertedCount} of ${customers.length} records inserted (${Math.floor((insertedCount / customers.length) * 100)}%)...`
+          `Progress: ${insertedCount} of ${customers.length} records inserted (${Math.floor((insertedCount / customers.length) * 100)}%)...`,
         );
       }
     }
 
     console.log(
-      `Insertion complete. Inserted ${customers.length} records into AllCustomersTest`
+      `Insertion complete. Inserted ${customers.length} records into AllCustomersTest`,
     );
   } catch (err) {
     console.error("Error populating table:", err);

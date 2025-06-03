@@ -14,6 +14,8 @@ import {
 } from "./BatchProcessorStyles";
 import ConfigPanel from "./ConfigPanel";
 import JobProgressTracker from "./JobProgressTracker";
+import SecureButton from "./SecureButton";
+import { useAuthProtection } from "./withAuthProtection";
 //---------------------------------------------
 
 interface JobType {
@@ -43,6 +45,7 @@ const BatchProcessor: React.FC = () => {
   const [priorityIdField, setPriorityIdField] = useState("");
   const [priorityLinkedField, setPriorityLinkedField] = useState("");
   const [priorityJobTypeId, setPriorityJobTypeId] = useState(0);
+  const { disabled, isAuthenticated } = useAuthProtection();
   //---------------------------------------------
 
   useEffect(() => {
@@ -96,7 +99,7 @@ const BatchProcessor: React.FC = () => {
     if (selectedJob) {
       setTableName(selectedJob.DBTableName || "");
       setPriorityScreenName(selectedJob.ScreenName || "");
-      setPriorityIdField(selectedJob.priority_id || "");      
+      setPriorityIdField(selectedJob.priority_id || "");
       setPriorityLinkedField(selectedJob.linkedField || "");
       setPriorityJobTypeId(selectedJob.JobTypeId || 0);
     } else {
@@ -116,6 +119,11 @@ const BatchProcessor: React.FC = () => {
   };
   //---------------------------------------------
   const handleBatchProcess = async () => {
+    // Check authentication before processing
+    if (!isAuthenticated) {
+      toast.error("Please login to perform this action");
+      return;
+    }
     if (!tableName || !priorityScreenName || !priorityIdField) {
       toast.error(
         "Table Name and Priority Screen Name and priority Id Field are required."
@@ -171,6 +179,7 @@ const BatchProcessor: React.FC = () => {
                   value="batch"
                   checked={processingType.toLowerCase() === "batch"}
                   onChange={handleProcessingTypeChange}
+                  disabled={disabled}
                 />
                 <label>Batch Processing</label>
                 <div className="info-tooltip">
@@ -260,15 +269,15 @@ const BatchProcessor: React.FC = () => {
             </InputLabel>
           </InputContainer>
 
-          <Button
+          <SecureButton
             onClick={handleBatchProcess}
-            disabled={isProcessing}
+            disabled={isProcessing || disabled}
             className={`process-button ${isProcessing ? "processing" : ""}`}
           >
             {isProcessing
               ? "Processing..."
               : `Process with ${processingType.charAt(0).toUpperCase() + processingType.slice(1)}`}
-          </Button>
+          </SecureButton>
         </SectionContainer>
 
         <SectionContainer>

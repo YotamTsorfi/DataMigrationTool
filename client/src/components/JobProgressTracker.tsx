@@ -139,7 +139,8 @@ const JobProgressTracker: React.FC<JobProgressTrackerProps> = ({ jobId }) => {
       ) : (
         activeJobs.map((job) => (
           <JobInfo key={job.jobId}>
-            <h4>Job: {job.jobId.substring(0, 8)}...</h4>
+            {/* <h4>Job: {job.jobId.substring(0, 8)}...</h4> */}
+            <h4>Job: {job.jobId}</h4>
             <ProgressContainer>
               <ProgressDetails>
                 <span>Progress: {job.percentage}%</span>

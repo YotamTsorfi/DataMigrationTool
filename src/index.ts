@@ -17,6 +17,7 @@ import userRouter from "./routers/userRouter";
 import jobRoutes from "./routers/jobRouters";
 import configRouter from "./routers/configRouters";
 import dashboardRouter from "./routers/dashboardRouter";
+import authRouter from "./routers/authRouter";
 
 // Initialize Express app
 const app = express();
@@ -58,12 +59,16 @@ app.use(
     origin: allowedOrigins,
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
-  })
+  }),
 );
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Add auth middleware globally for optional user identification
+// app.use(authMiddleware.optionalToken);
+
 // Routers
+app.use("/auth", authRouter);
 app.use("/priority", priorityRoutes);
 app.use("/api", userRouter);
 app.use("/job", jobRoutes);
@@ -85,7 +90,7 @@ httpServer.listen(port, "0.0.0.0", () => {
 
   writeToLogFile(
     "general.log",
-    `[INFO] Server started in ${Date.now() - startupTime}ms`
+    `[INFO] Server started in ${Date.now() - startupTime}ms`,
   );
   PerformanceMonitor.logServerMetrics();
 });
@@ -105,7 +110,7 @@ process.on("uncaughtException", (error) => {
   console.error("💥 Uncaught Exception:", error);
   writeToLogFile(
     "error.log",
-    `FATAL ERROR: Uncaught exception: ${error.message}\n${error.stack}`
+    `FATAL ERROR: Uncaught exception: ${error.message}\n${error.stack}`,
   );
 });
 
@@ -113,6 +118,6 @@ process.on("unhandledRejection", (reason) => {
   console.error("💥 Unhandled Promise Rejection:", reason);
   writeToLogFile(
     "error.log",
-    `FATAL ERROR: Unhandled promise rejection: ${reason}`
+    `FATAL ERROR: Unhandled promise rejection: ${reason}`,
   );
 });

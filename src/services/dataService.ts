@@ -7,7 +7,7 @@ import PerformanceMonitor from "../utils/performanceMonitor";
 export async function fetchDataChunk(
   tableName: string,
   lastRowId: number,
-  chunkSize: number
+  chunkSize: number,
 ): Promise<any[]> {
   const perfMonitor = new PerformanceMonitor();
   perfMonitor.startDbFetch();
@@ -86,7 +86,7 @@ export async function performBulkUpdateWithService(
   perfMonitor?: PerformanceMonitor,
   batchSize = 500,
   maxRetries = 3,
-  sentToPriority = false
+  sentToPriority = false,
 ): Promise<{ updateTime: number; hadDeadlocks: boolean; successful: boolean }> {
   // Return the time taken for the operation and status info
   if (updates.length === 0)
@@ -110,7 +110,7 @@ export async function performBulkUpdateWithService(
           if (errorObj.error && errorObj.error.message) {
             update.ErrorMessage = errorObj.error.message;
             console.log(
-              `Extracted detailed error message: ${update.ErrorMessage}`
+              `Extracted detailed error message: ${update.ErrorMessage}`,
             );
           }
         }
@@ -137,7 +137,7 @@ export async function performBulkUpdateWithService(
       "Updates",
       "dbo.BatchUpdateTableType",
       sanitizedRows,
-      batchSize
+      batchSize,
     );
 
     // Track if we had deadlocks during the operation
@@ -148,7 +148,7 @@ export async function performBulkUpdateWithService(
 
     if (hadDeadlocks) {
       console.log(
-        `Bulk update completed with ${result.retryCount} retries due to deadlocks. All updates successful.`
+        `Bulk update completed with ${result.retryCount} retries due to deadlocks. All updates successful.`,
       );
     }
 
@@ -172,13 +172,13 @@ export async function performBulkUpdateWithService(
 
     if (isConnectionError) {
       console.log(
-        "Database connection error detected. Will retry operation..."
+        "Database connection error detected. Will retry operation...",
       );
     }
 
     if (isDeadlock && sentToPriority) {
       console.log(
-        "Deadlock detected after successful Priority update. Using 'Completed' status with explanatory message..."
+        "Deadlock detected after successful Priority update. Using 'Completed' status with explanatory message...",
       );
 
       // Update to use accepted status value
@@ -194,12 +194,12 @@ export async function performBulkUpdateWithService(
           `,
             {
               RowId: update.RowId,
-            }
+            },
           );
         } catch (innerError) {
           console.error(
             `Failed to update source record ${update.RowId} status:`,
-            innerError
+            innerError,
           );
         }
       }
@@ -226,7 +226,7 @@ export async function performBulkErrorInsertWithService(
   errors: any[],
   perfMonitor?: PerformanceMonitor,
   batchSize = 1000, // Increased default batch size from 1000
-  maxRetries = 3
+  maxRetries = 3,
 ): Promise<{ updateTime: number; hadDeadlocks: boolean; successful: boolean }> {
   // Return the time taken
   if (errors.length === 0)
@@ -253,7 +253,7 @@ export async function performBulkErrorInsertWithService(
             errorEntry.Error = errorObj.error.message;
             // Use debug level to reduce console output
             console.debug(
-              `Extracted detailed error message for log: ${errorEntry.Error}`
+              `Extracted detailed error message for log: ${errorEntry.Error}`,
             );
           }
         }
@@ -279,7 +279,7 @@ export async function performBulkErrorInsertWithService(
       errors,
       batchSize,
       maxRetries,
-      batchId // Pass batch identifier for better logging
+      batchId, // Pass batch identifier for better logging
     );
 
     // Track if we had deadlocks
@@ -291,11 +291,11 @@ export async function performBulkErrorInsertWithService(
     // Only log this for larger batches to reduce console spam
     if (errors.length > 100) {
       console.log(
-        `Bulk error insert completed in ${insertTime.toFixed(2)}ms for ${errors.length} error records`
+        `Bulk error insert completed in ${insertTime.toFixed(2)}ms for ${errors.length} error records`,
       );
     } else {
       console.debug(
-        `Bulk error insert: ${errors.length} records in ${insertTime.toFixed(2)}ms`
+        `Bulk error insert: ${errors.length} records in ${insertTime.toFixed(2)}ms`,
       );
     }
 
@@ -324,7 +324,7 @@ export async function recordBatchProcessing(
   status: string,
   errorMessage: string | null,
   tableName: string,
-  updateBatchTable: boolean = false
+  updateBatchTable: boolean = false,
 ): Promise<void> {
   // const recordStartTime = Date.now();
 
@@ -367,7 +367,7 @@ export async function recordBatchProcessing(
         Status: finalStatus,
         ErrorMessage: errorMessage,
         TableName: tableName,
-      }
+      },
     );
   } catch (error: any) {
     console.error(`Error recording batch processing:`, error);
@@ -400,12 +400,12 @@ export async function recordBatchProcessing(
             ErrorMessage:
               "DB update failed due to deadlock after Priority success",
             TableName: tableName,
-          }
+          },
         );
       } catch (retryError) {
         console.error(
           `Failed to record batch with PartialSync status:`,
-          retryError
+          retryError,
         );
       }
     }

@@ -65,7 +65,7 @@ async function processBatch(
   dbFetchTime?: number,
   priorityIdField?: string,
   logErrors: boolean = false,
-  updateBatchTable: boolean = false
+  updateBatchTable: boolean = false,
 ): Promise<BatchCreateRowsResult> {
   //TODO
   // console.log(`processBatch called with priorityIdField: [${priorityIdField}]`);
@@ -104,7 +104,7 @@ async function processBatch(
     // Create headers with authentication
     const headers = createBatchHeaders(
       boundary,
-      `Basic ${Buffer.from(`${config.priorityPAT}:${config.priorityPassword}`).toString("base64")}`
+      `Basic ${Buffer.from(`${config.priorityPAT}:${config.priorityPassword}`).toString("base64")}`,
     );
     perfMonitor.endBatchBuild();
 
@@ -158,7 +158,7 @@ async function processBatch(
           perfMonitor,
           undefined,
           3, // number of retries
-          sentToPriority // sentToPriority is used to determine if we should log deadlocks
+          sentToPriority, // sentToPriority is used to determine if we should log deadlocks
         );
 
         totalDbUpdateTime += result.updateTime;
@@ -168,7 +168,7 @@ async function processBatch(
         if (hadDeadlocks && result.successful && sentToPriority) {
           batchStatus = "Completed";
           console.log(
-            `Batch ${batchId} had deadlocks during DB update but completed successfully`
+            `Batch ${batchId} had deadlocks during DB update but completed successfully`,
           );
         }
       } catch (dbError) {
@@ -182,7 +182,7 @@ async function processBatch(
 
         if (isDeadlock && sentToPriority) {
           console.log(
-            `Batch ${batchId} was sent to Priority but failed DB update due to deadlock`
+            `Batch ${batchId} was sent to Priority but failed DB update due to deadlock`,
           );
 
           // Use "Completed" with explanatory error message
@@ -246,7 +246,7 @@ async function processBatch(
           ? "DB update had deadlocks but completed successfully"
           : null,
         tableName,
-        updateBatchTable
+        updateBatchTable,
       );
     }
     // Clear large response data to help garbage collection
@@ -300,7 +300,7 @@ async function processBatches(
   jobId: string,
   priorityIdField: string,
   logErrors: boolean = false,
-  updateBatchTable: boolean = false
+  updateBatchTable: boolean = false,
 ): Promise<any[]> {
   const config = await configService.getConfig();
   const BATCH_SIZE = config.BATCH_SIZE;
@@ -368,15 +368,15 @@ async function processBatches(
               perfMonitor.metrics.dbFetchTime,
               priorityIdField,
               logErrors,
-              updateBatchTable
-            )
-          )
+              updateBatchTable,
+            ),
+          ),
         );
       }
 
       // Process all batches concurrently
       console.log(
-        `Processing ${batchPromises.length} batches with max concurrency of ${CONCURRENT_BATCHES}`
+        `Processing ${batchPromises.length} batches with max concurrency of ${CONCURRENT_BATCHES}`,
       );
       const startTime = Date.now();
 
@@ -420,11 +420,11 @@ async function processBatches(
           jobId,
           totalProcessedRecords,
           totalSuccessCount,
-          totalFailureCount
+          totalFailureCount,
         );
 
         console.log(
-          `Processed ${batchResults.length} batches in ${totalProcessingTime}ms. Success: ${totalSuccessCount}, Failures: ${totalFailureCount}`
+          `Processed ${batchResults.length} batches in ${totalProcessingTime}ms. Success: ${totalSuccessCount}, Failures: ${totalFailureCount}`,
         );
       } catch (error) {
         console.error("Error processing batch set:", error);

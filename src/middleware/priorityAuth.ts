@@ -14,7 +14,7 @@ declare module "express" {
 export async function priorityAuthMiddleware(
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) {
   try {
     // Get configuration from database instead of environment variables
@@ -88,7 +88,7 @@ export async function priorityAuthMiddleware(
       (error) => {
         console.error("Request Error:", error.message);
         return Promise.reject(error);
-      }
+      },
     );
 
     // add interceptors for response logging
@@ -113,18 +113,18 @@ export async function priorityAuthMiddleware(
           // For connection errors like ETIMEDOUT, provide a more user-friendly message
           if (error.code === "ETIMEDOUT") {
             console.error(
-              `Priority API connection timed out: Could not connect to ${simplifiedError.url}`
+              `Priority API connection timed out: Could not connect to ${simplifiedError.url}`,
             );
           } else if (error.code === "ECONNREFUSED") {
             console.error(
-              `Priority API connection refused: ${simplifiedError.url} is unreachable`
+              `Priority API connection refused: ${simplifiedError.url} is unreachable`,
             );
           } else {
             console.error("Priority API Error:", simplifiedError);
           }
 
           return Promise.reject(error);
-        }
+        },
       );
     });
 

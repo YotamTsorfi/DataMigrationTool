@@ -144,7 +144,7 @@ class ConfigurationService {
           ConfigKey: key,
           ConfigValue: String(value),
           LastUpdated: new Date(),
-        }
+        },
       );
 
       // Update the in-memory config as well

@@ -62,7 +62,7 @@ export class DatabaseService {
   // מתודה לקבלת או יצירת סכמת טבלה
   private static getOrCreateTableSchema(
     tvpType: string,
-    sampleData: Record<string, any>
+    sampleData: Record<string, any>,
   ): sql.Table {
     const cacheKey = `${tvpType}`;
 
@@ -115,7 +115,7 @@ export class DatabaseService {
   private static addColumnWithAppropriateType(
     table: sql.Table,
     colName: string,
-    sampleValue: any
+    sampleValue: any,
   ): void {
     if (typeof sampleValue === "number") {
       this.handleNumericType(table, colName, sampleValue);
@@ -143,7 +143,7 @@ export class DatabaseService {
   private static handleNumericType(
     table: sql.Table,
     colName: string,
-    value: number
+    value: number,
   ): void {
     if (Number.isInteger(value)) {
       if (value > 2147483647 || value < -2147483648) {
@@ -178,7 +178,7 @@ export class DatabaseService {
     data: any[],
     batchSize?: number,
     maxRetries?: number,
-    batchId?: string
+    batchId?: string,
   ): Promise<{
     success: boolean;
     retryCount: number;
@@ -236,7 +236,7 @@ export class DatabaseService {
           if (isDeadlock || isTransactionAbort) {
             hadDeadlock = true;
             console.log(
-              `❗ ${isDeadlock ? "Database deadlock" : "Transaction abort"} detected in Batch ${batchIdentifier}. Retry attempt ${retries}/${effectiveMaxRetries}...`
+              `❗ ${isDeadlock ? "Database deadlock" : "Transaction abort"} detected in Batch ${batchIdentifier}. Retry attempt ${retries}/${effectiveMaxRetries}...`,
             );
           } else {
             // Truncate very long error messages
@@ -248,13 +248,13 @@ export class DatabaseService {
                 : "Unknown error";
 
             console.error(
-              `❌ Error in Batch ${batchIdentifier}, retry ${retries}/${effectiveMaxRetries}: ${errorMsg}`
+              `❌ Error in Batch ${batchIdentifier}, retry ${retries}/${effectiveMaxRetries}: ${errorMsg}`,
             );
           }
 
           if (retries >= effectiveMaxRetries) {
             console.error(
-              `⛔ Maximum retries (${effectiveMaxRetries}) reached for ${batchIdentifier}. Giving up.`
+              `⛔ Maximum retries (${effectiveMaxRetries}) reached for ${batchIdentifier}. Giving up.`,
             );
             throw error;
           }
@@ -265,7 +265,7 @@ export class DatabaseService {
           const totalDelay = baseDelay + jitter;
 
           console.log(
-            `⏱️ Waiting ${Math.round((totalDelay / 1000) * 10) / 10} seconds before retry...`
+            `⏱️ Waiting ${Math.round((totalDelay / 1000) * 10) / 10} seconds before retry...`,
           );
           await new Promise((resolve) => setTimeout(resolve, totalDelay));
         }
@@ -282,7 +282,7 @@ export class DatabaseService {
 
   //--------------------------------------------------------------------------------
   static async executeTransaction(
-    operations: (transaction: sql.Transaction) => Promise<void>
+    operations: (transaction: sql.Transaction) => Promise<void>,
   ): Promise<void> {
     const pool = await this.getPool();
     const transaction = new sql.Transaction(pool);
@@ -300,7 +300,7 @@ export class DatabaseService {
   static async executeStoredProcedure<T>(
     procedureName: string,
     params?: Record<string, any>,
-    isolationLevel: sql.IIsolationLevel = sql.ISOLATION_LEVEL.READ_COMMITTED
+    isolationLevel: sql.IIsolationLevel = sql.ISOLATION_LEVEL.READ_COMMITTED,
   ): Promise<T[]> {
     const pool = await this.getPool();
     const transaction = new sql.Transaction(pool);
@@ -322,7 +322,7 @@ export class DatabaseService {
                 const firstRow = value.tvpValue[0];
                 const table = this.getOrCreateTableSchema(
                   value.tvpType,
-                  firstRow
+                  firstRow,
                 );
                 const columns = Object.keys(firstRow);
 

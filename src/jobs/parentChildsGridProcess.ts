@@ -248,14 +248,14 @@ export async function processParentChildGridBatches(
                 (result.failureCount || 0) === 0;
 
               // Log failures when detected
-              if (!isSuccessful || result.failureCount) {
-                console.warn(
-                  `Item ${item.row.RowId} processing reported failures: ${result.failureCount}`
-                );
-                console.warn(
-                  `Error details: ${result.error || "No detailed error provided"}`
-                );
-              }
+              // if (!isSuccessful || result.failureCount) {
+              //   console.warn(
+              //     `Item ${item.row.RowId} processing reported failures: ${result.failureCount}`,
+              //   );
+              //   console.warn(
+              //     `Error details: ${result.error || "No detailed error provided"}`,
+              //   );
+              // }
 
               return {
                 success: isSuccessful, // Only mark as successful if no failures

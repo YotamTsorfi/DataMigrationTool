@@ -1,6 +1,5 @@
 import styled from "styled-components";
 
-
 export const DashboardContainer = styled.div`
   padding: 20px;
   background-color: #f8f9fa;
@@ -184,7 +183,7 @@ export const LoadingOverlay = styled.div`
   align-items: center;
   height: 200px;
   width: 100%;
-  
+
   .spinner {
     border: 4px solid rgba(0, 0, 0, 0.1);
     border-radius: 50%;
@@ -193,10 +192,14 @@ export const LoadingOverlay = styled.div`
     height: 30px;
     animation: spin 1s linear infinite;
   }
-  
+
   @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
   }
 `;
 
@@ -204,19 +207,19 @@ export const Pagination = styled.div`
   display: flex;
   justify-content: flex-end;
   margin-top: 16px;
-  
+
   button {
     background-color: #fff;
     border: 1px solid #ddd;
     padding: 5px 10px;
     margin-left: 5px;
     cursor: pointer;
-    
+
     &:disabled {
       background-color: #f5f5f5;
       cursor: not-allowed;
     }
-    
+
     &.active {
       background-color: #007bff;
       color: white;

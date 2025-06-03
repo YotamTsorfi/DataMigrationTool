@@ -60,7 +60,7 @@ export async function processParentChildResponse(
   childTableNames?: string[],
   childJobs?: ChildJob[],
   logErrors: boolean = false,
-  updateBatchTable: boolean = false
+  updateBatchTable: boolean = false,
 ): Promise<ProcessResponseResult> {
   try {
     // Start measuring DB update time
@@ -78,7 +78,7 @@ export async function processParentChildResponse(
         response?.data?.error?.message ||
         `API Error: Status ${response?.status}`;
       console.warn(
-        `API returned error status ${response?.status}, but continuing with database updates`
+        `API returned error status ${response?.status}, but continuing with database updates`,
       );
     }
 
@@ -95,7 +95,7 @@ export async function processParentChildResponse(
       response,
       enrichedRecords,
       priorityIdField,
-      childJobs
+      childJobs,
     );
 
     // Update performance metrics - THIS IS THE FIX
@@ -144,7 +144,7 @@ export async function processParentChildResponse(
             const childRecords = getChildRecords(
               record,
               jobTypeName,
-              childTableName
+              childTableName,
             );
 
             if (
@@ -195,7 +195,7 @@ export async function processParentChildResponse(
           perfMonitor,
           undefined,
           3, // number of retries
-          sentToPriority
+          sentToPriority,
         );
 
         totalDbUpdateTime += result.updateTime;
@@ -222,7 +222,7 @@ export async function processParentChildResponse(
           if (!update.tableName) {
             console.error(
               `❌ Child update missing tableName property:`,
-              update
+              update,
             );
             return;
           }
@@ -237,7 +237,7 @@ export async function processParentChildResponse(
 
         // Process each child table
         for (const [tableName, updates] of Object.entries(
-          childUpdatesByTable
+          childUpdatesByTable,
         )) {
           try {
             // Force parameter types explicitly for each child table
@@ -263,7 +263,7 @@ export async function processParentChildResponse(
               perfMonitor,
               undefined,
               3,
-              sentToPriority
+              sentToPriority,
             );
 
             // לוג הצלחה לאחר העדכון
@@ -274,7 +274,7 @@ export async function processParentChildResponse(
           } catch (tableError) {
             console.error(
               `Error updating child table ${tableName}:`,
-              tableError
+              tableError,
             );
             // Continue with other tables despite error
           }
@@ -330,7 +330,7 @@ export async function processParentChildResponse(
           ? "DB update had deadlocks but completed successfully"
           : null,
         parentTable,
-        updateBatchTable
+        updateBatchTable,
       );
     }
 
@@ -361,7 +361,7 @@ export async function processParentChildResponse(
         parentTable,
         jobId,
         batchId,
-        childJobs
+        childJobs,
       );
     } catch (forceUpdateError) {
       console.error("Failed to force error updates:", forceUpdateError);
@@ -391,7 +391,7 @@ export async function processParentChildResponse(
 function getChildRecords(
   record: any,
   jobTypeName: string,
-  tableName?: string
+  tableName?: string,
 ): any[] | undefined {
   if (!record.childRecords) return undefined;
 
@@ -438,10 +438,10 @@ async function forceErrorDatabaseUpdates(
   jobId: string,
   batchId: string,
   childJobs?: ChildJob[],
-  logErrors: boolean = false
+  logErrors: boolean = false,
 ): Promise<void> {
   console.log(
-    `Forcing database updates for ${records.length} records due to processor error`
+    `Forcing database updates for ${records.length} records due to processor error`,
   );
 
   const errorMessage = error instanceof Error ? error.message : String(error);
@@ -480,7 +480,7 @@ async function forceErrorDatabaseUpdates(
           const childRecords = getChildRecords(
             record,
             job.JobTypeName,
-            job.DBTableName
+            job.DBTableName,
           );
 
           if (childRecords && Array.isArray(childRecords)) {
@@ -552,7 +552,7 @@ function processApiResponse(
   response: any,
   enrichedRecords: any[],
   priorityIdField?: string,
-  childJobs?: ChildJob[]
+  childJobs?: ChildJob[],
 ) {
   // Default error result as before
   const defaultErrorResult = {
@@ -645,7 +645,7 @@ function processApiResponse(
           const childRecords = getChildRecords(
             record,
             jobTypeName,
-            childTableName
+            childTableName,
           );
 
           // Only process child records if we found any
@@ -694,7 +694,7 @@ function processApiResponse(
                   if (responseBody && responseBody[subformKey] !== undefined) {
                     const matchingItem = responseBody[subformKey].find(
                       (item: any) =>
-                        item[job.priority_id] === childRecord[job.priority_id]
+                        item[job.priority_id] === childRecord[job.priority_id],
                     );
                     if (matchingItem) {
                       const idValue = matchingItem[job.priority_id];
@@ -742,11 +742,11 @@ function processApiResponse(
                           childUpdate.priority_id =
                             idValue !== null ? String(idValue) : null;
                           console.log(
-                            `Using first item's ${job.priority_id} as fallback: ${childUpdate.priority_id}`
+                            `Using first item's ${job.priority_id} as fallback: ${childUpdate.priority_id}`,
                           );
                         } else {
                           console.log(
-                            `No ${job.priority_id} field found in first array item`
+                            `No ${job.priority_id} field found in first array item`,
                           );
                         }
                       }
@@ -755,7 +755,7 @@ function processApiResponse(
                     else if (!job.HasSiblings) {
                       const subformData = responseBody[subformKey];
                       console.log(
-                        `Found single object subform ${subformKey}: ${typeof subformData}`
+                        `Found single object subform ${subformKey}: ${typeof subformData}`,
                       );
 
                       // אם הנתונים הם אובייקט ישיר (לא מערך)
@@ -771,7 +771,7 @@ function processApiResponse(
                           // console.log(`✓ Found child ID in object: ${childUpdate.priority_id}`);
                         } else {
                           console.log(
-                            `Field ${job.priority_id} not found in subform object`
+                            `Field ${job.priority_id} not found in subform object`,
                           );
                         }
                       }
@@ -815,7 +815,7 @@ function processApiResponse(
                       childUpdate.priority_id =
                         idValue !== null ? String(idValue) : null;
                       console.log(
-                        `Found child ID at root level: ${childUpdate.priority_id}`
+                        `Found child ID at root level: ${childUpdate.priority_id}`,
                       );
                     }
                   }
@@ -825,7 +825,7 @@ function processApiResponse(
                 } catch (e) {
                   console.error(
                     `Error extracting child ID for ${jobTypeName}:`,
-                    e
+                    e,
                   );
                 }
               } else {
@@ -903,7 +903,7 @@ function processApiResponse(
           const childRecords = getChildRecords(
             record,
             jobTypeName,
-            childTableName
+            childTableName,
           );
 
           if (childRecords && Array.isArray(childRecords)) {

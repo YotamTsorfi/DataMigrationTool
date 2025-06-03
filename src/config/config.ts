@@ -13,7 +13,7 @@ const requiredEnvVars = [
 requiredEnvVars.forEach((envVar) => {
   if (!process.env[envVar]) {
     throw new Error(
-      `❌ ${envVar} is not defined in the environment variables.`
+      `❌ ${envVar} is not defined in the environment variables.`,
     );
   }
 });

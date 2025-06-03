@@ -6,7 +6,8 @@ import {
   InputContainer,
   Button,
 } from "./BatchProcessorStyles";
-
+import SecureButton from "./SecureButton";
+import { useAuthProtection } from "./withAuthProtection";
 interface ConfigItem {
   ConfigKey: string;
   ConfigValue: string;
@@ -18,6 +19,7 @@ interface ConfigItem {
 const ConfigPanel: React.FC = () => {
   const [configs, setConfigs] = useState<ConfigItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const { disabled } = useAuthProtection();
 
   useEffect(() => {
     fetchConfigs();
@@ -106,18 +108,20 @@ const ConfigPanel: React.FC = () => {
                   type="text"
                   value={config.ConfigValue}
                   onChange={(e) => handleConfigChange(index, e.target.value)}
+                  disabled={disabled}
                   style={{
                     flexGrow: 1,
                     minWidth: 0, // חשוב למניעת גלישה בפלקסבוקס
                     maxWidth: "calc(100% - 80px)", // השארת מקום לכפתור
                   }}
                 />
-                <Button
+                <SecureButton
                   onClick={() => saveConfig(config)}
+                  disabled={disabled}
                   style={{ flexShrink: 0 }} // מונע מהכפתור להתכווץ
                 >
                   Save
-                </Button>
+                </SecureButton>
               </div>
               <small>
                 Last updated: {new Date(config.LastUpdated).toLocaleString()}

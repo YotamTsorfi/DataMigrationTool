@@ -76,7 +76,7 @@ class JobManager {
         TotalRecords: jobRequest.recordCount,
         Status: "Queued",
         ProcessingType: jobRequest.processingType || "batch", // Default to "batch" if not provided
-      }
+      },
     );
 
     return jobId;
@@ -88,7 +88,7 @@ class JobManager {
     status: JobStatus,
     totalSuccess?: number,
     totalFailures?: number,
-    errorMessage?: string
+    errorMessage?: string,
   ): Promise<void> {
     // עדכון זמן סיום רק כאשר העבודה מסתיימת
     const isCompleted = status === "Completed" || status === "Failed";
@@ -184,7 +184,7 @@ class JobManager {
       {
         ProcessingType: processingType,
         JobId: jobId,
-      }
+      },
     );
 
     try {
@@ -197,7 +197,7 @@ class JobManager {
          WHERE refParentJobId = @JobTypeId`,
           {
             JobTypeId: jobRequest.priorityJobTypeId,
-          }
+          },
         )) as ChildJob[];
 
         const childJobCount = childJobs.length;
@@ -213,11 +213,11 @@ class JobManager {
             {
               JobId: jobId,
               ChildTables: childJobs.map((job) => job.DBTableName).join(","),
-            }
+            },
           );
 
           console.log(
-            `Job ${jobId} marked as parent-child job with ${childJobCount} child tables: ${childJobs.map((job) => job.DBTableName).join(", ")}`
+            `Job ${jobId} marked as parent-child job with ${childJobCount} child tables: ${childJobs.map((job) => job.DBTableName).join(", ")}`,
           );
 
           // Configure error buffer for larger batch size for parent-child processing
@@ -253,7 +253,7 @@ class JobManager {
             jobRequest.priorityLinkedField,
             childJobs,
             logErrors,
-            updateBatchTable
+            updateBatchTable,
           );
 
           // Reset error buffer configuration to default after parent-child processing
@@ -265,26 +265,26 @@ class JobManager {
         } else {
           // אם אין עבודות ילד או לא מדובר בעיבוד מסוג batch, ביצוע עיבוד רגיל
           console.log(
-            `Job ${jobId} has parent-child relationship but using standard processing (${processingType})`
+            `Job ${jobId} has parent-child relationship but using standard processing (${processingType})`,
           );
           results = await this.executeStandardProcessing(
             jobId,
             jobRequest,
             processingType,
             logErrors,
-            updateBatchTable
+            updateBatchTable,
           );
         }
       } else {
         // אין קשרי הורה-ילד, ביצוע עיבוד רגיל
         console.log(
-          `Job ${jobId} using standard processing (${processingType})`
+          `Job ${jobId} using standard processing (${processingType})`,
         );
         results = await this.executeStandardProcessing(
           jobId,
           jobRequest,
           processingType,
-          logErrors
+          logErrors,
         );
       }
 
@@ -307,7 +307,7 @@ class JobManager {
                   (typeof result.successCount === "number"
                     ? result.successCount
                     : 0),
-                0
+                0,
               )
             : 0,
           results
@@ -317,10 +317,10 @@ class JobManager {
                   (typeof result.failureCount === "number"
                     ? result.failureCount
                     : 0),
-                0
+                0,
               )
             : 0,
-          "Job cancelled by user request"
+          "Job cancelled by user request",
         );
 
         // Clean up cancellation status
@@ -370,7 +370,7 @@ class JobManager {
         "Completed",
         totalSuccess,
         totalFailures,
-        totalFailures > 0 ? "Some records failed" : undefined
+        totalFailures > 0 ? "Some records failed" : undefined,
       );
 
       // הדפסת סטטיסטיקות ביצועים
@@ -378,7 +378,7 @@ class JobManager {
       // const jobDurationSec = ((jobEndTime - jobStartTime) / 1000).toFixed(2);
 
       console.log(
-        `Job ${jobId} completed in ${jobDurationSec} seconds. Results: Success: ${totalSuccess}, Failures: ${totalFailures}`
+        `Job ${jobId} completed in ${jobDurationSec} seconds. Results: Success: ${totalSuccess}, Failures: ${totalFailures}`,
       );
 
       return results;
@@ -399,7 +399,7 @@ class JobManager {
         "Failed",
         0,
         jobRequest.recordCount,
-        error instanceof Error ? error.message : "Unknown error"
+        error instanceof Error ? error.message : "Unknown error",
       );
 
       // Clean up cancellation status even on error
@@ -432,10 +432,10 @@ class JobManager {
     jobRequest: JobRequest,
     processingType: string,
     logErrors: boolean = false,
-    updateBatchTable: boolean = false
+    updateBatchTable: boolean = false,
   ): Promise<any> {
     console.log(
-      `Job ${jobId} starting ${processingType} processing with error logging: ${logErrors ? "enabled" : "disabled"}`
+      `Job ${jobId} starting ${processingType} processing with error logging: ${logErrors ? "enabled" : "disabled"}`,
     );
 
     // אתחול מעקב התקדמות
@@ -443,7 +443,7 @@ class JobManager {
 
     const batchStartTime = Date.now();
     console.log(
-      `Job ${jobId} starting processing at: ${new Date().toISOString()}`
+      `Job ${jobId} starting processing at: ${new Date().toISOString()}`,
     );
 
     let results;
@@ -459,7 +459,7 @@ class JobManager {
         jobId,
         jobRequest.priorityIdField,
         logErrors,
-        updateBatchTable
+        updateBatchTable,
       );
     } else {
       // עיבוד רגיל במנות (ברירת המחדל)
@@ -472,16 +472,16 @@ class JobManager {
         jobId,
         jobRequest.priorityIdField,
         logErrors,
-        updateBatchTable
+        updateBatchTable,
       );
     }
 
     const batchEndTime = Date.now();
     const batchDurationSec = ((batchEndTime - batchStartTime) / 1000).toFixed(
-      2
+      2,
     );
     console.log(
-      `Job ${jobId} completed processing in ${batchDurationSec} seconds at: ${adjustTimeZone(new Date())}`
+      `Job ${jobId} completed processing in ${batchDurationSec} seconds at: ${adjustTimeZone(new Date())}`,
     );
 
     return results;
@@ -502,7 +502,7 @@ class JobManager {
   private async getDefaultProcessingType(): Promise<string> {
     try {
       const result = await DatabaseService.executeQuery(
-        `SELECT ConfigValue FROM PrioritySystemConfig WHERE ConfigKey = 'PROCESSING_TYPE'`
+        `SELECT ConfigValue FROM PrioritySystemConfig WHERE ConfigKey = 'PROCESSING_TYPE'`,
       );
 
       return result && result[0]

@@ -1,6 +1,6 @@
 //userController.ts
 
-import { Request, Response } from 'express';
+import { Request, Response } from "express";
 import { DatabaseService } from "../services/databaseService";
 
 export const getUsers = async (req: Request, res: Response) => {
