@@ -39,7 +39,7 @@ async function processParentChildBatches(
   parentIdField: string,
   linkedField: string,
   childJobs: ChildJob[],
-  logErrors: boolean = false,
+  logErrors: boolean = false
 ): Promise<BatchResult[]> {
   // Debug logging (keep this)
   console.log("------------- DEBUG --------------------");
@@ -73,7 +73,7 @@ async function processParentChildBatches(
   };
 
   // Initialize job tracking
-  ProgressTracker.initJob(jobId, totalRecords);
+  ProgressTracker.initJob(jobId, totalRecords, jobType);
   const overallPerformance = new PerformanceMonitor();
   overallPerformance.startOperation();
 
@@ -97,11 +97,11 @@ async function processParentChildBatches(
   // ערך מירבי של מקביליות - לפי כמות השרתים והערך שהוגדר
   const effectiveConcurrency = Math.min(
     maxConcurrentBatches,
-    maxBatchesPerServer * serverCount,
+    maxBatchesPerServer * serverCount
   );
 
   console.log(
-    `Using concurrency of ${effectiveConcurrency} batches (${serverCount} servers with ${maxBatchesPerServer} batches per server)`,
+    `Using concurrency of ${effectiveConcurrency} batches (${serverCount} servers with ${maxBatchesPerServer} batches per server)`
   );
 
   // יצירת בריכת העובדים המקבילים - לפי הערך האפקטיבי שחישבנו
@@ -154,11 +154,11 @@ async function processParentChildBatches(
     // נשלוף כמות רשומות המתאימה לבאצ' אחד (100 רשומות)
     const batchRemaining = Math.min(
       maxBatchSizeForApi,
-      totalRecords - currentRow,
+      totalRecords - currentRow
     );
 
     console.log(
-      `Fetching next batch at offset ${currentStartRow}, remaining: ${batchRemaining}`,
+      `Fetching next batch at offset ${currentStartRow}, remaining: ${batchRemaining}`
     );
 
     // 1. התחלת מדידת זמן שליפה
@@ -172,7 +172,7 @@ async function processParentChildBatches(
       currentStartRow,
       batchRemaining,
       linkedField,
-      childJobs,
+      childJobs
     );
 
     // 3. עיבוד הסטרים וקריאת הנתונים
@@ -211,7 +211,7 @@ async function processParentChildBatches(
         `Progress: ${processedRecords}/${totalRecords} (${Math.floor((processedRecords / totalRecords) * 100)}%) | ` +
           `Average fetch: ${(phaseMetrics.dbFetch.total / phaseMetrics.dbFetch.count).toFixed(2)}ms | ` +
           `Average API: ${(phaseMetrics.apiRequest.total / phaseMetrics.apiRequest.count).toFixed(2)}ms | ` +
-          `Active batches: ${activeJobs.size}`,
+          `Active batches: ${activeJobs.size}`
       );
       lastLogTime = Date.now();
     }
@@ -241,7 +241,7 @@ async function processParentChildBatches(
           parentIdField,
           childTableNames,
           childJobs,
-          logErrors,
+          logErrors
         );
 
         // 5.3 מדידת זמן סיום API
@@ -250,7 +250,7 @@ async function processParentChildBatches(
         phaseMetrics.apiRequest.count++;
 
         console.log(
-          `Batch API request completed in ${apiTime.toFixed(2)}ms for ${records.length} records`,
+          `Batch API request completed in ${apiTime.toFixed(2)}ms for ${records.length} records`
         );
 
         // 5.4 עיבוד התוצאות ועדכון הסטטיסטיקה
@@ -272,7 +272,7 @@ async function processParentChildBatches(
           jobId,
           totalSuccessCount + totalFailureCount,
           totalSuccessCount,
-          totalFailureCount,
+          totalFailureCount
         );
 
         // בדיקת כישלונות רצופים
@@ -282,12 +282,12 @@ async function processParentChildBatches(
         ) {
           consecutiveFailedBatches++;
           console.warn(
-            `Batch completely failed (${consecutiveFailedBatches} consecutive failures) - continuing anyway`,
+            `Batch completely failed (${consecutiveFailedBatches} consecutive failures) - continuing anyway`
           );
 
           if (consecutiveFailedBatches >= maxConsecutiveFailures) {
             console.warn(
-              `${maxConsecutiveFailures}+ consecutive failed batches detected, but continuing per configuration`,
+              `${maxConsecutiveFailures}+ consecutive failed batches detected, but continuing per configuration`
             );
           }
         } else {
@@ -317,7 +317,7 @@ async function processParentChildBatches(
           jobId,
           totalSuccessCount + totalFailureCount,
           totalSuccessCount,
-          totalFailureCount,
+          totalFailureCount
         );
 
         // הוספת שגיאה לתוצאות
@@ -349,7 +349,7 @@ async function processParentChildBatches(
     // התחלת התהליך - אתחול של מספר עבודות בהתאם למקביליות המותרת
     const initialBatches = Math.min(
       effectiveConcurrency,
-      Math.ceil(totalRecords / maxBatchSizeForApi),
+      Math.ceil(totalRecords / maxBatchSizeForApi)
     );
     console.log(`Initializing ${initialBatches} concurrent batches`);
 
@@ -394,7 +394,7 @@ async function processParentChildBatches(
           `Progress: ${processedRecords}/${totalRecords} (${Math.floor((processedRecords / totalRecords) * 100)}%) | ` +
             `Speed: ${Math.round(recordsPerMinute)} records/minute | ` +
             `ETA: ${formatTime(((totalRecords - processedRecords) / recordsPerMinute) * 60)} | ` +
-            `Active: ${activeJobs.size}`,
+            `Active: ${activeJobs.size}`
         );
 
         lastProgressUpdate.time = now;
@@ -411,7 +411,7 @@ async function processParentChildBatches(
 
     // לוג סיום העבודה
     console.log(
-      `Parent-child job completed: ${processedRecords} records (${totalSuccessCount} success, ${totalFailureCount} failed), duration: ${metrics.totalDuration}`,
+      `Parent-child job completed: ${processedRecords} records (${totalSuccessCount} success, ${totalFailureCount} failed), duration: ${metrics.totalDuration}`
     );
 
     // סיכום ביצועים
@@ -435,13 +435,13 @@ async function processParentChildBatches(
 
     console.log(`Performance summary:`);
     console.log(
-      `- Avg DB Fetch Time: ${avgDbFetchTime}ms (${phaseMetrics.dbFetch.count} operations)`,
+      `- Avg DB Fetch Time: ${avgDbFetchTime}ms (${phaseMetrics.dbFetch.count} operations)`
     );
     console.log(
-      `- Avg API Request Time: ${avgApiTime}ms (${phaseMetrics.apiRequest.count} operations)`,
+      `- Avg API Request Time: ${avgApiTime}ms (${phaseMetrics.apiRequest.count} operations)`
     );
     console.log(
-      `- Avg Response Processing Time: ${avgResponseProcessingTime}ms (${phaseMetrics.responseProcessing.count} operations)`,
+      `- Avg Response Processing Time: ${avgResponseProcessingTime}ms (${phaseMetrics.responseProcessing.count} operations)`
     );
 
     return results;
@@ -458,7 +458,7 @@ async function processParentChildBatches(
     ProgressTracker.completeJob(
       jobId,
       totalSuccessCount,
-      totalFailureCount + (totalRecords - processedRecords),
+      totalFailureCount + (totalRecords - processedRecords)
     );
 
     results.push({
@@ -480,11 +480,11 @@ function formatTime(minutes: number): string {
 async function forceErrorRecordUpdates(
   records: any[],
   jobId: string,
-  error: any,
+  error: any
 ): Promise<void> {
   try {
     console.log(
-      `Forcing database updates for ${records.length} failed records`,
+      `Forcing database updates for ${records.length} failed records`
     );
 
     // Prepare update rows for parent records
@@ -521,10 +521,10 @@ async function forceErrorRecordUpdates(
         updateRows,
         undefined, // No performance monitor
         1000, // Default batch size
-        3, // Default retries
+        3 // Default retries
       );
       console.log(
-        `Updated ${updateRows.length} parent records with error status`,
+        `Updated ${updateRows.length} parent records with error status`
       );
     }
 
@@ -569,18 +569,18 @@ async function forceErrorRecordUpdates(
                 is_new: 1,
               });
             });
-          },
+          }
         );
       });
 
       // Update each child table
       for (const [tableName, updates] of Object.entries(
-        childUpdatesByTable,
+        childUpdatesByTable
       ) as [string, any[]][]) {
         if (updates.length > 0) {
           await performBulkUpdateWithService(tableName, updates);
           console.log(
-            `Updated ${updates.length} child records in ${tableName}`,
+            `Updated ${updates.length} child records in ${tableName}`
           );
         }
       }
@@ -596,7 +596,7 @@ async function forceErrorRecordUpdates(
 async function getBatchSize(): Promise<number> {
   try {
     const result = await DatabaseService.executeQuery(
-      `SELECT ConfigValue FROM PrioritySystemConfig WHERE ConfigKey = 'BATCH_SIZE'`,
+      `SELECT ConfigValue FROM PrioritySystemConfig WHERE ConfigKey = 'BATCH_SIZE'`
     );
 
     return result && result[0]

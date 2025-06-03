@@ -2,6 +2,7 @@ import { io } from "../index";
 
 interface JobProgress {
   jobId: string;
+  jobName?: string;
   totalRecords: number;
   processedRecords: number;
   successCount: number;
@@ -19,9 +20,10 @@ class ProgressTracker {
   /**
    * Initialize job progress tracking
    */
-  static initJob(jobId: string, totalRecords: number): void {
+  static initJob(jobId: string, totalRecords: number, jobName?: string): void {
     const progress: JobProgress = {
       jobId,
+      jobName,
       totalRecords,
       processedRecords: 0,
       successCount: 0,
@@ -41,12 +43,12 @@ class ProgressTracker {
     jobId: string,
     processedRecords: number,
     successCount: number,
-    failureCount: number,
+    failureCount: number
   ): void {
     const progress = this.jobProgress.get(jobId);
     if (!progress) {
       console.warn(
-        `Attempted to update progress for non-existent job: ${jobId}`,
+        `Attempted to update progress for non-existent job: ${jobId}`
       );
       return;
     }
@@ -55,7 +57,7 @@ class ProgressTracker {
     progress.successCount = successCount;
     progress.failureCount = failureCount;
     progress.percentage = Math.round(
-      (processedRecords / progress.totalRecords) * 100,
+      (processedRecords / progress.totalRecords) * 100
     );
     progress.status = "processing";
 
@@ -68,7 +70,7 @@ class ProgressTracker {
   static completeJob(
     jobId: string,
     successCount: number,
-    failureCount: number,
+    failureCount: number
   ): void {
     const progress = this.jobProgress.get(jobId);
     if (!progress) return;
@@ -95,7 +97,21 @@ class ProgressTracker {
     const progress = this.jobProgress.get(jobId);
     if (!progress) return;
 
-    io.emit("job:progress", progress);
+    // Include jobName in the emitted progress data
+    const progressData = {
+      jobId: progress.jobId,
+      jobName: progress.jobName,
+      totalRecords: progress.totalRecords,
+      processedRecords: progress.processedRecords,
+      successCount: progress.successCount,
+      failureCount: progress.failureCount,
+      percentage: Math.round(
+        (progress.processedRecords / progress.totalRecords) * 100
+      ),
+      status: progress.status,
+    };
+
+    io.emit("job:progress", progressData);
   }
 
   /**
@@ -110,7 +126,7 @@ class ProgressTracker {
    */
   static getAllActiveJobs(): JobProgress[] {
     return Array.from(this.jobProgress.values()).filter(
-      (job) => job.status === "pending" || job.status === "processing",
+      (job) => job.status === "pending" || job.status === "processing"
     );
   }
 }

@@ -24,7 +24,7 @@ export async function processWithQueues(
   jobId: string,
   priorityIdField?: string,
   logErrors: boolean = false,
-  updateBatchTable: boolean = false,
+  updateBatchTable: boolean = false
 ): Promise<any[]> {
   // Get system configuration
   const config = await configService.getConfig();
@@ -40,12 +40,12 @@ export async function processWithQueues(
   // Set horizontal batch size from configuration or use default
   const HORIZONTAL_BATCH_SIZE = parseInt(
     config.HORIZONTAL_BATCH_SIZE || "40",
-    10,
+    10
   );
   // Set vertical batch size from configuration or use default
   const VERTICAL_BATCH_SIZE = parseInt(
     config.VERTICAL_BATCH_SIZE || "1000",
-    10,
+    10
   );
 
   // TODO - Check CHUNK_SIZE
@@ -54,7 +54,7 @@ export async function processWithQueues(
   const CHUNK_SIZE = 2000;
 
   // Initialize progress tracking for this job
-  ProgressTracker.initJob(jobId, recordCount);
+  ProgressTracker.initJob(jobId, recordCount, jobType);
 
   // Process in chunks
   let processedCount = 0;
@@ -94,7 +94,7 @@ export async function processWithQueues(
 
       const horizontalBatch = rows.slice(
         i,
-        i + HORIZONTAL_BATCH_SIZE * VERTICAL_BATCH_SIZE,
+        i + HORIZONTAL_BATCH_SIZE * VERTICAL_BATCH_SIZE
       );
 
       // Enhanced load-balancing implementation
@@ -106,7 +106,7 @@ export async function processWithQueues(
           `queue-${h}`,
           jobId,
           jobType,
-          tableName,
+          tableName
         );
         queue.setUpdateBatchTable(updateBatchTable);
         horizontalQueues.push(queue);
@@ -127,7 +127,7 @@ export async function processWithQueues(
         const startIndex = v * VERTICAL_BATCH_SIZE;
         const verticalBatch = horizontalBatch.slice(
           startIndex,
-          startIndex + VERTICAL_BATCH_SIZE,
+          startIndex + VERTICAL_BATCH_SIZE
         );
 
         if (verticalBatch.length === 0) continue;
@@ -167,7 +167,7 @@ export async function processWithQueues(
         // Update workload tracker
         queueWorkloads.set(
           targetQueueIndex,
-          (queueWorkloads.get(targetQueueIndex) || 0) + verticalBatch.length,
+          (queueWorkloads.get(targetQueueIndex) || 0) + verticalBatch.length
         );
       }
 
@@ -211,7 +211,7 @@ export async function processWithQueues(
               jobId,
               totalProcessedRecords + currentSuccess + currentFailure,
               totalSuccessCount + currentSuccess,
-              totalFailureCount + currentFailure,
+              totalFailureCount + currentFailure
             );
           };
 
@@ -244,7 +244,7 @@ export async function processWithQueues(
         jobId,
         totalProcessedRecords + totalSuccessCount + totalFailureCount,
         totalSuccessCount,
-        totalFailureCount,
+        totalFailureCount
       );
     }
 
@@ -287,7 +287,7 @@ function processQueueResults(
     lastProcessedIndex: number;
   },
   tableName: string,
-  logErrors: boolean,
+  logErrors: boolean
 ): Promise<void> {
   // Start a performance monitor for metrics
   const perfMonitor = new PerformanceMonitor();
@@ -311,7 +311,7 @@ async function performDatabaseUpdatesAsync(
   },
   tableName: string,
   logErrors: boolean,
-  perfMonitor: PerformanceMonitor,
+  perfMonitor: PerformanceMonitor
 ): Promise<void> {
   try {
     // 1. נשמור את מבנה הטבלה בתחילת הפונקציה במקום לשאול שוב ושוב
@@ -325,7 +325,7 @@ async function performDatabaseUpdatesAsync(
       // בדיקת מבנה טבלה - פעם אחת בלבד
       tableColumns = await DatabaseService.executeQuery(
         `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tableName`,
-        { tableName },
+        { tableName }
       );
 
       // יצירת מפת שמות עמודות לחיפוש מהיר
@@ -397,7 +397,7 @@ async function performDatabaseUpdatesAsync(
       } catch (e) {
         console.error(
           `Failed to sanitize priority_id for RowId ${row.RowId}:`,
-          e,
+          e
         );
         row.priority_id = null;
       }
@@ -411,21 +411,21 @@ async function performDatabaseUpdatesAsync(
           perfMonitor,
           1000,
           3,
-          true,
+          true
         );
         bulkUpdateSuccessful = true;
       } catch (error) {
         bulkRetryCount++;
         console.error(
           `Bulk update attempt ${bulkRetryCount}/${MAX_BULK_RETRIES} failed:`,
-          error,
+          error
         );
 
         if (bulkRetryCount < MAX_BULK_RETRIES) {
           // המתנה הדרגתית בין ניסיונות
           console.log(`Waiting before retry ${bulkRetryCount}...`);
           await new Promise((resolve) =>
-            setTimeout(resolve, 1000 * bulkRetryCount),
+            setTimeout(resolve, 1000 * bulkRetryCount)
           );
         }
       }
@@ -434,7 +434,7 @@ async function performDatabaseUpdatesAsync(
     // 3. אם העדכון במסה נכשל, ננסה עדכונים בודדים עם ניסיונות חוזרים
     if (!bulkUpdateSuccessful) {
       console.warn(
-        `Bulk update failed after ${MAX_BULK_RETRIES} attempts, trying individual updates...`,
+        `Bulk update failed after ${MAX_BULK_RETRIES} attempts, trying individual updates...`
       );
 
       // שמירת רשימת מזהי השורות שעודכנו בהצלחה כדי למנוע כפילויות
@@ -502,12 +502,12 @@ async function performDatabaseUpdatesAsync(
             individualRetryCount++;
             console.error(
               `Individual update attempt ${individualRetryCount}/${MAX_INDIVIDUAL_RETRIES} for row ${row.RowId} failed:`,
-              innerError,
+              innerError
             );
 
             if (individualRetryCount < MAX_INDIVIDUAL_RETRIES) {
               await new Promise((resolve) =>
-                setTimeout(resolve, 500 * individualRetryCount),
+                setTimeout(resolve, 500 * individualRetryCount)
               );
             }
           }
@@ -515,7 +515,7 @@ async function performDatabaseUpdatesAsync(
 
         if (!individualUpdateSuccess) {
           console.error(
-            `Failed to update row ${row.RowId} after ${MAX_INDIVIDUAL_RETRIES} attempts`,
+            `Failed to update row ${row.RowId} after ${MAX_INDIVIDUAL_RETRIES} attempts`
           );
         }
       }

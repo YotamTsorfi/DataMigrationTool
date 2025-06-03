@@ -77,7 +77,7 @@ export async function processParentChildGridBatches(
   const CHUNK_SIZE = 2000; // Number of rows to fetch in each database call
 
   // Initialize progress tracking
-  ProgressTracker.initJob(jobId, totalRecords);
+  ProgressTracker.initJob(jobId, totalRecords, jobType);
   const overallPerformance = new PerformanceMonitor();
   overallPerformance.startOperation();
 

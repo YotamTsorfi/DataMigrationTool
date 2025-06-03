@@ -45,6 +45,7 @@ const JobInfo = styled.div`
 // Types
 interface JobProgress {
   jobId: string;
+  jobName: string;
   totalRecords: number;
   processedRecords: number;
   successCount: number;
@@ -139,6 +140,7 @@ const JobProgressTracker: React.FC<JobProgressTrackerProps> = ({ jobId }) => {
       ) : (
         activeJobs.map((job) => (
           <JobInfo key={job.jobId}>
+            {job.jobName && <h3>{job.jobName}</h3>}
             {/* <h4>Job: {job.jobId.substring(0, 8)}...</h4> */}
             <h4>Job: {job.jobId}</h4>
             <ProgressContainer>
