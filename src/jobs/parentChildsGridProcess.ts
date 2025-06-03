@@ -40,7 +40,8 @@ export async function processParentChildGridBatches(
   linkedField: string,
   childJobs: ChildJob[],
   logErrors: boolean = false,
-  updateBatchTable: boolean = false
+  updateBatchTable: boolean = false,
+  customWhereClause?: string
 ): Promise<BatchResult[]> {
   console.log(
     "------------- PARENT-CHILD GRID PROCESSING --------------------"
@@ -101,6 +102,12 @@ export async function processParentChildGridBatches(
 
       const chunkSize = Math.min(CHUNK_SIZE, totalRecords - processedCount);
 
+      // Get custom WHERE clause from config if not provided directly
+      if (!customWhereClause) {
+        const clause = await configService.getWhereClauseForJobType(jobType);
+        customWhereClause = clause === null ? undefined : clause;
+      }
+
       // Fetch data chunk from database
       const perfMonitor = new PerformanceMonitor();
       perfMonitor.startDbFetch();
@@ -111,7 +118,8 @@ export async function processParentChildGridBatches(
         chunkSize,
         linkedField,
         childJobs,
-        perfMonitor
+        perfMonitor,
+        customWhereClause
       );
       perfMonitor.endDbFetch();
 

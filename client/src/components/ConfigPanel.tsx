@@ -1,11 +1,7 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
-import {
-  SectionContainer,
-  InputContainer,
-  Button,
-} from "./BatchProcessorStyles";
+import { SectionContainer, InputContainer } from "./BatchProcessorStyles";
 import SecureButton from "./SecureButton";
 import { useAuthProtection } from "./withAuthProtection";
 interface ConfigItem {

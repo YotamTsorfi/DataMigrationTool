@@ -300,7 +300,8 @@ async function processBatches(
   jobId: string,
   priorityIdField: string,
   logErrors: boolean = false,
-  updateBatchTable: boolean = false
+  updateBatchTable: boolean = false,
+  customWhereClause?: string
 ): Promise<any[]> {
   const config = await configService.getConfig();
   const BATCH_SIZE = config.BATCH_SIZE;
@@ -345,7 +346,12 @@ async function processBatches(
       perfMonitor.startDbFetch();
 
       // Fetch data chunk from database
-      const rows = await fetchDataChunk(tableName, lastRowId, chunkSize);
+      const rows = await fetchDataChunk(
+        tableName,
+        lastRowId,
+        chunkSize,
+        customWhereClause
+      );
       perfMonitor.endDbFetch();
 
       if (rows.length === 0) break;

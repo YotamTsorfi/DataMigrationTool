@@ -24,11 +24,15 @@ export async function processWithQueues(
   jobId: string,
   priorityIdField?: string,
   logErrors: boolean = false,
-  updateBatchTable: boolean = false
+  updateBatchTable: boolean = false,
+  customWhereClause?: string
 ): Promise<any[]> {
   // Get system configuration
   const config = await configService.getConfig();
 
+  // console.log(
+  //   `processWithQueues received customWhereClause: ${customWhereClause}`
+  // );
   // Initialize ErrorBufferService at the beginning of the function
   const errorBuffer = ErrorBufferService.getInstance();
   errorBuffer.configure({
@@ -72,10 +76,21 @@ export async function processWithQueues(
     }
     const chunkSize = Math.min(CHUNK_SIZE, recordCount - processedCount);
 
+    // Get custom WHERE clause from config if not provided directly
+    if (!customWhereClause) {
+      const clause = await configService.getWhereClauseForJobType(jobType);
+      customWhereClause = clause === null ? undefined : clause;
+    }
+
     // Fetch data chunk from database
     const perfMonitor = new PerformanceMonitor();
     perfMonitor.startDbFetch();
-    const rows = await fetchDataChunk(tableName, lastRowId, chunkSize);
+    const rows = await fetchDataChunk(
+      tableName,
+      lastRowId,
+      chunkSize,
+      customWhereClause
+    );
     perfMonitor.endDbFetch();
 
     if (rows.length === 0) break;

@@ -7,10 +7,14 @@ import {
   SectionContainer,
   InputContainer,
   InputLabel,
-  Button,
   ReadOnlyInput,
   RadioGroup,
   RadioButton,
+  WhereClauseContainer,
+  WhereClauseTextarea,
+  ErrorMessage,
+  InfoBox,
+  ButtonGroup,
 } from "./BatchProcessorStyles";
 import ConfigPanel from "./ConfigPanel";
 import JobProgressTracker from "./JobProgressTracker";
@@ -46,6 +50,13 @@ const BatchProcessor: React.FC = () => {
   const [priorityLinkedField, setPriorityLinkedField] = useState("");
   const [priorityJobTypeId, setPriorityJobTypeId] = useState(0);
   const { disabled, isAuthenticated } = useAuthProtection();
+
+  // New state for WHERE clause functionality
+  const [customWhereClause, setCustomWhereClause] = useState<string>("");
+  const [whereClauseError, setWhereClauseError] = useState<string | null>(null);
+  const [baseWhereClause, setBaseWhereClause] = useState<string>("");
+  const [isValidatingWhereClause, setIsValidatingWhereClause] = useState(false);
+  const [isSavingWhereClause, setIsSavingWhereClause] = useState(false);
   //---------------------------------------------
 
   useEffect(() => {
@@ -81,21 +92,94 @@ const BatchProcessor: React.FC = () => {
     fetchProcessingType();
   }, []);
   //---------------------------------------------
-  // const refreshSystemConfig = async () => {
-  //   try {
-  //     const response = await axios.get(`${process.env.REACT_APP_API_URL}/job/config`);
-  //     if (response.data.success && response.data.config) {
-  //       setSystemConfig(response.data.config);
-  //     }
-  //   } catch (error) {
-  //     console.error("Error refreshing system configuration:", error);
-  //   }
-  // };
+  //---------------------------------------------
+  /**
+   * Fetches the WHERE clause for a specific job type
+   */
+  const fetchWhereClause = async (jobType: string): Promise<void> => {
+    if (!jobType) return;
+
+    try {
+      const response = await axios.get(
+        `${process.env.REACT_APP_API_URL}/where-clause/${jobType}`
+      );
+      setCustomWhereClause(response.data.whereClause || "");
+      setBaseWhereClause(response.data.baseWhereClause || "");
+      setWhereClauseError(null);
+    } catch (error) {
+      console.error("Error fetching WHERE clause:", error);
+      setWhereClauseError("Failed to load WHERE clause");
+    }
+  };
+
+  /**
+   * Validates the current WHERE clause syntax
+   */
+  const validateWhereClause = async (): Promise<boolean> => {
+    // Empty clause is valid
+    if (!customWhereClause.trim()) return true;
+
+    setIsValidatingWhereClause(true);
+    setWhereClauseError(null);
+
+    try {
+      const response = await axios.post(
+        `${process.env.REACT_APP_API_URL}/where-clause/validate`,
+        { whereClause: customWhereClause }
+      );
+
+      setIsValidatingWhereClause(false);
+
+      if (!response.data.valid) {
+        setWhereClauseError(response.data.message);
+        return false;
+      }
+      toast.success("WHERE clause syntax is valid");
+      return true;
+    } catch (error) {
+      console.error("Error validating WHERE clause:", error);
+      setWhereClauseError("Failed to validate WHERE clause");
+      setIsValidatingWhereClause(false);
+      return false;
+    }
+  };
+
+  /**
+   * Saves the WHERE clause for the selected job type
+   */
+  const saveWhereClause = async (): Promise<void> => {
+    if (!selectedJobType) {
+      toast.error("Please select a job type first");
+      return;
+    }
+
+    // Validate before saving
+    const isValid = await validateWhereClause();
+    if (!isValid) return;
+
+    setIsSavingWhereClause(true);
+
+    try {
+      const response = await axios.put(
+        `${process.env.REACT_APP_API_URL}/where-clause/${selectedJobType}`,
+        { whereClause: customWhereClause }
+      );
+
+      setIsSavingWhereClause(false);
+      toast.success(response.data.message || "WHERE clause saved successfully");
+    } catch (error) {
+      console.error("Error saving WHERE clause:", error);
+      toast.error("Failed to save WHERE clause");
+      setIsSavingWhereClause(false);
+    }
+  };
   //---------------------------------------------
   const handleJobTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const selectedValue = e.target.value;
     const selectedJob = jobTypes.find(
-      (job) => job.JobTypeName === e.target.value
+      (job) => job.JobTypeName === selectedValue
     );
+
     if (selectedJob) {
       setTableName(selectedJob.DBTableName || "");
       setPriorityScreenName(selectedJob.ScreenName || "");
@@ -109,7 +193,16 @@ const BatchProcessor: React.FC = () => {
       setPriorityLinkedField("");
       setPriorityJobTypeId(0);
     }
-    setSelectedJobType(e.target.value);
+
+    setSelectedJobType(selectedValue);
+
+    // Fetch the WHERE clause for the selected job type
+    if (selectedValue) {
+      fetchWhereClause(selectedValue);
+    } else {
+      setCustomWhereClause("");
+      setBaseWhereClause("");
+    }
   };
   //---------------------------------------------
   const handleProcessingTypeChange = (
@@ -124,16 +217,24 @@ const BatchProcessor: React.FC = () => {
       toast.error("Please login to perform this action");
       return;
     }
+
     if (!tableName || !priorityScreenName || !priorityIdField) {
       toast.error(
         "Table Name and Priority Screen Name and priority Id Field are required."
       );
       return;
     }
+
+    // Validate the WHERE clause if it's provided
+    if (customWhereClause.trim()) {
+      const isValid = await validateWhereClause();
+      if (!isValid) return;
+    }
+
     setIsProcessing(true);
 
     try {
-      // Use the specific endpoint for processing type
+      // Use the specific endpoint for processing type and include the WHERE clause
       await axios.post(
         `${process.env.REACT_APP_API_URL}/job/start-with-type/${processingType}`,
         {
@@ -145,6 +246,7 @@ const BatchProcessor: React.FC = () => {
           priorityIdField,
           priorityLinkedField,
           priorityJobTypeId,
+          customWhereClause: customWhereClause.trim() || undefined,
         }
       );
 
@@ -158,7 +260,7 @@ const BatchProcessor: React.FC = () => {
       setIsProcessing(false);
     }
   };
-  //---------------------------------------------
+  //---------------------------
   return (
     <div>
       <ToastContainer />
@@ -267,6 +369,50 @@ const BatchProcessor: React.FC = () => {
                 readOnly
               />
             </InputLabel>
+
+            {/* Custom WHERE Clause section */}
+            {selectedJobType && (
+              <WhereClauseContainer>
+                <h3>Custom WHERE Clause</h3>
+                <WhereClauseTextarea
+                  value={customWhereClause}
+                  onChange={(e) => setCustomWhereClause(e.target.value)}
+                  placeholder="Enter custom WHERE conditions (e.g. field1 > 100 AND field2 = 'value')"
+                  rows={4}
+                  $hasError={!!whereClauseError}
+                />
+                {whereClauseError && (
+                  <ErrorMessage>{whereClauseError}</ErrorMessage>
+                )}
+                <InfoBox>
+                  <strong>Base WHERE clause:</strong>{" "}
+                  <code>{baseWhereClause}</code>
+                  <br />
+                  Your custom clause will be combined with the base clause using
+                  AND.
+                  <br />
+                  Do not include the "WHERE" keyword.
+                </InfoBox>
+                <ButtonGroup>
+                  <SecureButton
+                    onClick={saveWhereClause}
+                    disabled={
+                      isSavingWhereClause || isValidatingWhereClause || disabled
+                    }
+                  >
+                    {isSavingWhereClause ? "Saving..." : "Save WHERE Clause"}
+                  </SecureButton>
+                  <SecureButton
+                    onClick={validateWhereClause}
+                    disabled={isValidatingWhereClause || disabled}
+                  >
+                    {isValidatingWhereClause
+                      ? "Validating..."
+                      : "Validate Syntax"}
+                  </SecureButton>
+                </ButtonGroup>
+              </WhereClauseContainer>
+            )}
           </InputContainer>
 
           <SecureButton

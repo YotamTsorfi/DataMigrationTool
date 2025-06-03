@@ -13,7 +13,8 @@ export async function fetchParentChildChunk(
   maxRows: number,
   linkedField: string,
   childJobs: ChildJob[],
-  perfMonitor?: PerformanceMonitor
+  perfMonitor?: PerformanceMonitor,
+  customWhereClause?: string
 ): Promise<any[]> {
   const startMonitoring = !perfMonitor;
   if (startMonitoring) {
@@ -30,7 +31,8 @@ export async function fetchParentChildChunk(
       parentTableName,
       startRow,
       chunkSize,
-      linkedField
+      linkedField,
+      customWhereClause
     );
 
     if (parentRecords.length === 0) {
@@ -125,26 +127,53 @@ export async function fetchParentChildChunk(
 }
 
 /**
- * Fetches eligible parent records
+ * Fetches eligible parent records with support for custom WHERE conditions
+ * @param tableName The database table to query
+ * @param startRow The row ID to start from
+ * @param limit Maximum number of records to return
+ * @param linkedField Field linking parent and child records
+ * @param customWhereClause Optional custom WHERE conditions to apply
+ * @returns Array of parent records matching the criteria
  */
 async function fetchEligibleParentRecords(
   tableName: string,
   startRow: number,
   limit: number,
-  linkedField: string
+  linkedField: string,
+  customWhereClause?: string
 ): Promise<any[]> {
-  return await DatabaseService.executeQuery(
-    `SELECT RowId, Data, ${linkedField}
-     FROM ${tableName}
-     WHERE RowId > @startRow
-     AND is_eligible = 1
-     AND is_new = 1
-     AND (Status IS NULL OR Status = 'Failed')
-     ORDER BY RowId ASC
-     OFFSET 0 ROWS
-     FETCH NEXT @limit ROWS ONLY`,
-    { startRow, limit }
-  );
+  try {
+    // Get base WHERE clause and combine with custom clause if provided
+    console.log(
+      `fetchEligibleParentRecords called with customWhereClause: ${customWhereClause}`
+    );
+
+    const baseWhereClause =
+      "is_eligible = 1 AND is_new = 1 AND (Status IS NULL OR Status = 'Failed')";
+    let whereClause = `RowId > @startRow AND ${baseWhereClause}`;
+
+    if (customWhereClause) {
+      whereClause = `${whereClause} AND (${customWhereClause})`;
+    }
+
+    // Maintain the original query structure with OFFSET/FETCH
+    const query = `
+      SELECT RowId, Data, ${linkedField}
+      FROM ${tableName}
+      WHERE ${whereClause}
+      ORDER BY RowId ASC
+      OFFSET 0 ROWS
+      FETCH NEXT @limit ROWS ONLY`;
+
+    const results = await DatabaseService.executeQuery(query, {
+      startRow,
+      limit,
+    });
+    return results;
+  } catch (error) {
+    console.error(`Error in fetchEligibleParentRecords: ${error}`);
+    throw error;
+  }
 }
 
 /**
