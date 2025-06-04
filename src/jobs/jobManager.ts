@@ -22,6 +22,7 @@ interface JobRequest {
   priorityJobTypeId?: number;
   logErrors?: boolean;
   updateBatchTable?: boolean;
+  processAllRecords?: boolean;
 }
 
 interface ChildJob {
@@ -121,6 +122,42 @@ class JobManager {
     await DatabaseService.executeQuery(query, params);
   }
 
+  /**
+   * Gets the structure of a table to determine which columns it contains
+   * @param tableName - The name of the table to check
+   * @returns An object with methods to check column existence
+   */
+  private async getTableStructure(
+    tableName: string
+  ): Promise<{ hasColumn(name: string): boolean }> {
+    try {
+      // Query to get column information from SQL Server
+      const columns = await DatabaseService.executeQuery(
+        `
+      SELECT COLUMN_NAME
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_NAME = @TableName
+    `,
+        {
+          TableName: tableName,
+        }
+      );
+
+      const columnSet = new Set(
+        columns.map((col: any) => col.COLUMN_NAME.toLowerCase())
+      );
+
+      return {
+        hasColumn: (name: string): boolean => columnSet.has(name.toLowerCase()),
+      };
+    } catch (error) {
+      console.error(`Error fetching table structure for ${tableName}:`, error);
+      // Return an object that assumes no columns exist
+      return {
+        hasColumn: () => false,
+      };
+    }
+  }
   //   ----------------------------
   /**
    * Starts the job processing by updating the job status and executing the appropriate processing method.
@@ -162,10 +199,10 @@ class JobManager {
       logErrors: logErrors,
     });
 
-    // עדכון סטטוס העבודה ל-"מתבצעת"
+    // Update the job status to "Running"
     await this.updateJobStatus(jobId, "Running");
 
-    // שליחת התראה על תחילת ג'וב
+    // Send email notification for job start
     await this.emailService.sendJobStartNotification({
       jobId,
       jobType: jobRequest.jobType,
@@ -174,11 +211,11 @@ class JobManager {
       totalRecords: jobRequest.recordCount,
     });
 
-    // קביעת סוג העיבוד (batch או queue)
+    // Get the processing type from the job request or default to system config
     const processingType =
       jobRequest.processingType || (await this.getDefaultProcessingType());
 
-    // עדכון סוג העיבוד במסד הנתונים
+    // Update the job history with the processing type
     await DatabaseService.executeQuery(
       `UPDATE PriorityJobsHistory SET ProcessingType = @ProcessingType WHERE JobId = @JobId`,
       {
@@ -196,10 +233,86 @@ class JobManager {
     //   `Job ${jobId} loaded WHERE clause for ${jobRequest.jobType}: ${customWhereClause || "(none)"}`
     // );
 
+    if (jobRequest.processAllRecords || jobRequest.recordCount === -1) {
+      try {
+        // Build a more flexible query that doesn't assume specific columns
+        let countQuery = `SELECT COUNT(*) as totalCount FROM ${jobRequest.tableName} WHERE 1=1`;
+
+        // Add table-specific conditions if we know the table structure
+        const tableInfo = await this.getTableStructure(jobRequest.tableName);
+
+        // Only add conditions for columns that actually exist
+        if (tableInfo.hasColumn("is_eligible")) {
+          countQuery += ` AND is_eligible = 1`;
+        }
+
+        if (tableInfo.hasColumn("is_new")) {
+          countQuery += ` AND is_new = 1`;
+        }
+
+        if (tableInfo.hasColumn("Status")) {
+          countQuery += ` AND (Status IS NULL OR Status = 'Failed')`;
+        }
+
+        // Add custom where clause if provided
+        if (customWhereClause) {
+          countQuery += ` AND ${customWhereClause}`;
+        }
+
+        console.log(`Count query for all records: ${countQuery}`);
+
+        const countResult = await DatabaseService.executeQuery(countQuery);
+
+        if (countResult && countResult.length > 0) {
+          const totalCount = (countResult[0] as { totalCount: number })
+            .totalCount;
+          console.log(`Total records for processing: ${totalCount}`);
+
+          if (totalCount === 0) {
+            console.warn(
+              `No records found matching criteria in ${jobRequest.tableName}. Checking without conditions...`
+            );
+
+            // Fallback - try counting without conditions
+            const fallbackQuery = `SELECT COUNT(*) as totalCount FROM ${jobRequest.tableName}`;
+            const fallbackResult =
+              await DatabaseService.executeQuery(fallbackQuery);
+
+            if (fallbackResult && fallbackResult.length > 0) {
+              const fallbackCount = (
+                fallbackResult[0] as { totalCount: number }
+              ).totalCount;
+              console.log(`Total records without conditions: ${fallbackCount}`);
+
+              if (fallbackCount > 0) {
+                // Proceed with all records if there are any
+                jobRequest.recordCount = fallbackCount;
+              }
+            }
+          } else {
+            // Update the record count in the job request
+            jobRequest.recordCount = totalCount;
+          }
+
+          // Also update in the database
+          await DatabaseService.executeQuery(
+            `UPDATE PriorityJobsHistory SET TotalRecords = @TotalRecords WHERE JobId = @JobId`,
+            {
+              TotalRecords: jobRequest.recordCount,
+              JobId: jobId,
+            }
+          );
+        }
+      } catch (error) {
+        console.error(`Error getting total record count: ${error}`);
+        // Continue with the provided record count as fallback
+      }
+    }
+
     try {
-      // בדיקה האם מדובר בעבודה עם קשרי הורה-ילד
+      // Start tracking job progress
       if (jobRequest.priorityLinkedField) {
-        // חילוץ עבודות ילד ממסד הנתונים
+        // If there's a linked field, we need to track progress
         const childJobs = (await DatabaseService.executeQuery(
           `SELECT ChildJobeId, JobTypeName, DBTableName, ScreenName, priority_id, HasSiblings 
          FROM PriorityChildJob 
@@ -211,12 +324,12 @@ class JobManager {
 
         const childJobCount = childJobs.length;
 
-        // אם יש עבודות ילד ומדובר בעיבוד מסוג batch, הפעלת מעבד הורה-ילד
+        // Log the child jobs for debugging
         // 26_05_2025 if (childJobCount > 0 && processingType === "batch") {
         if (childJobCount > 0) {
           console.log(`Job ${jobId} executing parent-child batch processing`);
 
-          // סימון הג'וב כאב-בן כדי למנוע יצירת ג'ובים נפרדים לטבלאות הילדים
+          // Mark the job as a parent-child job to prevent separate jobs from being created for child tables
           await DatabaseService.executeQuery(
             `UPDATE PriorityJobsHistory SET IsParentChildJob = 1, ChildTables = @ChildTables WHERE JobId = @JobId`,
             {
@@ -273,7 +386,7 @@ class JobManager {
             flushInterval: 30000,
           });
         } else {
-          // אם אין עבודות ילד או לא מדובר בעיבוד מסוג batch, ביצוע עיבוד רגיל
+          // If there are no child jobs or it's not batch processing, perform standard processing
           console.log(
             `Job ${jobId} has parent-child relationship but using standard processing (${processingType})`
           );
@@ -286,7 +399,7 @@ class JobManager {
           );
         }
       } else {
-        // אין קשרי הורה-ילד, ביצוע עיבוד רגיל
+        // If there are no parent-child relationships, perform standard processing
         console.log(
           `Job ${jobId} using standard processing (${processingType})`
         );
@@ -340,7 +453,7 @@ class JobManager {
       }
       //------------------
 
-      // חישוב סטטיסטיקות הצלחה וכישלון
+      // Calculate success and failure statistics
       const totalSuccess = results.reduce((acc: number, result: JobResult) => {
         // Use only explicit successCount and avoid fallback to result.success
         return (
@@ -357,10 +470,10 @@ class JobManager {
         );
       }, 0);
 
-      // סיום המעקב אחר התקדמות העבודה
+      // End job progress tracking
       ProgressTracker.completeJob(jobId, totalSuccess, totalFailures);
 
-      // שליחת התראה על סיום ג'וב
+      // Send email notification for job completion
       const jobDurationSec = ((Date.now() - jobStartTime) / 1000).toFixed(2);
       await this.emailService.sendJobCompletionNotification({
         jobId,
@@ -374,7 +487,7 @@ class JobManager {
         duration: `${jobDurationSec} שניות`,
       });
 
-      // עדכון סטטוס העבודה ל-"הושלמה"
+      // Update the job status to "Completed"
       await this.updateJobStatus(
         jobId,
         "Completed",
@@ -383,7 +496,7 @@ class JobManager {
         totalFailures > 0 ? "Some records failed" : undefined
       );
 
-      // הדפסת סטטיסטיקות ביצועים
+      // Print performance statistics
       // const jobEndTime = Date.now();
       // const jobDurationSec = ((jobEndTime - jobStartTime) / 1000).toFixed(2);
 
@@ -393,7 +506,7 @@ class JobManager {
 
       return results;
     } catch (error) {
-      // טיפול בשגיאות
+      // Catch any errors during job processing
       console.error(`Job ${jobId} failed with error:`, error);
 
       // Ensure errors are flushed even on job failure
@@ -403,7 +516,7 @@ class JobManager {
         console.error("Error flushing error buffer:", flushError);
       }
 
-      // עדכון סטטוס העבודה ל-"נכשלה"
+      // Update the job status to "Failed"
       await this.updateJobStatus(
         jobId,
         "Failed",
@@ -417,7 +530,7 @@ class JobManager {
         JobCancellationService.clearCancellationRequest(jobId);
       }
 
-      // שליחת התראה על כישלון ג'וב
+      // Send email notification for job failure
       const jobDurationSec = ((Date.now() - jobStartTime) / 1000).toFixed(2);
       await this.emailService.sendJobCompletionNotification({
         jobId,
@@ -429,14 +542,14 @@ class JobManager {
         failureCount: jobRequest.recordCount,
         status: "Failed",
         duration: `${jobDurationSec} שניות`,
-        // בעתיד ניתן להוסיף את פרטי השגיאה כאן
+        // Include error message in the notification
       });
 
       throw error;
     }
   }
 
-  // פונקציית עזר לביצוע עיבוד רגיל (הוצאתי לפונקציה נפרדת למען הסדר)
+  // Helper function to perform standard processing (extracted for clarity)
   private async executeStandardProcessing(
     jobId: string,
     jobRequest: JobRequest,
@@ -448,7 +561,7 @@ class JobManager {
       `Job ${jobId} starting ${processingType} processing with error logging: ${logErrors ? "enabled" : "disabled"}`
     );
 
-    // אתחול מעקב התקדמות
+    // Initialize job progress tracking
     ProgressTracker.initJob(jobId, jobRequest.recordCount, jobRequest.jobType);
 
     const batchStartTime = Date.now();
@@ -468,7 +581,7 @@ class JobManager {
     //   `JobManager retrieved WHERE clause for ${jobRequest.jobType}: ${customWhereClause || "(none)"}`
     // );
     if (processingType === "queue") {
-      // עיבוד עם תורים
+      // Process using queues
       results = await processWithQueues(
         jobRequest.recordCount,
         jobRequest.startRow,
@@ -482,7 +595,7 @@ class JobManager {
         customWhereClause
       );
     } else {
-      // עיבוד רגיל במנות (ברירת המחדל)
+      // Process in batches
       results = await processBatches(
         jobRequest.recordCount,
         jobRequest.startRow,
