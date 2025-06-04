@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { io } from "socket.io-client";
 import { styled } from "styled-components";
+import CancelJobButton from "./CancelJobButton";
+import CancellationStatus from "./CancellationStatus";
 
 // Progress bar styled components
 const ProgressContainer = styled.div`
@@ -42,6 +44,12 @@ const JobInfo = styled.div`
   background-color: #f5f5f5;
 `;
 
+const ActionContainer = styled.div`
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+`;
+
 // Types
 interface JobProgress {
   jobId: string;
@@ -51,7 +59,7 @@ interface JobProgress {
   successCount: number;
   failureCount: number;
   percentage: number;
-  status: "pending" | "processing" | "completed" | "failed";
+  status: "pending" | "processing" | "completed" | "failed" | "Cancelling";
   lastUpdated?: number;
 }
 
@@ -61,12 +69,19 @@ interface JobProgressTrackerProps {
 
 const JobProgressTracker: React.FC<JobProgressTrackerProps> = ({ jobId }) => {
   const [activeJobs, setActiveJobs] = useState<JobProgress[]>([]);
-  //   const [socket, setSocket] = useState<any>(null);
+
+  // Handle successful job cancellation
+  const handleCancelSuccess = (cancelledJobId: string): void => {
+    setActiveJobs((prev) =>
+      prev.map((job) =>
+        job.jobId === cancelledJobId ? { ...job, status: "Cancelling" } : job
+      )
+    );
+  };
 
   useEffect(() => {
     // Connect to socket server
     const socketClient = io(process.env.REACT_APP_API_URL);
-    // setSocket(socketClient);
 
     // Listen for progress updates
     socketClient.on("job:progress", (progressData: JobProgress) => {
@@ -143,30 +158,53 @@ const JobProgressTracker: React.FC<JobProgressTrackerProps> = ({ jobId }) => {
       {activeJobs.length === 0 ? (
         <p>No active jobs</p>
       ) : (
-        activeJobs.map((job) => (
-          <JobInfo key={job.jobId}>
-            {job.jobName && <h3>{job.jobName}</h3>}
-            {/* <h4>Job: {job.jobId.substring(0, 8)}...</h4> */}
-            <h4>Job: {job.jobId}</h4>
-            <ProgressContainer>
-              <ProgressDetails>
-                <span>Progress: {job.percentage}%</span>
-                <span>
-                  {job.processedRecords} / {job.totalRecords} records
-                </span>
-              </ProgressDetails>
-              <ProgressBarOuter>
-                <ProgressBarInner width={job.percentage} $status={job.status} />
-              </ProgressBarOuter>
-              <ProgressDetails>
-                <span>Status: {job.status}</span>
-                <span>
-                  Success: {job.successCount} | Failures: {job.failureCount}
-                </span>
-              </ProgressDetails>
-            </ProgressContainer>
-          </JobInfo>
-        ))
+        activeJobs.map((job) => {
+          // Determine if the job can be cancelled
+          const isCancellable = ["pending", "processing"].includes(job.status);
+          const isCancelling = job.status === "Cancelling";
+
+          return (
+            <JobInfo key={job.jobId}>
+              {job.jobName && <h3>{job.jobName}</h3>}
+              <h4>Job: {job.jobId}</h4>
+              <ProgressContainer>
+                <ProgressDetails>
+                  <span>Progress: {job.percentage}%</span>
+                  <span>
+                    {job.processedRecords} / {job.totalRecords} records
+                  </span>
+                </ProgressDetails>
+                <ProgressBarOuter>
+                  <ProgressBarInner
+                    width={job.percentage}
+                    $status={job.status}
+                  />
+                </ProgressBarOuter>
+                <ProgressDetails>
+                  <span>Status: {job.status}</span>
+                  <span>
+                    Success: {job.successCount} | Failures: {job.failureCount}
+                  </span>
+                </ProgressDetails>
+              </ProgressContainer>
+
+              {/* Display cancellation status when job is being cancelled */}
+              {isCancelling && <CancellationStatus jobId={job.jobId} />}
+
+              {/* Cancel button for in-progress jobs */}
+              <ActionContainer>
+                <CancelJobButton
+                  jobId={job.jobId}
+                  disabled={!isCancellable}
+                  onSuccess={() => handleCancelSuccess(job.jobId)}
+                  buttonText="Cancel Job"
+                  className={isCancellable ? "active" : "disabled"}
+                  jobStatus={job.status} // Pass the job status here
+                />
+              </ActionContainer>
+            </JobInfo>
+          );
+        })
       )}
     </div>
   );
