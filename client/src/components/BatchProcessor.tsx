@@ -363,13 +363,15 @@ const BatchProcessor: React.FC = () => {
               </select>
             </InputLabel>
             <InputLabel style={{ display: "flex", alignItems: "center" }}>
+              <br />
+              Process all records:
               <input
                 type="checkbox"
                 checked={processAllRecords}
                 onChange={handleProcessAllRecordsChange}
                 style={{ marginRight: "8px" }}
               />
-              Process all records
+              <br />
             </InputLabel>
             <InputLabel>
               Record Count:
@@ -377,6 +379,7 @@ const BatchProcessor: React.FC = () => {
                 type="number"
                 value={recordCount}
                 onChange={(e) => setRecordCount(Number(e.target.value))}
+                disabled={processAllRecords}
               />
             </InputLabel>
             <InputLabel>
@@ -385,6 +388,7 @@ const BatchProcessor: React.FC = () => {
                 type="number"
                 value={startRow}
                 onChange={(e) => setStartRow(Number(e.target.value))}
+                disabled={processAllRecords}
               />
             </InputLabel>
             <InputLabel>
