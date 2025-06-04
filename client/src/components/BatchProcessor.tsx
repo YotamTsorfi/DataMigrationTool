@@ -57,8 +57,15 @@ const BatchProcessor: React.FC = () => {
   const [baseWhereClause, setBaseWhereClause] = useState<string>("");
   const [isValidatingWhereClause, setIsValidatingWhereClause] = useState(false);
   const [isSavingWhereClause, setIsSavingWhereClause] = useState(false);
+  const [processAllRecords, setProcessAllRecords] = useState(false);
   //---------------------------------------------
 
+  const handleProcessAllRecordsChange = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    setProcessAllRecords(e.target.checked);
+  };
+  //---------------------------------------------
   useEffect(() => {
     const fetchJobTypes = async () => {
       try {
@@ -275,8 +282,9 @@ const BatchProcessor: React.FC = () => {
       await axios.post(
         `${process.env.REACT_APP_API_URL}/job/start-with-type/${processingType}`,
         {
-          recordCount,
-          startRow,
+          processAllRecords,
+          recordCount: processAllRecords ? -1 : recordCount,
+          startRow: processAllRecords ? 1 : startRow,
           tableName,
           priorityScreenName,
           jobType: selectedJobType,
@@ -354,12 +362,24 @@ const BatchProcessor: React.FC = () => {
                 ))}
               </select>
             </InputLabel>
+            <InputLabel style={{ display: "flex", alignItems: "center" }}>
+              <br />
+              Process all records:
+              <input
+                type="checkbox"
+                checked={processAllRecords}
+                onChange={handleProcessAllRecordsChange}
+                style={{ marginRight: "8px" }}
+              />
+              <br />
+            </InputLabel>
             <InputLabel>
               Record Count:
               <input
                 type="number"
                 value={recordCount}
                 onChange={(e) => setRecordCount(Number(e.target.value))}
+                disabled={processAllRecords}
               />
             </InputLabel>
             <InputLabel>
@@ -368,6 +388,7 @@ const BatchProcessor: React.FC = () => {
                 type="number"
                 value={startRow}
                 onChange={(e) => setStartRow(Number(e.target.value))}
+                disabled={processAllRecords}
               />
             </InputLabel>
             <InputLabel>

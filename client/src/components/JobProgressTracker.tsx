@@ -3,6 +3,7 @@ import { io } from "socket.io-client";
 import { styled } from "styled-components";
 import CancelJobButton from "./CancelJobButton";
 import CancellationStatus from "./CancellationStatus";
+import { useAuthProtection } from "./withAuthProtection";
 
 // Progress bar styled components
 const ProgressContainer = styled.div`
@@ -69,6 +70,7 @@ interface JobProgressTrackerProps {
 
 const JobProgressTracker: React.FC<JobProgressTrackerProps> = ({ jobId }) => {
   const [activeJobs, setActiveJobs] = useState<JobProgress[]>([]);
+  const { disabled, isAuthenticated } = useAuthProtection();
 
   // Handle successful job cancellation
   const handleCancelSuccess = (cancelledJobId: string): void => {
@@ -195,11 +197,12 @@ const JobProgressTracker: React.FC<JobProgressTrackerProps> = ({ jobId }) => {
               <ActionContainer>
                 <CancelJobButton
                   jobId={job.jobId}
-                  disabled={!isCancellable}
+                  disabled={!isCancellable || disabled} // Add auth disabled flag
                   onSuccess={() => handleCancelSuccess(job.jobId)}
                   buttonText="Cancel Job"
-                  className={isCancellable ? "active" : "disabled"}
-                  jobStatus={job.status} // Pass the job status here
+                  className={isCancellable && !disabled ? "active" : "disabled"}
+                  jobStatus={job.status}
+                  isAuthenticated={isAuthenticated} // Pass authentication state
                 />
               </ActionContainer>
             </JobInfo>

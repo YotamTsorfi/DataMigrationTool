@@ -5,6 +5,7 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import "../styles/CancelButton.css";
+import { toast } from "react-toastify";
 
 interface CancelJobButtonProps {
   jobId: string;
@@ -14,6 +15,7 @@ interface CancelJobButtonProps {
   disabled?: boolean;
   className?: string;
   jobStatus?: string;
+  isAuthenticated?: boolean;
 }
 
 const CancelJobButton: React.FC<CancelJobButtonProps> = ({
@@ -24,6 +26,7 @@ const CancelJobButton: React.FC<CancelJobButtonProps> = ({
   disabled = false,
   className = "",
   jobStatus,
+  isAuthenticated = false,
 }) => {
   const [isCancelling, setIsCancelling] = useState<boolean>(false);
 
@@ -41,6 +44,12 @@ const CancelJobButton: React.FC<CancelJobButtonProps> = ({
 
   const handleCancelClick = async (): Promise<void> => {
     if (!jobId || isCancelling) return;
+
+    // Check authentication before proceeding
+    if (!isAuthenticated) {
+      toast.error("Admin authentication required to cancel jobs");
+      return;
+    }
 
     try {
       setIsCancelling(true);
