@@ -114,7 +114,7 @@ const BatchProcessor: React.FC = () => {
 
     try {
       // Use null as a special indicator to remove the clause
-      const response = await axios.put(
+      await axios.put(
         `${process.env.REACT_APP_API_URL}/where-clause/${selectedJobType}`,
         { whereClause: null }
       );
