@@ -114,6 +114,20 @@ export class QueueProcessor {
     this.performanceMonitor.startOperation();
   }
 
+  /**
+   * Generates a clean error message by removing numbers and special characters
+   * while preserving Hebrew and English text
+   */
+  private generateCleanError(errorMessage: string | null): string | null {
+    if (!errorMessage) return null;
+
+    // Remove numbers and special characters while preserving Hebrew and English text
+    return errorMessage
+      .replace(/[0-9]/g, "") // Remove all numbers
+      .replace(/[^\p{L}\s]/gu, "") // Keep only letters (including Hebrew) and spaces
+      .trim();
+  }
+
   public setUpdateBatchTable(update: boolean): void {
     this.updateBatchTable = update;
   }
@@ -385,6 +399,7 @@ export class QueueProcessor {
             JobName: item.jobType,
             Status: "Completed",
             Error: null,
+            CleanError: null,
             JobId: item.jobId,
             priority_id: priorityId,
             is_new: 0,
@@ -405,6 +420,7 @@ export class QueueProcessor {
             JobName: item.jobType,
             Status: "Failed",
             Error: cleanErrorMessage,
+            CleanError: this.generateCleanError(cleanErrorMessage),
             JobId: item.jobId,
             priority_id: null,
             is_new: 1,
@@ -455,6 +471,7 @@ export class QueueProcessor {
         JobName: item.jobType,
         Status: "Failed",
         Error: errorMessage,
+        CleanError: this.generateCleanError(errorMessage),
         JobId: item.jobId,
         priority_id: null,
         is_new: 1,

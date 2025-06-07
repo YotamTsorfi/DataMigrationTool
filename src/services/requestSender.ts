@@ -11,7 +11,7 @@ import { formatAxiosError, createCleanError } from "../utils/errorHandler";
  */
 export async function sendBatchRequest(
   batchBody: string,
-  headers: Record<string, string>,
+  headers: Record<string, string>
 ): Promise<any> {
   const maxRetries = 5; // Maximum number of retries for network errors and 5xx server errors
   let retryCount = 0;
@@ -75,7 +75,7 @@ export async function sendBatchRequest(
 
         retryCount++;
         console.log(
-          `Rate limit exceeded (429). Retry attempt ${retryCount} after ${delayMs}ms delay. ${errorMessage}`,
+          `Rate limit exceeded (429). Retry attempt ${retryCount} after ${delayMs}ms delay. ${errorMessage}`
         );
 
         await new Promise((resolve) => setTimeout(resolve, delayMs));
@@ -98,7 +98,7 @@ export async function sendBatchRequest(
           : "unknown";
 
         console.log(
-          `Retry attempt ${retryCount} after ${errorType} error: ${errorMessage}. URL: ${url}, Data size: ${dataSize}KB`,
+          `Retry attempt ${retryCount} after ${errorType} error: ${errorMessage}. URL: ${url}, Data size: ${dataSize}KB`
         );
 
         // Exponential backoff
@@ -121,7 +121,7 @@ export async function sendBatchRequest(
 export function processApiResponse(
   response: any,
   rows: any[],
-  priorityIdField?: string,
+  priorityIdField?: string
 ): {
   updateRows: any[];
   errorRows: any[];
@@ -316,7 +316,7 @@ export function processApiResponse(
  */
 export function measureRequestPerformance(
   rows: any[],
-  perfMonitor: PerformanceMonitor,
+  perfMonitor: PerformanceMonitor
 ): void {
   perfMonitor.logRequestMetrics(rows);
 }
@@ -326,7 +326,7 @@ export function measureRequestPerformance(
  */
 export function measureResponsePerformance(
   response: any,
-  perfMonitor: PerformanceMonitor,
+  perfMonitor: PerformanceMonitor
 ): void {
   perfMonitor.logResponseMetrics(response.data, response.status);
 }

@@ -374,6 +374,18 @@ async function performDatabaseUpdatesAsync(
         row.ErrorMessage = row.ErrorMessage.substring(0, 3800);
       }
 
+      // Generate CleanError field - remove numbers and special characters
+      const errorValue = row.ErrorMessage || row.Error || null;
+      if (errorValue) {
+        // Remove numbers and special characters while preserving Hebrew and English text
+        row.CleanError = errorValue
+          .replace(/[0-9]/g, "") // Remove all numbers
+          .replace(/[^\p{L}\s]/gu, "") // Keep only letters (including Hebrew) and spaces
+          .trim();
+      } else {
+        row.CleanError = null;
+      }
+
       // טיפול מחמיר יותר ב-priority_id
       try {
         if (
@@ -478,6 +490,10 @@ async function performDatabaseUpdatesAsync(
               query += `, ${errorColumn} = @ErrorValue`;
             }
 
+            if (availableColumns.has("CleanError")) {
+              query += `, CleanError = @CleanErrorValue`;
+            }
+
             if (hasPriorityId && row.priority_id != null) {
               query += `, priority_id = @PriorityId`;
             }
@@ -504,6 +520,16 @@ async function performDatabaseUpdatesAsync(
                 errorValue && errorValue.length > 3800
                   ? errorValue.substring(0, 3800)
                   : errorValue;
+            }
+
+            if (availableColumns.has("CleanError")) {
+              const errorValue = row.ErrorMessage || row.Error || null;
+              params.CleanErrorValue = errorValue
+                ? errorValue
+                    .replace(/[0-9]/g, "")
+                    .replace(/[^\p{L}\s]/gu, "")
+                    .trim()
+                : null;
             }
 
             if (hasPriorityId && row.priority_id != null) {
