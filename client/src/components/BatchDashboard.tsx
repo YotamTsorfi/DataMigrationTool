@@ -677,10 +677,12 @@ const BatchDashboard: React.FC = () => {
                   <td>{error.JobName}</td>
                   <td>{error.TableName}</td>
                   <td>{error.RowId}</td>
-                  <td title={error.Error}>
-                    {error.Error.length > 100
-                      ? `${error.Error.substring(0, 100)}...`
-                      : error.Error}
+                  <td title={error.Error || ""}>
+                    {error.Error
+                      ? error.Error.length > 100
+                        ? `${error.Error.substring(0, 100)}...`
+                        : error.Error
+                      : "N/A"}
                   </td>
                 </tr>
               ))}
