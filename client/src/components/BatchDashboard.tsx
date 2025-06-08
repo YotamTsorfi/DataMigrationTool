@@ -31,6 +31,7 @@ import {
 } from "../styles/BatchDashboardStyles";
 import ErrorGroups from "./ErrorGroups";
 import SuccessRecords from "./SuccessRecords";
+import ErrorCopyTool from "./ErrorCopyTool";
 
 // Interface definitions
 interface DashboardSummary {
@@ -402,6 +403,12 @@ const BatchDashboard: React.FC = () => {
         >
           Success Records
         </Tab>
+        <Tab
+          $active={activeTab === "errorCopy"}
+          onClick={() => setActiveTab("errorCopy")}
+        >
+          Error Copy Tool
+        </Tab>
       </TabContainer>
 
       {isLoading && (
@@ -642,6 +649,12 @@ const BatchDashboard: React.FC = () => {
       {!isLoading && activeTab === "successRecords" && (
         <TabContent>
           <SuccessRecords />
+        </TabContent>
+      )}
+
+      {!isLoading && activeTab === "errorCopy" && (
+        <TabContent>
+          <ErrorCopyTool />
         </TabContent>
       )}
       {!isLoading && activeTab === "errors" && (
