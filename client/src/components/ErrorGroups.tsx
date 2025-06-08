@@ -30,11 +30,6 @@ const SummaryBar = styled.div`
   border-radius: 4px;
 `;
 
-const ErrorPieChart = styled.div`
-  height: 300px;
-  margin-bottom: 20px;
-`;
-
 const ErrorCount = styled.span<{ $isHighlighted?: boolean }>`
   font-weight: ${(props) => (props.$isHighlighted ? "bold" : "normal")};
   color: ${(props) => (props.$isHighlighted ? "#f44336" : "inherit")};
