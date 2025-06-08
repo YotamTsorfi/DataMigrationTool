@@ -143,6 +143,17 @@ export function processApiResponse(
     response.data.responses
   );
 
+  /**
+   * Generates a clean error message by removing numbers and special characters,
+   * while preserving Hebrew and English letters and spaces.
+   */
+  function generateCleanError(errorMessage: string | null): string | null {
+    if (!errorMessage) return null;
+    return errorMessage
+      .replace(/[0-9]/g, "") // Remove all numbers
+      .replace(/[^\p{L}\s]/gu, "") // Keep only letters (including Hebrew/English) and spaces
+      .trim();
+  }
   //   console.log("===== PROCESSING API RESPONSE =====");
   //   console.log("Processing", rows.length, "rows against response");
 
@@ -172,6 +183,7 @@ export function processApiResponse(
         JobName: row.__jobType,
         Status: "Failed",
         Error: "No response item found",
+        CleanError: "No response item found",
         JobId: row.__jobId,
       });
 
@@ -289,6 +301,7 @@ export function processApiResponse(
       JobName: row.__jobType,
       Status: status,
       Error: errorMessage,
+      CleanError: generateCleanError(errorMessage),
       JobId: row.__jobId,
       priority_id: priorityId,
       is_new: status === "Completed" ? 0 : 1,

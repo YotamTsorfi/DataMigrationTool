@@ -63,10 +63,14 @@ class JobManager {
   async createJob(jobRequest: JobRequest): Promise<string> {
     const jobId = uuidv4();
 
+    // Get the company value from configuration
+    const config = await configService.getConfig();
+    const company = config.PRIORITY_COMPANY || "";
+
     await DatabaseService.executeQuery(
       `
-    INSERT INTO PriorityJobsHistory (JobId, JobName, TableName, ScreenName, StartTime, TotalRecords, Status, ProcessingType, IsParentChildJob)
-    VALUES (@JobId, @JobName, @TableName, @ScreenName, @StartTime, @TotalRecords, @Status, @ProcessingType, 0)
+    INSERT INTO PriorityJobsHistory (JobId, JobName, TableName, ScreenName, StartTime, TotalRecords, Status, ProcessingType, IsParentChildJob, Company)
+    VALUES (@JobId, @JobName, @TableName, @ScreenName, @StartTime, @TotalRecords, @Status, @ProcessingType, 0, @Company)
   `,
       {
         JobId: jobId,
@@ -77,6 +81,7 @@ class JobManager {
         TotalRecords: jobRequest.recordCount,
         Status: "Queued",
         ProcessingType: jobRequest.processingType || "batch", // Default to "batch" if not provided
+        Company: company, // Add the company parameter
       }
     );
 
