@@ -29,6 +29,8 @@ import {
   LoadingOverlay,
   Pagination,
 } from "../styles/BatchDashboardStyles";
+import ErrorGroups from "./ErrorGroups";
+import SuccessRecords from "./SuccessRecords";
 
 // Interface definitions
 interface DashboardSummary {
@@ -94,7 +96,7 @@ const formatDate = (dateString: string): string => {
 
 const safeFormat = (
   value: number | null | undefined,
-  useLocale = true,
+  useLocale = true
 ): string => {
   if (value == null) return "0";
   return useLocale ? value.toLocaleString() : value.toString();
@@ -160,7 +162,7 @@ const BatchDashboard: React.FC = () => {
         const params = { dateRange, statusFilter, jobFilter, tableFilter };
         const response = await axios.get(
           `${process.env.REACT_APP_API_URL}/dashboard/dashboard-summary`,
-          { params },
+          { params }
         );
         setSummary(response.data);
 
@@ -187,7 +189,7 @@ const BatchDashboard: React.FC = () => {
     const fetchJobTypes = async () => {
       try {
         const response = await axios.get(
-          `${process.env.REACT_APP_API_URL}/job/job-types`,
+          `${process.env.REACT_APP_API_URL}/job/job-types`
         );
         const jobNames = response.data.map((job: any) => job.JobTypeName);
         setAvailableJobs(jobNames);
@@ -217,7 +219,7 @@ const BatchDashboard: React.FC = () => {
                 jobType: jobFilter,
                 tableName: tableFilter,
               },
-            },
+            }
           );
           setBatchHistory(response.data.batchResults);
           setTotalBatches(response.data.total);
@@ -232,7 +234,7 @@ const BatchDashboard: React.FC = () => {
                 jobType: jobFilter,
                 tableName: tableFilter,
               },
-            },
+            }
           );
           setErrorLogs(response.data.errorLogs);
           setTotalErrors(response.data.total);
@@ -246,7 +248,7 @@ const BatchDashboard: React.FC = () => {
                 jobType: jobFilter,
                 tableName: tableFilter,
               },
-            },
+            }
           );
           setJobHistory(response.data.jobsHistory);
         }
@@ -280,7 +282,7 @@ const BatchDashboard: React.FC = () => {
       { name: "Queued", value: summary.queuedJobs },
       { name: "Not Synced", value: summary.notSyncedJobs },
     ],
-    [summary],
+    [summary]
   );
 
   const tableDistributionData = useMemo(
@@ -289,7 +291,7 @@ const BatchDashboard: React.FC = () => {
         name: table,
         count,
       })),
-    [summary.tableCounts],
+    [summary.tableCounts]
   );
 
   // Calculate max page numbers
@@ -387,6 +389,18 @@ const BatchDashboard: React.FC = () => {
           onClick={() => setActiveTab("errors")}
         >
           Errors
+        </Tab>
+        <Tab
+          $active={activeTab === "errorGroups"}
+          onClick={() => setActiveTab("errorGroups")}
+        >
+          Error Analysis
+        </Tab>
+        <Tab
+          $active={activeTab === "successRecords"}
+          onClick={() => setActiveTab("successRecords")}
+        >
+          Success Records
         </Tab>
       </TabContainer>
 
@@ -619,6 +633,17 @@ const BatchDashboard: React.FC = () => {
         </TabContent>
       )}
 
+      {!isLoading && activeTab === "errorGroups" && (
+        <TabContent>
+          <ErrorGroups />
+        </TabContent>
+      )}
+
+      {!isLoading && activeTab === "successRecords" && (
+        <TabContent>
+          <SuccessRecords />
+        </TabContent>
+      )}
       {!isLoading && activeTab === "errors" && (
         <TabContent>
           <h3>Error Logs</h3>

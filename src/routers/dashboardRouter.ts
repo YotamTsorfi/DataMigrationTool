@@ -106,7 +106,7 @@ router.get(
         error: error instanceof Error ? error.message : "Unknown error",
       });
     }
-  },
+  }
 );
 
 //-----------------------------------
@@ -345,7 +345,229 @@ router.get(
         error: error instanceof Error ? error.message : "Unknown error",
       });
     }
-  },
+  }
+);
+
+//-----------------------------------
+router.get(
+  "/error-groups",
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { jobType = "all", tableName = "all" } = req.query;
+
+      // Find the actual database table name if jobType is provided
+      let sourceTableName: string | null = null;
+
+      if (jobType !== "all") {
+        const jobTypeQuery = `
+          SELECT DBTableName
+          FROM PriorityJobTypes
+          WHERE JobTypeName = '${jobType}'
+        `;
+
+        const jobTypeResult = await DatabaseService.executeQuery(jobTypeQuery);
+        if (jobTypeResult.length > 0) {
+          sourceTableName = (jobTypeResult[0] as { DBTableName: string })
+            .DBTableName;
+        }
+      } else if (tableName !== "all") {
+        // If tableName is directly specified, we'll use it
+        sourceTableName = tableName as string;
+      }
+
+      // If no valid table name found, return empty results
+      if (!sourceTableName) {
+        res.status(200).json({
+          success: true,
+          errorGroups: [],
+          totalErrors: 0,
+        });
+        return;
+      }
+
+      // Check if the table exists before querying it
+      const tableExistsQuery = `
+        SELECT 1
+        FROM INFORMATION_SCHEMA.TABLES
+        WHERE TABLE_NAME = '${sourceTableName}'
+      `;
+
+      const tableExists = await DatabaseService.executeQuery(tableExistsQuery);
+
+      if (tableExists.length === 0) {
+        res.status(200).json({
+          success: true,
+          errorGroups: [],
+          totalErrors: 0,
+          message: `Table ${sourceTableName} does not exist`,
+        });
+        return;
+      }
+
+      // Query to get grouped errors
+      const errorGroupsQuery = `
+        SELECT 
+          CleanError, 
+          COUNT(*) as count,
+          MIN(Error) as sampleError,
+          MIN(reference_id) as sampleReferenceId,
+          MIN(StatusCode) as statusCode
+        FROM ${sourceTableName}
+        WHERE is_eligible = 1 
+          AND (Status IS NULL OR Status = 'Failed')
+          AND CleanError IS NOT NULL
+        GROUP BY CleanError
+        ORDER BY COUNT(*) DESC
+      `;
+
+      // Query to get total error count
+      const totalErrorsQuery = `
+        SELECT COUNT(*) as total
+        FROM ${sourceTableName}
+        WHERE is_eligible = 1 
+          AND (Status IS NULL OR Status = 'Failed')
+          AND CleanError IS NOT NULL
+      `;
+
+      const [errorGroups, totalErrorsResult] = await Promise.all([
+        DatabaseService.executeQuery(errorGroupsQuery),
+        DatabaseService.executeQuery(totalErrorsQuery),
+      ]);
+
+      res.status(200).json({
+        success: true,
+        errorGroups,
+        totalErrors: (totalErrorsResult[0] as { total: number }).total,
+        tableName: sourceTableName,
+      });
+    } catch (error) {
+      console.error("Error fetching error groups:", error);
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+);
+//-----------------------------------
+router.get("/db-tables", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const query = `
+      SELECT DISTINCT DBTableName
+      FROM PriorityJobTypes
+      WHERE DBTableName IS NOT NULL
+      ORDER BY DBTableName
+    `;
+
+    const tables = await DatabaseService.executeQuery(query);
+    const tableNames = tables.map((table: any) => table.DBTableName);
+
+    res.status(200).json(tableNames);
+  } catch (error) {
+    console.error("Error fetching database tables:", error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+});
+//-----------------------------------
+// API endpoint to get success records statistics for a specific table/job
+router.get(
+  "/success-records",
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { jobType = "all", tableName = "all" } = req.query;
+
+      // Find the actual database table name if jobType is provided
+      let sourceTableName: string | null = null;
+
+      if (jobType !== "all") {
+        const jobTypeQuery = `
+          SELECT DBTableName
+          FROM PriorityJobTypes
+          WHERE JobTypeName = '${jobType}'
+        `;
+
+        const jobTypeResult = await DatabaseService.executeQuery(jobTypeQuery);
+        if (jobTypeResult.length > 0) {
+          sourceTableName = (jobTypeResult[0] as { DBTableName: string })
+            .DBTableName;
+        }
+      } else if (tableName !== "all") {
+        // If tableName is directly specified, we'll use it
+        sourceTableName = tableName as string;
+      }
+
+      // If no valid table name found, return empty results
+      if (!sourceTableName) {
+        res.status(200).json({
+          success: true,
+          successCount: 0,
+          message: "Please select a valid job type or table name",
+        });
+        return;
+      }
+
+      // Check if the table exists before querying it
+      const tableExistsQuery = `
+        SELECT 1
+        FROM INFORMATION_SCHEMA.TABLES
+        WHERE TABLE_NAME = '${sourceTableName}'
+      `;
+
+      const tableExists = await DatabaseService.executeQuery(tableExistsQuery);
+
+      if (tableExists.length === 0) {
+        res.status(200).json({
+          success: true,
+          successCount: 0,
+          message: `Table ${sourceTableName} does not exist`,
+        });
+        return;
+      }
+
+      // Query to get successful records count
+      const successCountQuery = `
+        SELECT COUNT(*) as successCount
+        FROM ${sourceTableName}
+        WHERE is_eligible = 1 
+          AND Status = 'Completed'
+      `;
+
+      // Get total records count for comparison
+      const totalCountQuery = `
+        SELECT COUNT(*) as total
+        FROM ${sourceTableName}
+        WHERE is_eligible = 1
+      `;
+
+      const [successResult, totalResult] = await Promise.all([
+        DatabaseService.executeQuery(successCountQuery),
+        DatabaseService.executeQuery(totalCountQuery),
+      ]);
+
+      const successCount = (successResult[0] as { successCount: number })
+        .successCount;
+      const totalCount = (totalResult[0] as { total: number }).total;
+      const successRate =
+        totalCount > 0 ? (successCount / totalCount) * 100 : 0;
+
+      res.status(200).json({
+        success: true,
+        successCount,
+        totalCount,
+        successRate: parseFloat(successRate.toFixed(2)),
+        tableName: sourceTableName,
+      });
+    } catch (error) {
+      console.error("Error fetching success records count:", error);
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
 );
 
 export default router;
