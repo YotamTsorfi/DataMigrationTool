@@ -71,6 +71,7 @@ export function sanitizeForSqlUpdate(updates: any[]): any[] {
       JobName: update.JobName,
       Status: update.Status,
       Error: update.Error || update.ErrorMessage || null,
+      CleanError: update.CleanError || null,
       JobId: update.JobId,
       priority_id:
         update.priority_id === undefined

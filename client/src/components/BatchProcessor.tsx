@@ -471,7 +471,7 @@ const BatchProcessor: React.FC = () => {
                   <SecureButton
                     onClick={clearWhereClause}
                     disabled={isSavingWhereClause || disabled}
-                    style={{ backgroundColor: "#dc3545" }}
+                    style={disabled ? {} : { backgroundColor: "#dc3545" }}
                   >
                     Clear WHERE Clause
                   </SecureButton>

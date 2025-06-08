@@ -104,7 +104,7 @@ export class QueueProcessor {
     queueId: string,
     jobId: string,
     jobType: string,
-    tableName: string,
+    tableName: string
   ) {
     this.queueId = queueId;
     this.jobId = jobId;
@@ -112,6 +112,20 @@ export class QueueProcessor {
     this.tableName = tableName;
     this.performanceMonitor = new PerformanceMonitor();
     this.performanceMonitor.startOperation();
+  }
+
+  /**
+   * Generates a clean error message by removing numbers and special characters
+   * while preserving Hebrew and English text
+   */
+  private generateCleanError(errorMessage: string | null): string | null {
+    if (!errorMessage) return null;
+
+    // Remove numbers and special characters while preserving Hebrew and English text
+    return errorMessage
+      .replace(/[0-9]/g, "") // Remove all numbers
+      .replace(/[^\p{L}\s]/gu, "") // Keep only letters (including Hebrew) and spaces
+      .trim();
   }
 
   public setUpdateBatchTable(update: boolean): void {
@@ -130,7 +144,7 @@ export class QueueProcessor {
   public setRateLimitEnabled(enabled: boolean): void {
     this.enableRateLimit = enabled;
     console.log(
-      `Queue ${this.queueId}: Rate limiting ${enabled ? "enabled" : "disabled"}`,
+      `Queue ${this.queueId}: Rate limiting ${enabled ? "enabled" : "disabled"}`
     );
   }
   public addItem(item: QueueItem): void {
@@ -170,7 +184,7 @@ export class QueueProcessor {
     // Store normal concurrency value
     const configConcurrency = parseInt(
       systemConfig.QUEUE_CONCURRENT_ITEMS || "500",
-      10,
+      10
     );
     this.normalConcurrency = this.concurrencyLimit || configConcurrency;
 
@@ -221,11 +235,11 @@ export class QueueProcessor {
           this.failureCount > 0 ? "PartialSync" : "Completed",
           null,
           this.tableName,
-          this.updateBatchTable,
+          this.updateBatchTable
         );
       }
       console.log(
-        `Queue ${this.queueId} stats: ${this.total503Errors}/${this.totalRequests} requests resulted in 503 errors (${((this.total503Errors / this.totalRequests) * 100).toFixed(2)}%)`,
+        `Queue ${this.queueId} stats: ${this.total503Errors}/${this.totalRequests} requests resulted in 503 errors (${((this.total503Errors / this.totalRequests) * 100).toFixed(2)}%)`
       );
 
       return {
@@ -257,7 +271,7 @@ export class QueueProcessor {
   //-------------------------
   // הוספת שיטה להגדרת מאזין התקדמות
   public setProgressListener(
-    listener: (successCount: number, failureCount: number) => void,
+    listener: (successCount: number, failureCount: number) => void
   ): void {
     this.progressListener = listener;
   }
@@ -303,7 +317,7 @@ export class QueueProcessor {
             typeof result.responseStats?.status === "number"
               ? result.responseStats.status
               : 0,
-            result.responseStats?.errorData,
+            result.responseStats?.errorData
           );
 
           // Add failure row
@@ -370,7 +384,7 @@ export class QueueProcessor {
             } catch (err) {
               if (err && typeof err === "object" && "message" in err) {
                 console.warn(
-                  `Error extracting priority_id: ${(err as any).message}`,
+                  `Error extracting priority_id: ${(err as any).message}`
                 );
               } else {
                 console.warn(`Error extracting priority_id:`, err);
@@ -385,6 +399,7 @@ export class QueueProcessor {
             JobName: item.jobType,
             Status: "Completed",
             Error: null,
+            CleanError: null,
             JobId: item.jobId,
             priority_id: priorityId,
             is_new: 0,
@@ -396,7 +411,7 @@ export class QueueProcessor {
           const cleanErrorMessage = this.formatErrorMessage(
             response.error || "",
             response.status,
-            response.errorData,
+            response.errorData
           );
 
           this.updateRows.push({
@@ -405,6 +420,7 @@ export class QueueProcessor {
             JobName: item.jobType,
             Status: "Failed",
             Error: cleanErrorMessage,
+            CleanError: this.generateCleanError(cleanErrorMessage),
             JobId: item.jobId,
             priority_id: null,
             is_new: 1,
@@ -426,7 +442,7 @@ export class QueueProcessor {
       // Update tracking for progress
       this.lastProcessedIndex = Math.max(
         this.lastProcessedIndex,
-        item.row.RowId,
+        item.row.RowId
       );
 
       // Update progress
@@ -442,7 +458,7 @@ export class QueueProcessor {
       const errorMessage = this.formatErrorMessage(
         error instanceof Error ? error.message : "Unknown error",
         axios.isAxiosError(error) ? error.response?.status || 0 : 0,
-        errorData,
+        errorData
       );
 
       if (this.progressListener) {
@@ -455,6 +471,7 @@ export class QueueProcessor {
         JobName: item.jobType,
         Status: "Failed",
         Error: errorMessage,
+        CleanError: this.generateCleanError(errorMessage),
         JobId: item.jobId,
         priority_id: null,
         is_new: 1,
@@ -476,7 +493,7 @@ export class QueueProcessor {
   private formatErrorMessage(
     errorMessage: string,
     status: number,
-    errorData?: any,
+    errorData?: any
   ): string {
     // First check if we have errorData to extract detailed messages from
     if (errorData) {
@@ -661,16 +678,26 @@ export class QueueProcessor {
           this.errorCount503++;
           this.lastErrorTimeStamp = Date.now();
 
+          // Check for specific 503 error types from response headers
           const retryAfter = error.response.headers["retry-after"];
+          const errorType = error.response.headers["x-error-type"] || "unknown";
+
+          // Calculate adaptive delay with server guidance
           let delayMs = retryAfter
             ? parseInt(retryAfter) * 1000
             : 1000 * Math.pow(2, retryCount);
+
+          // Add randomness to prevent thundering herd
           delayMs += Math.floor(Math.random() * 500);
 
-          // Only log if we're in verbose mode
+          // For server overload, optionally add extra delay
+          if (errorType === "overload" && delayMs < 5000) {
+            delayMs = Math.max(delayMs, 5000);
+          }
+
           if (this.logRetries) {
             console.log(
-              `Service unavailable (503). Retry attempt ${retryCount} after ${delayMs}ms delay. ${errorMessage}`,
+              `Service unavailable (503 - ${errorType}). Retry attempt ${retryCount}/${maxRetries} after ${delayMs}ms delay.`
             );
           }
 
@@ -687,7 +714,7 @@ export class QueueProcessor {
 
           if (this.logRetries) {
             console.log(
-              `Rate limit exceeded (429). Retry attempt ${retryCount} after ${delayMs}ms delay. ${errorMessage}`,
+              `Rate limit exceeded (429). Retry attempt ${retryCount} after ${delayMs}ms delay. ${errorMessage}`
             );
           }
           await new Promise((resolve) => setTimeout(resolve, delayMs));
@@ -705,7 +732,7 @@ export class QueueProcessor {
           const delay = 1000 * Math.pow(2, retryCount);
           if (this.logRetries) {
             console.log(
-              `Retry attempt ${retryCount} after error: ${errorMessage}. Delay: ${delay}ms`,
+              `Retry attempt ${retryCount} after error: ${errorMessage}. Delay: ${delay}ms`
             );
           }
           await new Promise((resolve) => setTimeout(resolve, delay));
@@ -734,23 +761,45 @@ export class QueueProcessor {
 
   private async applyRateLimit(): Promise<void> {
     console.log(
-      `Queue ${this.queueId}: queue.length=${this.queue.length}, errorCount503=${this.errorCount503}, backoffActive=${this.backoffActive}`,
+      `Queue ${this.queueId}: queue.length=${this.queue.length}, errorCount503=${this.errorCount503}, backoffActive=${this.backoffActive}`
     );
 
-    // REDUCED THRESHOLD: Apply rate limiting to smaller batches too
+    // Skip rate limiting for very small batches
     if (this.queue.length < 300) {
-      return; // Only skip very small batches
+      return;
     }
 
+    // Calculate error rate as percentage of total requests
+    const errorRate =
+      this.totalRequests > 0
+        ? (this.total503Errors / this.totalRequests) * 100
+        : 0;
+
+    // Check if errors were recent (within 10 seconds window)
     const recentErrors = Date.now() - this.lastErrorTimeStamp < 10000;
+
+    // Calculate time-based error decay
+    const timeElapsedSinceError = (Date.now() - this.lastErrorTimeStamp) / 1000; // in seconds
+    if (timeElapsedSinceError > 60 && this.errorCount503 > 0) {
+      // Reduce error count over time if no recent errors
+      this.errorCount503 = Math.max(0, this.errorCount503 - 1);
+      console.log(
+        `Queue ${this.queueId}: Decaying error count to ${this.errorCount503}`
+      );
+    }
 
     // Track consecutive successes to recover from backoff
     if (!recentErrors) {
       this.consecutiveSuccesses++;
 
-      if (this.backoffActive && this.consecutiveSuccesses > 200) {
+      // Allow recovery based on both consecutive successes and error rate
+      if (
+        this.backoffActive &&
+        (this.consecutiveSuccesses > 100 ||
+          (errorRate < 0.5 && this.consecutiveSuccesses > 50))
+      ) {
         console.log(
-          "Exiting backoff mode after consecutive successful requests",
+          `Queue ${this.queueId}: Exiting backoff mode - ${this.consecutiveSuccesses} consecutive successes, error rate ${errorRate.toFixed(2)}%`
         );
         this.backoffActive = false;
         this.errorCount503 = 0;
@@ -758,22 +807,59 @@ export class QueueProcessor {
     } else {
       this.consecutiveSuccesses = 0;
 
-      // REDUCED THRESHOLD: Enter backoff sooner
-      if (this.errorCount503 > 2 && !this.backoffActive) {
-        console.log("Entering backoff mode due to multiple 503 errors");
+      // More nuanced entry into backoff mode
+      if (
+        !this.backoffActive &&
+        (this.errorCount503 > 2 || (errorRate > 2.0 && this.total503Errors > 3))
+      ) {
+        console.log(
+          `Queue ${this.queueId}: Entering backoff mode - ${this.errorCount503} recent 503 errors, error rate ${errorRate.toFixed(2)}%`
+        );
         this.backoffActive = true;
       }
     }
 
-    // Gentler adaptive delay based on error rate
-    let delay = Math.max(2, Math.min(this.minDelay, 5));
+    // Implement progressive backoff levels instead of binary on/off
+    let concurrencyMultiplier = 1.0;
+    if (this.backoffActive) {
+      // Calculate severity based on error count and rate
+      if (errorRate > 5.0 || this.errorCount503 > 10) {
+        concurrencyMultiplier = 0.4; // Severe reduction - 40% of normal
+      } else if (errorRate > 2.0 || this.errorCount503 > 5) {
+        concurrencyMultiplier = 0.6; // Moderate reduction - 60% of normal
+      } else {
+        concurrencyMultiplier = 0.8; // Light reduction - 80% of normal
+      }
+    }
+
+    // Update concurrency limit dynamically
+    const effectiveConcurrency = Math.floor(
+      this.normalConcurrency * concurrencyMultiplier
+    );
+
+    // Only log when the concurrency changes
+    if (
+      Math.floor(this.normalConcurrency * concurrencyMultiplier) !==
+      this.concurrencyLimit
+    ) {
+      console.log(
+        `Queue ${this.queueId}: Adjusting concurrency to ${effectiveConcurrency} (${Math.round(concurrencyMultiplier * 100)}% of normal)`
+      );
+    }
+
+    // Apply adaptive delay based on error conditions
+    let delay = this.minDelay;
 
     if (recentErrors && this.errorCount503 > 0) {
-      // More moderate scaling formula
-      delay = Math.min(100, 3 * Math.log(this.errorCount503 + 1) * 3);
-      console.log(
-        `Applying adaptive throttling delay: ${delay}ms due to 503 errors`,
-      );
+      // More sophisticated adaptive delay formula with ceiling
+      const baseDelay = Math.min(500, 10 * Math.pow(this.errorCount503, 1.5));
+      delay = Math.floor(baseDelay * (1 + Math.random() * 0.2)); // Add small jitter
+
+      if (delay > this.minDelay * 2) {
+        console.log(
+          `Queue ${this.queueId}: Applying throttling delay: ${delay}ms due to ${this.errorCount503} 503 errors`
+        );
+      }
     }
 
     await new Promise((resolve) => setTimeout(resolve, delay));
@@ -785,7 +871,7 @@ export class QueueProcessor {
       this.jobId,
       this.successCount + this.failureCount,
       this.successCount,
-      this.failureCount,
+      this.failureCount
     );
 
     if (this.progressListener) {

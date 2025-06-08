@@ -1,15 +1,15 @@
 import { v4 as uuidv4 } from "uuid";
-// import { DatabaseService } from "../services/databaseService";
 import { fetchParentChildChunk } from "../services/parentChildChunkFetcher";
+import { sendParentChildBatch } from "../services/priorityParentChildSender";
+import { QueueProcessor, QueueItem } from "../services/queueProcessor";
+import { performBulkUpdateWithService } from "../services/dataService";
 import { configService } from "../config/configService";
+import { ChildJob } from "./jobParentAndChilds";
+
 import PerformanceMonitor from "../utils/performanceMonitor";
 import ProgressTracker from "../utils/progressTracker";
 import { ErrorBufferService } from "../utils/errorBufferService";
 import { JobCancellationService } from "../utils/jobCancellationService";
-import { ChildJob } from "./jobParentAndChilds";
-import { sendParentChildBatch } from "../services/priorityParentChildSender";
-import { performBulkUpdateWithService } from "../services/dataService";
-import { QueueProcessor, QueueItem } from "../services/queueProcessor";
 // import pLimit from "p-limit";
 
 /**
@@ -24,7 +24,17 @@ interface BatchResult {
   duration?: number;
   totalProcessed?: number;
 }
-
+/**
+ * Generates a clean error message by removing numbers and special characters,
+ * while preserving Hebrew and English letters and spaces.
+ */
+function generateCleanError(errorMessage: string | null): string | null {
+  if (!errorMessage) return null;
+  return errorMessage
+    .replace(/[0-9]/g, "") // Remove all numbers
+    .replace(/[^\p{L}\s]/gu, "") // Keep only letters (including Hebrew/English) and spaces
+    .trim();
+}
 /**
  * Process parent-child records using grid-based processing
  * Horizontal parallelism (multiple queues) with vertical processing (sequential within queue)
@@ -406,7 +416,10 @@ async function forceErrorRecordUpdate(
       BatchId: batchId,
       JobName: jobType,
       Status: "Failed",
-      Error: error instanceof Error ? error.message : String(error), // Add Error field
+      Error: error instanceof Error ? error.message : String(error),
+      CleanError: generateCleanError(
+        error instanceof Error ? error.message : String(error)
+      ),
       JobId: jobId,
       priority_id: null,
       is_new: 1,
@@ -453,6 +466,9 @@ async function forceErrorRecordUpdate(
               JobName: jobType,
               Status: "Failed",
               Error: error instanceof Error ? error.message : String(error),
+              CleanError: generateCleanError(
+                error instanceof Error ? error.message : String(error)
+              ),
               JobId: jobId,
               priority_id: null,
               is_new: 1,
@@ -472,30 +488,3 @@ async function forceErrorRecordUpdate(
     console.error(`Failed to update database with error information:`, dbError);
   }
 }
-
-/**
- * Helper function to get batch size from configuration
- */
-// async function getBatchSize(): Promise<number> {
-//   try {
-//     const result = await DatabaseService.executeQuery(
-//       `SELECT ConfigValue FROM PrioritySystemConfig WHERE ConfigKey = 'BATCH_SIZE'`
-//     );
-
-//     return result && result[0]
-//       ? parseInt((result[0] as { ConfigValue: string }).ConfigValue, 10)
-//       : 1000; // Default batch size
-//   } catch (error) {
-//     console.error("Error fetching batch size:", error);
-//     return 1000; // Default batch size if we can't get the config
-//   }
-// }
-
-/**
- * Format time for logging
- */
-// function formatTime(minutes: number): string {
-//   const hrs = Math.floor(minutes / 60);
-//   const mins = Math.floor(minutes % 60);
-//   return `${hrs}h ${mins}m`;
-// }
