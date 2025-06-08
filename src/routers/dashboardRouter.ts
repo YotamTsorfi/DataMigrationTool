@@ -569,5 +569,94 @@ router.get(
     }
   }
 );
+//-----------------------------------
+// API endpoint to copy failed records from a source table to PriorityErrorLogs
+router.post(
+  "/copy-failed-records",
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { sourceTableName } = req.body;
+
+      if (!sourceTableName || sourceTableName === "all") {
+        res.status(400).json({
+          success: false,
+          message: "Please select a valid table name",
+        });
+        return;
+      }
+
+      // Check if the table exists before proceeding
+      const tableExistsQuery = `
+        SELECT 1
+        FROM INFORMATION_SCHEMA.TABLES
+        WHERE TABLE_NAME = '${sourceTableName}'
+      `;
+
+      const tableExists = await DatabaseService.executeQuery(tableExistsQuery);
+
+      if (tableExists.length === 0) {
+        res.status(404).json({
+          success: false,
+          message: `Table ${sourceTableName} does not exist`,
+        });
+        return;
+      }
+
+      // Insert failed records from source table into PriorityErrorLogs
+      const insertQuery = `
+        INSERT INTO PriorityErrorLogs (
+          JobName,
+          BatchId,
+          TableName,
+          RowId,
+          Error,
+          Timestamp,
+          JobId,
+          ErrorStatus,
+          OriginalRowIdentifier,
+          CleanError,
+          StatusCode
+        )
+        SELECT
+          JobName,
+          BatchId,
+          '${sourceTableName}' as TableName,
+          RowId,
+          Error,
+          GETDATE() as Timestamp,
+          JobId,
+          'New' as ErrorStatus,
+          reference_id as OriginalRowIdentifier,
+          CleanError,
+          StatusCode
+        FROM ${sourceTableName}
+        WHERE Status = 'Failed' AND is_eligible = 1
+        AND NOT EXISTS (
+          -- Avoid duplicates by checking if this error already exists
+          SELECT 1 FROM PriorityErrorLogs 
+          WHERE PriorityErrorLogs.RowId = ${sourceTableName}.RowId
+          AND PriorityErrorLogs.TableName = '${sourceTableName}'
+          AND PriorityErrorLogs.Error = ${sourceTableName}.Error
+        )
+      `;
+
+      // Execute the insert query and get the number of affected rows
+      const rowsAffected = await DatabaseService.executeNonQuery(insertQuery);
+
+      res.status(200).json({
+        success: true,
+        copiedRecords: rowsAffected,
+        message: `Successfully copied ${rowsAffected} failed records from ${sourceTableName} to PriorityErrorLogs`,
+      });
+    } catch (error) {
+      console.error("Error copying failed records:", error);
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+);
+//------------------------------------
 
 export default router;
