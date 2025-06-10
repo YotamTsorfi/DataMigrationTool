@@ -585,6 +585,11 @@ router.post(
         return;
       }
 
+      // Log the start of the copy operation
+      console.log(
+        `Starting copy of failed records from table: ${sourceTableName}`
+      );
+
       // Check if the table exists before proceeding
       const tableExistsQuery = `
         SELECT 1
@@ -599,10 +604,13 @@ router.post(
           success: false,
           message: `Table ${sourceTableName} does not exist`,
         });
+        // Log the end of the copy operation with failure
+        console.log(`Copy failed: Table ${sourceTableName} does not exist`);
         return;
       }
 
       // Insert failed records from source table into PriorityErrorLogs
+      // Only include JobIds that haven't been processed before for this table
       const insertQuery = `
         INSERT INTO PriorityErrorLogs (
           JobName,
@@ -629,27 +637,36 @@ router.post(
           reference_id as OriginalRowIdentifier,
           CleanError,
           StatusCode
-        FROM ${sourceTableName}
+        FROM ${sourceTableName} source
         WHERE Status = 'Failed' AND is_eligible = 1
         AND NOT EXISTS (
-          -- Avoid duplicates by checking if this error already exists
+          -- Avoid all records from JobIds that have already been processed for this table
           SELECT 1 FROM PriorityErrorLogs 
-          WHERE PriorityErrorLogs.RowId = ${sourceTableName}.RowId
+          WHERE PriorityErrorLogs.JobId = source.JobId
           AND PriorityErrorLogs.TableName = '${sourceTableName}'
-          AND PriorityErrorLogs.Error = ${sourceTableName}.Error
         )
       `;
 
       // Execute the insert query and get the number of affected rows
       const rowsAffected = await DatabaseService.executeNonQuery(insertQuery);
 
+      // Log the end of the copy operation with success
+      console.log(
+        `Finished copying failed records from table: ${sourceTableName}. Copied ${rowsAffected} records.`
+      );
+
       res.status(200).json({
         success: true,
         copiedRecords: rowsAffected,
-        message: `Successfully copied ${rowsAffected} failed records from ${sourceTableName} to PriorityErrorLogs`,
+        message: `Successfully copied ${rowsAffected} failed records from ${sourceTableName} to PriorityErrorLogs (only from JobIds not previously processed)`,
       });
     } catch (error) {
       console.error("Error copying failed records:", error);
+      // Log the end of the copy operation with error
+      console.log(
+        "Copy failed due to error:",
+        error instanceof Error ? error.message : error
+      );
       res.status(500).json({
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
