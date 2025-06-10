@@ -668,6 +668,7 @@ const BatchDashboard: React.FC = () => {
                 <th>Table</th>
                 <th>Row Id</th>
                 <th>Error</th>
+                <th>Job Id</th>
               </tr>
             </thead>
             <tbody>
@@ -684,6 +685,7 @@ const BatchDashboard: React.FC = () => {
                         : error.Error
                       : "N/A"}
                   </td>
+                  <td>{error.JobId}</td>
                 </tr>
               ))}
             </tbody>
