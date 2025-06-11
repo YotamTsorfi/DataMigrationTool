@@ -1,7 +1,7 @@
 /**
  * Form component for creating and editing job types with authentication protection
  */
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { IJobType } from "./JobTypesManager";
 
 interface JobTypeFormProps {
