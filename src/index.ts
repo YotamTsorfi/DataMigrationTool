@@ -19,6 +19,7 @@ import configRouter from "./routers/configRouters";
 import dashboardRouter from "./routers/dashboardRouter";
 import authRouter from "./routers/authRouter";
 import whereClauseRouter from "./routers/whereClauseRouter";
+import jobTypesRouter from "./routers/jobTypesRouter";
 
 // Initialize Express app
 const app = express();
@@ -76,6 +77,7 @@ app.use("/job", jobRoutes);
 app.use("/config", configRouter);
 app.use("/dashboard", dashboardRouter);
 app.use("/where-clause", whereClauseRouter);
+app.use("/api", jobTypesRouter);
 
 // Serve React client static files
 app.use(express.static(path.join(__dirname, "../client/build")));
