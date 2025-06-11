@@ -1,8 +1,16 @@
-import React from "react";
+/**
+ * Main application component that handles routing and authentication
+ * Provides navigation between the batch processor, dashboard, and job types manager
+ * Includes toast notification support for user feedback
+ */
+import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 import "./App.css";
 import { useGlobalAuthCheck } from "./hooks/useGlobalAuthCheck";
 import BatchProcessor from "./components/BatchProcessor";
 import BatchDashboard from "./components/BatchDashboard";
+import JobTypesManager from "./components/JobTypesManager/JobTypesManager";
 import { AuthProvider } from "./context/AuthContext";
 import AuthStatus from "./components/AuthStatus";
 import styled from "styled-components";
@@ -14,20 +22,68 @@ const Header = styled.header`
   padding: 0 20px;
 `;
 
+const Navigation = styled.nav`
+  display: flex;
+  gap: 20px;
+  margin: 10px 0;
+  padding: 10px;
+  background-color: #f0f0f0;
+
+  a {
+    padding: 8px 16px;
+    text-decoration: none;
+    color: #333;
+    font-weight: 500;
+    border-radius: 4px;
+
+    &:hover {
+      background-color: #e0e0e0;
+    }
+
+    &.active {
+      background-color: #007bff;
+      color: white;
+    }
+  }
+`;
+
 function App() {
   useGlobalAuthCheck();
   return (
     <AuthProvider>
-      <div className="App">
-        <Header className="App-header">
-          <h1>Carmelton Data Migration System</h1>
-          <AuthStatus />
-        </Header>
-        <main>
-          <BatchProcessor />
-          <BatchDashboard />
-        </main>
-      </div>
+      <BrowserRouter>
+        <div className="App">
+          <Header className="App-header">
+            <h1>Carmelton Data Migration System</h1>
+            <AuthStatus />
+          </Header>
+          <Navigation>
+            <Link to="/">Batch Processor</Link>
+            <Link to="/dashboard">Dashboard</Link>
+            <Link to="/jobtypes">Job Types Manager</Link>
+          </Navigation>
+          <main>
+            <Routes>
+              <Route path="/" element={<BatchProcessor />} />
+              <Route path="/dashboard" element={<BatchDashboard />} />
+              <Route path="/jobtypes" element={<JobTypesManager />} />
+            </Routes>
+          </main>
+
+          {/* Toast notification container */}
+          <ToastContainer
+            position="top-right"
+            autoClose={3000}
+            hideProgressBar={false}
+            newestOnTop
+            closeOnClick
+            rtl={false}
+            pauseOnFocusLoss
+            draggable
+            pauseOnHover
+          />
+        </div>
+      </BrowserRouter>
     </AuthProvider>
   );
 }

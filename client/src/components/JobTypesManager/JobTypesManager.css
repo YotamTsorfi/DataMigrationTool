@@ -1,0 +1,275 @@
+.job-types-manager {
+  padding: 20px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.manager-layout {
+  display: flex;
+  gap: 30px;
+  margin-top: 20px;
+}
+
+.job-types-section {
+  flex: 0 0 400px; /* Fixed width, won't grow or shrink */
+}
+
+.details-section {
+  flex: 1;
+  min-width: 500px;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.job-types-list-container {
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  padding: 10px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  overflow: auto;
+}
+
+.job-types-list,
+.child-jobs-list {
+  width: 100%;
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 100%;
+}
+
+th,
+td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid #ddd;
+}
+
+/* Make sure table cells wrap properly */
+td {
+  white-space: nowrap;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+th {
+  background-color: #f1f1f1;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+tr:hover {
+  background-color: #f1f1f1;
+  cursor: pointer;
+}
+
+tr.selected {
+  background-color: #e6f7ff;
+}
+
+.form-container {
+  background-color: #f8f9fa;
+  padding: 20px;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.form-group {
+  margin-bottom: 15px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: 500;
+}
+
+.form-group input[type="text"],
+.form-group input[type="number"] {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+}
+
+.form-group input.error {
+  border-color: #dc3545;
+}
+
+.error-text {
+  color: #dc3545;
+  font-size: 0.875rem;
+  margin-top: 3px;
+  display: block;
+}
+
+.form-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.submit-button,
+.add-button {
+  background-color: #007bff;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.close-button {
+  background-color: #6c757d;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.cancel-button {
+  background-color: #6c757d;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.edit-button {
+  background-color: #28a745;
+  color: white;
+  border: none;
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-right: 5px;
+  cursor: pointer;
+  z-index: 10;
+  position: relative;
+}
+
+.delete-button {
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  z-index: 10;
+  position: relative;
+}
+
+.dismiss-button {
+  background-color: #6c757d;
+  color: white;
+  border: none;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-top: 10px;
+}
+
+.checkbox-group {
+  display: flex;
+  align-items: center;
+}
+
+.checkbox-group input[type="checkbox"] {
+  margin-right: 8px;
+}
+
+.loading,
+.no-job-types {
+  padding: 20px;
+  text-align: center;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+}
+
+.no-child-jobs-message {
+  padding: 20px;
+  text-align: center;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  margin-bottom: 20px;
+}
+
+.error-message {
+  background-color: #f8d7da;
+  color: #721c24;
+  padding: 10px;
+  border-radius: 4px;
+  margin-bottom: 15px;
+}
+
+small {
+  color: #6c757d;
+  display: block;
+  margin-top: 4px;
+}
+
+/* Fix for button click events */
+td button {
+  position: relative;
+  z-index: 5;
+}
+
+td {
+  position: relative;
+}
+
+.form-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.close-button {
+  background-color: transparent;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #6c757d;
+  padding: 0;
+  margin: 0;
+  line-height: 1;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.close-button:hover {
+  background-color: #f0f0f0;
+  color: #343a40;
+}
+
+.close-button-text {
+  background-color: #6c757d;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-left: 10px;
+}
+
+.close-button-text:hover {
+  background-color: #5a6268;
+}
