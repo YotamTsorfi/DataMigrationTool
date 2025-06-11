@@ -1,12 +1,13 @@
 /**
- * Job Types Manager component - provides UI for managing Priority Job Types and Child Jobs
- * Includes toast notifications for all CRUD operations to provide user feedback
+ * Job Types Manager component for managing job types and child jobs
+ * Includes authentication protection to restrict unauthorized users from making changes
  */
 import React, { useState, useEffect } from "react";
+import { toast } from "react-toastify";
 import { JobTypeForm } from "./JobTypeForm";
 import { ChildJobForm } from "./ChildJobForm";
 import { JobTypesList } from "./JobTypesList";
-import { toast } from "react-toastify";
+import { useAuthProtection } from "../../hooks/useAuthProtection";
 import {
   fetchJobTypes,
   createJobType,
@@ -42,6 +43,10 @@ export interface IChildJob {
 }
 
 const JobTypesManager: React.FC = () => {
+  // Get authentication status and protection helpers
+  const { isAuthenticated, protectProps } = useAuthProtection();
+
+  // State declarations
   const [jobTypes, setJobTypes] = useState<IJobType[]>([]);
   const [childJobs, setChildJobs] = useState<IChildJob[]>([]);
   const [selectedJobType, setSelectedJobType] = useState<IJobType | null>(null);
@@ -57,7 +62,7 @@ const JobTypesManager: React.FC = () => {
 
   // Fetch all job types on mount
   useEffect(() => {
-    const loadJobTypes = async () => {
+    const loadJobTypes = async (): Promise<void> => {
       try {
         const data = await fetchJobTypes();
         setJobTypes(data);
@@ -74,7 +79,7 @@ const JobTypesManager: React.FC = () => {
 
   // Fetch child jobs when a job type is selected
   useEffect(() => {
-    const loadChildJobs = async () => {
+    const loadChildJobs = async (): Promise<void> => {
       if (selectedJobType?.JobTypeId) {
         try {
           const data = await fetchChildJobs(selectedJobType.JobTypeId);
@@ -93,7 +98,8 @@ const JobTypesManager: React.FC = () => {
     loadChildJobs();
   }, [selectedJobType]);
 
-  const handleJobTypeSelect = (jobType: IJobType) => {
+  // Handler for selecting a job type
+  const handleJobTypeSelect = (jobType: IJobType): void => {
     setSelectedJobType(jobType);
     setIsAddingJobType(false);
     setIsEditingJobType(false);
@@ -102,7 +108,8 @@ const JobTypesManager: React.FC = () => {
     setSelectedChildJob(null);
   };
 
-  const handleAddJobType = async (jobType: IJobType) => {
+  // Handler for adding a job type
+  const handleAddJobType = async (jobType: IJobType): Promise<void> => {
     try {
       const newJobType = await createJobType(jobType);
       setJobTypes([...jobTypes, newJobType]);
@@ -116,36 +123,33 @@ const JobTypesManager: React.FC = () => {
     }
   };
 
-  /**
-   * Updates an existing job type and keeps the edit form open for further editing
-   */
+  // Handler for editing a job type
   const handleEditJobType = async (jobType: IJobType): Promise<void> => {
     try {
       const updatedJobType = await updateJobType(jobType);
-
-      // Update the job types list
       setJobTypes(
         jobTypes.map((jt) =>
           jt.JobTypeId === updatedJobType.JobTypeId ? updatedJobType : jt
         )
       );
-
-      // Update the selected job type with the latest data
       setSelectedJobType(updatedJobType);
-
-      // Show success notification but keep the form open
+      // Keep the form open for further editing
       toast.success(
         `Job type "${updatedJobType.JobTypeName}" updated successfully`
       );
-
-      // Note: We're no longer closing the form with setIsEditingJobType(false)
     } catch (err) {
       setError("Failed to update job type");
       toast.error("Failed to update job type");
     }
   };
 
-  const handleDeleteJobType = async (jobTypeId: number) => {
+  // Handler for closing the edit form
+  const handleCloseEditForm = (): void => {
+    setIsEditingJobType(false);
+  };
+
+  // Handler for deleting a job type
+  const handleDeleteJobType = async (jobTypeId: number): Promise<void> => {
     if (
       window.confirm(
         "Are you sure you want to delete this job type? This will also delete all associated child jobs."
@@ -168,7 +172,8 @@ const JobTypesManager: React.FC = () => {
     }
   };
 
-  const handleAddChildJob = async (childJob: IChildJob) => {
+  // Handler for adding a child job
+  const handleAddChildJob = async (childJob: IChildJob): Promise<void> => {
     try {
       const newChildJob = await createChildJob({
         ...childJob,
@@ -177,15 +182,16 @@ const JobTypesManager: React.FC = () => {
       setChildJobs([...childJobs, newChildJob]);
       setIsAddingChildJob(false);
       toast.success(
-        `New child job "${newChildJob.JobTypeName} - ${newChildJob.DBTableName}" created successfully`
+        `New child job "${newChildJob.JobTypeName}" created successfully`
       );
     } catch (err) {
       setError("Failed to add child job");
-      toast.error("Failed to add child job");
+      toast.error("Failed to create child job");
     }
   };
 
-  const handleEditChildJob = async (childJob: IChildJob) => {
+  // Handler for editing a child job
+  const handleEditChildJob = async (childJob: IChildJob): Promise<void> => {
     try {
       const updatedChildJob = await updateChildJob(childJob);
       setChildJobs(
@@ -196,7 +202,7 @@ const JobTypesManager: React.FC = () => {
       setIsEditingChildJob(false);
       setSelectedChildJob(null);
       toast.success(
-        `Child job "${updatedChildJob.JobTypeName} - ${updatedChildJob.DBTableName}" updated successfully`
+        `Child job "${updatedChildJob.JobTypeName}" updated successfully`
       );
     } catch (err) {
       setError("Failed to update child job");
@@ -204,11 +210,12 @@ const JobTypesManager: React.FC = () => {
     }
   };
 
-  const handleDeleteChildJob = async (childJobId: number) => {
+  // Handler for deleting a child job
+  const handleDeleteChildJob = async (childJobId: number): Promise<void> => {
     if (window.confirm("Are you sure you want to delete this child job?")) {
       try {
         const childJobName =
-          childJobs.find((cj) => cj.ChildJobeId === childJobId)?.DBTableName ||
+          childJobs.find((cj) => cj.ChildJobeId === childJobId)?.JobTypeName ||
           "";
         await deleteChildJob(childJobId);
         setChildJobs(childJobs.filter((cj) => cj.ChildJobeId !== childJobId));
@@ -223,6 +230,7 @@ const JobTypesManager: React.FC = () => {
     }
   };
 
+  // Show loading state while data is being fetched
   if (loading) {
     return <div className="loading">Loading job types...</div>;
   }
@@ -230,6 +238,12 @@ const JobTypesManager: React.FC = () => {
   return (
     <div className="job-types-manager">
       <h1>Priority Job Types Manager</h1>
+
+      {!isAuthenticated && (
+        <div className="auth-warning">
+          You are viewing in read-only mode. Please log in to make changes.
+        </div>
+      )}
 
       {error && <div className="error-message">{error}</div>}
 
@@ -246,6 +260,7 @@ const JobTypesManager: React.FC = () => {
                 setIsAddingChildJob(false);
                 setIsEditingChildJob(false);
               }}
+              {...protectProps()}
             >
               Add New Job Type
             </button>
@@ -263,7 +278,8 @@ const JobTypesManager: React.FC = () => {
                 setIsAddingChildJob(false);
                 setIsEditingChildJob(false);
               }}
-              onDelete={(jobTypeId) => handleDeleteJobType(jobTypeId)}
+              onDelete={handleDeleteJobType}
+              isAuthenticated={isAuthenticated}
             />
           </div>
         </div>
@@ -273,6 +289,7 @@ const JobTypesManager: React.FC = () => {
             <JobTypeForm
               onSubmit={handleAddJobType}
               onCancel={() => setIsAddingJobType(false)}
+              isAuthenticated={isAuthenticated}
             />
           )}
 
@@ -281,9 +298,8 @@ const JobTypesManager: React.FC = () => {
               jobType={selectedJobType}
               onSubmit={handleEditJobType}
               onCancel={() => setIsEditingJobType(false)}
-              onClose={() => {
-                setIsEditingJobType(false);
-              }}
+              onClose={handleCloseEditForm}
+              isAuthenticated={isAuthenticated}
             />
           )}
 
@@ -298,6 +314,7 @@ const JobTypesManager: React.FC = () => {
                   <button
                     className="add-button"
                     onClick={() => setIsAddingChildJob(true)}
+                    {...protectProps()}
                   >
                     Add Child Job
                   </button>
@@ -347,6 +364,7 @@ const JobTypesManager: React.FC = () => {
                                   setIsEditingChildJob(true);
                                   setIsAddingChildJob(false);
                                 }}
+                                {...protectProps()}
                               >
                                 Edit
                               </button>
@@ -356,6 +374,7 @@ const JobTypesManager: React.FC = () => {
                                   e.stopPropagation();
                                   handleDeleteChildJob(childJob.ChildJobeId!);
                                 }}
+                                {...protectProps()}
                               >
                                 Delete
                               </button>
@@ -367,8 +386,10 @@ const JobTypesManager: React.FC = () => {
                   ) : (
                     <div className="no-child-jobs-message">
                       <p>
-                        No child jobs found for this job type. Add one using the
-                        button above.
+                        No child jobs found for this job type.{" "}
+                        {isAuthenticated
+                          ? "Add one using the button above."
+                          : ""}
                       </p>
                       <button
                         className="dismiss-button"
@@ -387,6 +408,7 @@ const JobTypesManager: React.FC = () => {
               parentJobType={selectedJobType}
               onSubmit={handleAddChildJob}
               onCancel={() => setIsAddingChildJob(false)}
+              isAuthenticated={isAuthenticated}
             />
           )}
 
@@ -399,6 +421,7 @@ const JobTypesManager: React.FC = () => {
                 setIsEditingChildJob(false);
                 setSelectedChildJob(null);
               }}
+              isAuthenticated={isAuthenticated}
             />
           )}
         </div>

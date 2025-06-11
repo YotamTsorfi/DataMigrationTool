@@ -1,3 +1,6 @@
+/**
+ * Form component for creating and editing job types with authentication protection
+ */
 import React, { useState, useEffect } from "react";
 import { IJobType } from "./JobTypesManager";
 
@@ -6,6 +9,7 @@ interface JobTypeFormProps {
   onSubmit: (jobType: IJobType) => void;
   onCancel: () => void;
   onClose?: () => void;
+  isAuthenticated: boolean;
 }
 
 export const JobTypeForm: React.FC<JobTypeFormProps> = ({
@@ -13,79 +17,69 @@ export const JobTypeForm: React.FC<JobTypeFormProps> = ({
   onSubmit,
   onCancel,
   onClose,
+  isAuthenticated,
 }) => {
-  const [formData, setFormData] = useState<IJobType>({
+  const [formState, setFormState] = useState<IJobType>({
     JobTypeName: "",
     DBTableName: "",
     ScreenName: "",
-    SourceSystem: "",
-    priority_id: "",
-    linkedField: "",
+    SourceSystem: null,
+    priority_id: null,
+    linkedField: null,
     RunOrder: 0,
+    ...jobType,
   });
 
-  const [formErrors, setFormErrors] = useState({
-    JobTypeName: false,
-    DBTableName: false,
-    ScreenName: false,
-  });
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  useEffect(() => {
-    if (jobType) {
-      setFormData(jobType);
-    }
-  }, [jobType]);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
     const { name, value } = e.target;
+    setFormState({
+      ...formState,
+      [name]: value,
+    });
 
-    // Handle number type for RunOrder
-    if (name === "RunOrder") {
-      setFormData({
-        ...formData,
-        [name]: parseInt(value) || 0,
-      });
-    } else {
-      setFormData({
-        ...formData,
-        [name]: value,
-      });
-    }
-
-    // Clear validation errors when field is modified
-    if (name in formErrors) {
-      setFormErrors({
-        ...formErrors,
-        [name]: false,
+    // Clear error when field is edited
+    if (errors[name]) {
+      setErrors({
+        ...errors,
+        [name]: "",
       });
     }
   };
 
   const validateForm = (): boolean => {
-    const errors = {
-      JobTypeName: !formData.JobTypeName,
-      DBTableName: !formData.DBTableName,
-      ScreenName: !formData.ScreenName,
-    };
+    const newErrors: Record<string, string> = {};
 
-    setFormErrors(errors);
+    if (!formState.JobTypeName.trim()) {
+      newErrors.JobTypeName = "Job Type Name is required";
+    }
 
-    return !Object.values(errors).some(Boolean);
+    if (!formState.DBTableName.trim()) {
+      newErrors.DBTableName = "DB Table Name is required";
+    }
+
+    if (!formState.ScreenName.trim()) {
+      newErrors.ScreenName = "Screen Name is required";
+    }
+
+    if (typeof formState.RunOrder !== "number" || isNaN(formState.RunOrder)) {
+      newErrors.RunOrder = "Run Order must be a valid number";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent): void => {
     e.preventDefault();
 
-    if (validateForm()) {
-      // Convert empty strings to null
-      const submissionData = {
-        ...formData,
-        SourceSystem: formData.SourceSystem || null,
-        priority_id: formData.priority_id || null,
-        linkedField: formData.linkedField || null,
-      };
+    if (!isAuthenticated) {
+      return; // Extra protection
+    }
 
-      onSubmit(submissionData);
+    if (validateForm()) {
+      onSubmit(formState);
     }
   };
 
@@ -107,102 +101,125 @@ export const JobTypeForm: React.FC<JobTypeFormProps> = ({
 
       <form onSubmit={handleSubmit}>
         <div className="form-group">
-          <label htmlFor="JobTypeName">Job Type Name *</label>
+          <label htmlFor="JobTypeName">Job Type Name:</label>
           <input
             type="text"
             id="JobTypeName"
             name="JobTypeName"
-            value={formData.JobTypeName}
+            value={formState.JobTypeName}
             onChange={handleChange}
-            className={formErrors.JobTypeName ? "error" : ""}
+            className={errors.JobTypeName ? "error" : ""}
+            disabled={!isAuthenticated}
+            data-auth-protected="true"
           />
-          {formErrors.JobTypeName && (
-            <span className="error-text">Job Type Name is required</span>
+          {errors.JobTypeName && (
+            <span className="error-text">{errors.JobTypeName}</span>
           )}
         </div>
 
         <div className="form-group">
-          <label htmlFor="DBTableName">DB Table Name *</label>
+          <label htmlFor="DBTableName">DB Table Name:</label>
           <input
             type="text"
             id="DBTableName"
             name="DBTableName"
-            value={formData.DBTableName}
+            value={formState.DBTableName}
             onChange={handleChange}
-            className={formErrors.DBTableName ? "error" : ""}
+            className={errors.DBTableName ? "error" : ""}
+            disabled={!isAuthenticated}
+            data-auth-protected="true"
           />
-          {formErrors.DBTableName && (
-            <span className="error-text">DB Table Name is required</span>
+          {errors.DBTableName && (
+            <span className="error-text">{errors.DBTableName}</span>
           )}
         </div>
 
         <div className="form-group">
-          <label htmlFor="ScreenName">Screen Name *</label>
+          <label htmlFor="ScreenName">Screen Name:</label>
           <input
             type="text"
             id="ScreenName"
             name="ScreenName"
-            value={formData.ScreenName}
+            value={formState.ScreenName}
             onChange={handleChange}
-            className={formErrors.ScreenName ? "error" : ""}
+            className={errors.ScreenName ? "error" : ""}
+            disabled={!isAuthenticated}
+            data-auth-protected="true"
           />
-          {formErrors.ScreenName && (
-            <span className="error-text">Screen Name is required</span>
+          {errors.ScreenName && (
+            <span className="error-text">{errors.ScreenName}</span>
           )}
         </div>
 
         <div className="form-group">
-          <label htmlFor="SourceSystem">Source System</label>
+          <label htmlFor="SourceSystem">Source System (optional):</label>
           <input
             type="text"
             id="SourceSystem"
             name="SourceSystem"
-            value={formData.SourceSystem || ""}
+            value={formState.SourceSystem || ""}
             onChange={handleChange}
+            disabled={!isAuthenticated}
+            data-auth-protected="true"
           />
         </div>
 
         <div className="form-group">
-          <label htmlFor="priority_id">Priority ID</label>
+          <label htmlFor="priority_id">Priority ID (optional):</label>
           <input
             type="text"
             id="priority_id"
             name="priority_id"
-            value={formData.priority_id || ""}
+            value={formState.priority_id || ""}
             onChange={handleChange}
+            disabled={!isAuthenticated}
+            data-auth-protected="true"
           />
         </div>
 
         <div className="form-group">
-          <label htmlFor="linkedField">Linked Field</label>
+          <label htmlFor="linkedField">Linked Field (optional):</label>
           <input
             type="text"
             id="linkedField"
             name="linkedField"
-            value={formData.linkedField || ""}
+            value={formState.linkedField || ""}
             onChange={handleChange}
+            disabled={!isAuthenticated}
+            data-auth-protected="true"
           />
         </div>
 
         <div className="form-group">
-          <label htmlFor="RunOrder">Run Order</label>
+          <label htmlFor="RunOrder">Run Order:</label>
           <input
             type="number"
             id="RunOrder"
             name="RunOrder"
-            value={formData.RunOrder}
+            value={formState.RunOrder}
             onChange={handleChange}
+            className={errors.RunOrder ? "error" : ""}
+            disabled={!isAuthenticated}
+            data-auth-protected="true"
           />
+          {errors.RunOrder && (
+            <span className="error-text">{errors.RunOrder}</span>
+          )}
         </div>
 
         <div className="form-actions">
-          <button type="submit" className="submit-button">
+          <button
+            type="submit"
+            className="submit-button"
+            disabled={!isAuthenticated}
+            data-auth-protected="true"
+          >
             {jobType ? "Update" : "Create"} Job Type
           </button>
           <button type="button" onClick={onCancel} className="cancel-button">
             Cancel
           </button>
-          {jobType && (
+          {jobType && onClose && (
             <button
               type="button"
               onClick={onClose}

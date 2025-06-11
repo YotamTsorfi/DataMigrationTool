@@ -1,3 +1,6 @@
+/**
+ * Component for displaying a list of job types with authentication-protected actions
+ */
 import React from "react";
 import { IJobType } from "./JobTypesManager";
 
@@ -7,6 +10,7 @@ interface JobTypesListProps {
   onSelect: (jobType: IJobType) => void;
   onEdit: (jobType: IJobType) => void;
   onDelete: (jobTypeId: number) => void;
+  isAuthenticated: boolean;
 }
 
 export const JobTypesList: React.FC<JobTypesListProps> = ({
@@ -15,6 +19,7 @@ export const JobTypesList: React.FC<JobTypesListProps> = ({
   onSelect,
   onEdit,
   onDelete,
+  isAuthenticated,
 }) => {
   return (
     <div className="job-types-list">
@@ -53,6 +58,8 @@ export const JobTypesList: React.FC<JobTypesListProps> = ({
                         e.stopPropagation();
                         onEdit(jobType);
                       }}
+                      data-auth-protected="true"
+                      disabled={!isAuthenticated}
                     >
                       Edit
                     </button>
@@ -62,6 +69,8 @@ export const JobTypesList: React.FC<JobTypesListProps> = ({
                         e.stopPropagation();
                         onDelete(jobType.JobTypeId!);
                       }}
+                      data-auth-protected="true"
+                      disabled={!isAuthenticated}
                     >
                       Delete
                     </button>
