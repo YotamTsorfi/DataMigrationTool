@@ -59,7 +59,7 @@ export const SectionContainer = styled.div`
   width: 100%;
 
   @media (min-width: 992px) {
-    width: 48%; // Slightly wider than before for desktop
+    width: 80%; // Slightly wider than before for desktop
   }
 `;
 

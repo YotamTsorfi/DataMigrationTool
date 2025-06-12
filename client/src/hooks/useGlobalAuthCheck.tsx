@@ -1,45 +1,62 @@
 /**
- * Hook for global authentication checking and redirect handling.
- * Allows for displaying a login prompt when unauthenticated users try to use protected features.
+ * Hook for global authentication checking with synchronized state to prevent false negatives
+ * after page refreshes.
  */
 import { useEffect, useState } from "react";
-import { useAuth } from "../context/AuthContext";
 import { toast } from "react-toastify";
+import { useAuthSync } from "./useAuthSync";
 
 export const useGlobalAuthCheck = () => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isInitialized, user } = useAuthSync();
   const [loginPromptShown, setLoginPromptShown] = useState(false);
 
-  useEffect(() => {
-    // Add global click handler to check for interactions with protected elements
-    const clickHandler = (e: MouseEvent) => {
-      if (isAuthenticated) return;
+  // // Log authentication state on mount and when it changes
+  // useEffect(() => {
+  //   console.log("Auth state updated (synchronized):", {
+  //     isAuthenticated,
+  //     user,
+  //     isInitialized,
+  //   });
+  // }, [isAuthenticated, user, isInitialized]);
 
+  useEffect(() => {
+    // Only add the click handler if auth sync is initialized
+    if (!isInitialized) return;
+
+    const handleClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       const isProtectedElement = target.closest('[data-auth-protected="true"]');
 
-      if (isProtectedElement && !loginPromptShown) {
-        toast.info("Please log in to access this feature", {
-          toastId: "login-prompt", // Prevents duplicate toasts
-          autoClose: 3000,
+      if (isProtectedElement) {
+        console.log("Protected element clicked, auth state:", {
+          isAuthenticated,
+          username: user?.username,
+          isInitialized,
         });
-        setLoginPromptShown(true);
-        setTimeout(() => setLoginPromptShown(false), 3000);
 
-        // Stop event propagation to prevent default action
-        e.stopPropagation();
-        e.preventDefault();
+        // Only block if not authenticated
+        if (!isAuthenticated && !loginPromptShown) {
+          console.log("Blocking action - user not authenticated");
+          toast.info("Please log in to access this feature", {
+            toastId: "login-prompt",
+            autoClose: 3000,
+          });
+          setLoginPromptShown(true);
+          setTimeout(() => setLoginPromptShown(false), 3000);
+
+          // Stop event propagation to prevent default action
+          e.stopPropagation();
+          e.preventDefault();
+        }
       }
     };
 
-    document.addEventListener("click", clickHandler, true); // true for capture phase
+    document.addEventListener("click", handleClick, true);
 
     return () => {
-      document.removeEventListener("click", clickHandler, true);
+      document.removeEventListener("click", handleClick, true);
     };
-  }, [isAuthenticated, loginPromptShown]);
-
-  // Additional auth-related global utilities can be added here
+  }, [isAuthenticated, loginPromptShown, user, isInitialized]);
 
   return { isAuthenticated };
 };
