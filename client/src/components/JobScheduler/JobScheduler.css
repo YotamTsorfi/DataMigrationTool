@@ -1,0 +1,39 @@
+.job-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 20px;
+}
+
+.job-table th,
+.job-table td {
+  padding: 10px;
+  border: 1px solid #ddd;
+  text-align: left;
+}
+
+.job-table th {
+  background-color: #f2f2f2;
+  font-weight: bold;
+}
+
+.active-job {
+  background-color: #e6f7ff;
+  font-weight: bold;
+}
+
+.status-pending {
+  color: #8c8c8c;
+}
+
+.status-active {
+  color: #1890ff;
+  font-weight: bold;
+}
+
+.status-completed {
+  color: #52c41a;
+}
+
+.status-failed {
+  color: #f5222d;
+}
