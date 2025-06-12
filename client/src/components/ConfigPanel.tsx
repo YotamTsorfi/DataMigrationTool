@@ -370,18 +370,19 @@ const ConfigPanel: React.FC = () => {
                             <colgroup>
                               <col
                                 style={{ width: "32%", minWidth: "180px" }}
-                              />{" "}
+                              />
                               {/* Key */}
-                              <col style={{ width: "40%" }} /> {/* Value */}
-                              <col style={{ width: "45%" }} />{" "}
+                              <col style={{ width: "40%" }} />
+                              {/* Value */}
+                              <col style={{ width: "45%" }} />
                               {/* Description */}
                               <col
                                 style={{ width: "27%", minWidth: "180px" }}
-                              />{" "}
+                              />
                               {/* Last Updated */}
                               <col
                                 style={{ width: "22%", minWidth: "150px" }}
-                              />{" "}
+                              />
                               {/* Actions */}
                             </colgroup>
                             <thead>

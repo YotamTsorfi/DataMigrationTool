@@ -7,7 +7,9 @@ import { toast } from "react-toastify";
 import { JobTypeForm } from "./JobTypeForm";
 import { ChildJobForm } from "./ChildJobForm";
 import { JobTypesList } from "./JobTypesList";
-import { useAuthProtection } from "../../hooks/useAuthProtection";
+import { useAuthProtection } from "../withAuthProtection";
+import SecureButton from "./SecureButton";
+
 import {
   fetchJobTypes,
   createJobType,
@@ -43,8 +45,7 @@ export interface IChildJob {
 }
 
 const JobTypesManager: React.FC = () => {
-  // Get authentication status and protection helpers
-  const { isAuthenticated, protectProps } = useAuthProtection();
+  const { disabled, isAuthenticated } = useAuthProtection();
 
   // State declarations
   const [jobTypes, setJobTypes] = useState<IJobType[]>([]);
@@ -247,44 +248,9 @@ const JobTypesManager: React.FC = () => {
 
       {error && <div className="error-message">{error}</div>}
 
-      <div className="manager-layout">
-        <div className="job-types-section">
-          <div className="section-header">
-            <h2>Job Types</h2>
-            <button
-              className="add-button"
-              onClick={() => {
-                setIsAddingJobType(true);
-                setSelectedJobType(null);
-                setIsEditingJobType(false);
-                setIsAddingChildJob(false);
-                setIsEditingChildJob(false);
-              }}
-              {...protectProps()}
-            >
-              Add New Job Type
-            </button>
-          </div>
-
-          <div className="job-types-list-container">
-            <JobTypesList
-              jobTypes={jobTypes}
-              selectedJobType={selectedJobType}
-              onSelect={handleJobTypeSelect}
-              onEdit={(jobType) => {
-                setSelectedJobType(jobType);
-                setIsEditingJobType(true);
-                setIsAddingJobType(false);
-                setIsAddingChildJob(false);
-                setIsEditingChildJob(false);
-              }}
-              onDelete={handleDeleteJobType}
-              isAuthenticated={isAuthenticated}
-            />
-          </div>
-        </div>
-
-        <div className="details-section">
+      {/* Job Type Form Section */}
+      {(isAddingJobType || (isEditingJobType && selectedJobType)) && (
+        <div className="form-section">
           {isAddingJobType && (
             <JobTypeForm
               onSubmit={handleAddJobType}
@@ -302,130 +268,164 @@ const JobTypesManager: React.FC = () => {
               isAuthenticated={isAuthenticated}
             />
           )}
+        </div>
+      )}
 
-          {selectedJobType &&
-            !isAddingJobType &&
-            !isEditingJobType &&
-            !isAddingChildJob &&
-            !isEditingChildJob && (
-              <div className="child-jobs-section">
-                <div className="section-header">
-                  <h3>Child Jobs for: {selectedJobType.JobTypeName}</h3>
-                  <button
-                    className="add-button"
-                    onClick={() => setIsAddingChildJob(true)}
-                    {...protectProps()}
-                  >
-                    Add Child Job
-                  </button>
-                  <button
-                    className="close-button"
-                    onClick={() => setSelectedJobType(null)}
-                  >
-                    Close
-                  </button>
-                </div>
+      {/* Job Types List Section */}
+      <div className="section job-types-section">
+        <div className="section-header">
+          <h2>Job Types</h2>
+          <SecureButton
+            className="add-button"
+            onClick={() => {
+              setIsAddingJobType(true);
+              setSelectedJobType(null);
+              setIsEditingJobType(false);
+              setIsAddingChildJob(false);
+              setIsEditingChildJob(false);
+            }}
+            disabled={disabled}
+          >
+            Add New Job Type
+          </SecureButton>
+        </div>
 
-                <div className="child-jobs-list">
-                  {childJobs.length > 0 ? (
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Job Type Name</th>
-                          <th>DB Table Name</th>
-                          <th>Screen Name</th>
-                          <th>Has Siblings</th>
-                          <th>Priority ID</th>
-                          <th>Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {childJobs.map((childJob) => (
-                          <tr
-                            key={childJob.ChildJobeId}
-                            className={
-                              selectedChildJob?.ChildJobeId ===
-                              childJob.ChildJobeId
-                                ? "selected"
-                                : ""
-                            }
-                          >
-                            <td>{childJob.JobTypeName}</td>
-                            <td>{childJob.DBTableName}</td>
-                            <td>{childJob.ScreenName}</td>
-                            <td>{childJob.HasSiblings ? "Yes" : "No"}</td>
-                            <td>{childJob.priority_id || "-"}</td>
-                            <td>
-                              <button
-                                className="edit-button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSelectedChildJob(childJob);
-                                  setIsEditingChildJob(true);
-                                  setIsAddingChildJob(false);
-                                }}
-                                {...protectProps()}
-                              >
-                                Edit
-                              </button>
-                              <button
-                                className="delete-button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteChildJob(childJob.ChildJobeId!);
-                                }}
-                                {...protectProps()}
-                              >
-                                Delete
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  ) : (
-                    <div className="no-child-jobs-message">
-                      <p>
-                        No child jobs found for this job type.{" "}
-                        {isAuthenticated
-                          ? "Add one using the button above."
-                          : ""}
-                      </p>
-                      <button
-                        className="dismiss-button"
-                        onClick={() => setSelectedJobType(null)}
-                      >
-                        Dismiss
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-          {isAddingChildJob && selectedJobType && (
-            <ChildJobForm
-              parentJobType={selectedJobType}
-              onSubmit={handleAddChildJob}
-              onCancel={() => setIsAddingChildJob(false)}
-              isAuthenticated={isAuthenticated}
-            />
-          )}
-
-          {isEditingChildJob && selectedChildJob && (
-            <ChildJobForm
-              childJob={selectedChildJob}
-              parentJobType={selectedJobType!}
-              onSubmit={handleEditChildJob}
-              onCancel={() => {
-                setIsEditingChildJob(false);
-                setSelectedChildJob(null);
-              }}
-              isAuthenticated={isAuthenticated}
-            />
-          )}
+        <div className="job-types-list-container">
+          <JobTypesList
+            jobTypes={jobTypes}
+            selectedJobType={selectedJobType}
+            onSelect={handleJobTypeSelect}
+            onEdit={(jobType) => {
+              setSelectedJobType(jobType);
+              setIsEditingJobType(true);
+              setIsAddingJobType(false);
+              setIsAddingChildJob(false);
+              setIsEditingChildJob(false);
+            }}
+            onDelete={handleDeleteJobType}
+            isAuthenticated={isAuthenticated}
+          />
         </div>
       </div>
+
+      {/* Child Jobs Section - Now appears below job types */}
+      {selectedJobType && !isAddingJobType && !isEditingJobType && (
+        <div className="section child-jobs-section">
+          <div className="section-header">
+            <h3>Child Jobs for: {selectedJobType.JobTypeName}</h3>
+            <div className="button-group">
+              <SecureButton
+                className="add-button"
+                onClick={() => setIsAddingChildJob(true)}
+                disabled={disabled}
+              >
+                Add Child Job
+              </SecureButton>
+              <SecureButton
+                className="close-button"
+                onClick={() => setSelectedJobType(null)}
+              >
+                Close
+              </SecureButton>
+            </div>
+          </div>
+
+          {/* Child Job Form Section */}
+          {(isAddingChildJob || isEditingChildJob) && (
+            <div className="form-section">
+              {isAddingChildJob && selectedJobType && (
+                <ChildJobForm
+                  parentJobType={selectedJobType}
+                  onSubmit={handleAddChildJob}
+                  onCancel={() => setIsAddingChildJob(false)}
+                  isAuthenticated={isAuthenticated}
+                />
+              )}
+
+              {isEditingChildJob && selectedChildJob && (
+                <ChildJobForm
+                  childJob={selectedChildJob}
+                  parentJobType={selectedJobType}
+                  onSubmit={handleEditChildJob}
+                  onCancel={() => {
+                    setIsEditingChildJob(false);
+                    setSelectedChildJob(null);
+                  }}
+                  isAuthenticated={isAuthenticated}
+                />
+              )}
+            </div>
+          )}
+
+          {/* Child Jobs List */}
+          {!isAddingChildJob && !isEditingChildJob && (
+            <div className="child-jobs-list-container">
+              {childJobs.length > 0 ? (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Job Type Name</th>
+                      <th>DB Table Name</th>
+                      <th>Screen Name</th>
+                      <th>Has Siblings</th>
+                      <th>Priority ID</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {childJobs.map((childJob) => (
+                      <tr
+                        key={childJob.ChildJobeId}
+                        className={
+                          selectedChildJob?.ChildJobeId === childJob.ChildJobeId
+                            ? "selected"
+                            : ""
+                        }
+                      >
+                        <td>{childJob.JobTypeName}</td>
+                        <td>{childJob.DBTableName}</td>
+                        <td>{childJob.ScreenName}</td>
+                        <td>{childJob.HasSiblings ? "Yes" : "No"}</td>
+                        <td>{childJob.priority_id || "-"}</td>
+                        <td>
+                          <SecureButton
+                            className="edit-button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedChildJob(childJob);
+                              setIsEditingChildJob(true);
+                              setIsAddingChildJob(false);
+                            }}
+                          >
+                            Edit
+                          </SecureButton>
+                          <SecureButton
+                            className="delete-button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteChildJob(childJob.ChildJobeId!);
+                            }}
+                            style={{ backgroundColor: "#dc3545" }}
+                          >
+                            Delete
+                          </SecureButton>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="no-child-jobs-message">
+                  <p>
+                    No child jobs found for this job type.{" "}
+                    {isAuthenticated ? "Add one using the button above." : ""}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
