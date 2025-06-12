@@ -9,6 +9,7 @@ import "react-toastify/dist/ReactToastify.css";
 import "./App.css";
 import { useGlobalAuthCheck } from "./hooks/useGlobalAuthCheck";
 import BatchProcessor from "./components/BatchProcessor";
+import JobScheduler from "./components/JobScheduler/JobScheduler";
 import BatchDashboard from "./components/BatchDashboard";
 import JobTypesManager from "./components/JobTypesManager/JobTypesManager";
 import ConfigPanel from "./components/ConfigPanel";
@@ -60,6 +61,7 @@ function App() {
           </Header>
           <Navigation>
             <Link to="/">Batch/Queue Processor</Link>
+            <Link to="/job-scheduler">Job Scheduler</Link>
             <Link to="/dashboard">Dashboard</Link>
             <Link to="/jobtypes">Job Types Manager</Link>
             <Link to="/config">System Configuration</Link>
@@ -67,6 +69,7 @@ function App() {
           <main>
             <Routes>
               <Route path="/" element={<BatchProcessor />} />
+              <Route path="/job-scheduler" element={<JobScheduler />} />
               <Route path="/dashboard" element={<BatchDashboard />} />
               <Route path="/jobtypes" element={<JobTypesManager />} />
               <Route path="/config" element={<ConfigPanel />} />

@@ -1,4 +1,4 @@
-import * as fs from "fs";
+// import * as fs from "fs";
 import path from "path";
 
 // Load environment variables before anything else
@@ -13,13 +13,14 @@ import { config } from "./config/config";
 import { writeToLogFile } from "./config/logger";
 import PerformanceMonitor from "./utils/performanceMonitor";
 import priorityRoutes from "./routers/priorityRoutes";
-import userRouter from "./routers/userRouter";
+// import userRouter from "./routers/userRouter";
 import jobRoutes from "./routers/jobRouters";
 import configRouter from "./routers/configRouters";
 import dashboardRouter from "./routers/dashboardRouter";
 import authRouter from "./routers/authRouter";
 import whereClauseRouter from "./routers/whereClauseRouter";
 import jobTypesRouter from "./routers/jobTypesRouter";
+import jobSchedulerRouter from "./routers/jobSchedulerRouter";
 
 // Initialize Express app
 const app = express();
@@ -72,12 +73,13 @@ app.use(express.urlencoded({ extended: true }));
 // Routers
 app.use("/auth", authRouter);
 app.use("/priority", priorityRoutes);
-app.use("/api", userRouter);
+// app.use("/api", userRouter);
 app.use("/job", jobRoutes);
 app.use("/config", configRouter);
 app.use("/dashboard", dashboardRouter);
 app.use("/where-clause", whereClauseRouter);
 app.use("/api", jobTypesRouter);
+app.use("/api/job-scheduler", jobSchedulerRouter);
 
 // Serve React client static files
 app.use(express.static(path.join(__dirname, "../client/build")));
