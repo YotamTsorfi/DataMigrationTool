@@ -301,7 +301,7 @@ const BatchDashboard: React.FC = () => {
 
   return (
     <DashboardContainer>
-      <h2>Batch Processing Dashboard</h2>
+      <h2>Processing Dashboard</h2>
 
       <FilterContainer>
         <FilterItem>

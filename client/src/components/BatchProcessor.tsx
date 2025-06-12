@@ -323,7 +323,7 @@ const BatchProcessor: React.FC = () => {
             boxSizing: "border-box",
           }}
         >
-          <h2>Batch Processor</h2>
+          <h2>Batch/Queue Processor</h2>
 
           <InputContainer>
             <h3>Processing Type</h3>

@@ -59,7 +59,7 @@ function App() {
             <AuthStatus />
           </Header>
           <Navigation>
-            <Link to="/">Batch Processor</Link>
+            <Link to="/">Batch/Queue Processor</Link>
             <Link to="/dashboard">Dashboard</Link>
             <Link to="/jobtypes">Job Types Manager</Link>
             <Link to="/config">System Configuration</Link>
