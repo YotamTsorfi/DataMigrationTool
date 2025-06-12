@@ -48,6 +48,7 @@ export const MainContainer = styled.div`
   display: flex;
   justify-content: space-between;
   padding: 20px;
+  flex-wrap: wrap;
 `;
 
 export const SectionContainer = styled.div`
@@ -55,7 +56,17 @@ export const SectionContainer = styled.div`
   border: 1px solid #ccc;
   border-radius: 8px;
   margin-bottom: 20px;
-  width: 45%; /* Adjust the width as needed */
+  width: 100%;
+
+  @media (min-width: 992px) {
+    width: 48%; // Slightly wider than before for desktop
+  }
+`;
+
+export const ConfigSectionContainer = styled(SectionContainer)`
+  @media (min-width: 1500px) {
+    width: 100%; // Give more room to System Configuration
+  }
 `;
 
 export const InputContainer = styled.div`

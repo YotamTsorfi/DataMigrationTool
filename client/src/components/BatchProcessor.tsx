@@ -16,7 +16,6 @@ import {
   InfoBox,
   ButtonGroup,
 } from "./BatchProcessorStyles";
-import ConfigPanel from "./ConfigPanel";
 import JobProgressTracker from "./JobProgressTracker";
 import SecureButton from "./SecureButton";
 import { useAuthProtection } from "./withAuthProtection";
@@ -309,11 +308,21 @@ const BatchProcessor: React.FC = () => {
   return (
     <div>
       <ToastContainer />
-      <MainContainer>
-        <SectionContainer>
-          <ConfigPanel />
-        </SectionContainer>
-        <SectionContainer>
+      <MainContainer
+        style={{
+          display: "flex",
+          flexDirection: "row",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+        }}
+      >
+        <SectionContainer
+          style={{
+            width: "calc(50% - 10px)",
+            margin: "0",
+            boxSizing: "border-box",
+          }}
+        >
           <h2>Batch Processor</h2>
 
           <InputContainer>
@@ -491,7 +500,13 @@ const BatchProcessor: React.FC = () => {
           </SecureButton>
         </SectionContainer>
 
-        <SectionContainer>
+        <SectionContainer
+          style={{
+            width: "calc(50% - 10px)",
+            margin: "0",
+            boxSizing: "border-box",
+          }}
+        >
           <JobProgressTracker />
         </SectionContainer>
       </MainContainer>

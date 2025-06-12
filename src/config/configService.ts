@@ -100,7 +100,7 @@ class ConfigurationService {
     return this.config;
   }
 
-  private async loadConfigFromDb(): Promise<void> {
+  public async loadConfigFromDb(): Promise<void> {
     try {
       // Verify DatabaseService exists and has executeQuery method
       if (

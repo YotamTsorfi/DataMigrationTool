@@ -11,6 +11,7 @@ import { useGlobalAuthCheck } from "./hooks/useGlobalAuthCheck";
 import BatchProcessor from "./components/BatchProcessor";
 import BatchDashboard from "./components/BatchDashboard";
 import JobTypesManager from "./components/JobTypesManager/JobTypesManager";
+import ConfigPanel from "./components/ConfigPanel";
 import { AuthProvider } from "./context/AuthContext";
 import AuthStatus from "./components/AuthStatus";
 import styled from "styled-components";
@@ -61,12 +62,14 @@ function App() {
             <Link to="/">Batch Processor</Link>
             <Link to="/dashboard">Dashboard</Link>
             <Link to="/jobtypes">Job Types Manager</Link>
+            <Link to="/config">System Configuration</Link>
           </Navigation>
           <main>
             <Routes>
               <Route path="/" element={<BatchProcessor />} />
               <Route path="/dashboard" element={<BatchDashboard />} />
               <Route path="/jobtypes" element={<JobTypesManager />} />
+              <Route path="/config" element={<ConfigPanel />} />
             </Routes>
           </main>
 
