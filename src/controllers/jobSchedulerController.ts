@@ -7,6 +7,7 @@ import { Request, Response } from "express";
 import { v4 as uuidv4 } from "uuid";
 import { DatabaseService } from "../services/databaseService";
 import { JobManager } from "../jobs/jobManager";
+import { JobCancellationService } from "../utils/jobCancellationService";
 
 // Define types for database query results
 interface JobType {
@@ -154,6 +155,7 @@ async function loadJobQueue(): Promise<void> {
 
 /**
  * Updates the scheduler state in the database for recovery purposes
+ * Optimized to avoid duplicate entries and provide a clearer state history
  */
 async function updateSchedulerState(
   status: "running" | "paused" | "completed" | "failed"
@@ -163,18 +165,54 @@ async function updateSchedulerState(
   try {
     // Get current job info
     const currentJobId = activeJob?.jobTypeId || null;
+    const currentJobName = activeJob?.jobTypeName || null;
     const currentJobIndex = jobQueue.findIndex(
       (job) => job.jobTypeId === currentJobId
     );
 
+    // For "running" status with no active job, find the next job
+    let jobToRecord = currentJobId;
+    let jobNameToRecord = currentJobName;
+    let jobIndexToRecord = currentJobIndex;
+
+    if (status === "running" && !currentJobId && jobQueue.length > 0) {
+      jobToRecord = jobQueue[0].jobTypeId;
+      jobNameToRecord = jobQueue[0].jobTypeName;
+      jobIndexToRecord = 0;
+    }
+
+    // First, check if there's a recent record with the same status we can skip
+    const recentState = await DatabaseService.executeQuery<{
+      Id: number;
+      Status: string;
+    }>(
+      `SELECT TOP 1 Id, Status 
+       FROM PrioritySchedulerState 
+       WHERE SchedulerJobId = @schedulerId 
+       ORDER BY LastUpdated DESC`,
+      { schedulerId: schedulerJobId }
+    );
+
+    // Skip if we would be adding the same status again (prevents duplicates)
+    if (recentState?.length > 0 && recentState[0].Status === status) {
+      console.log(`Skipping redundant '${status}' state update`);
+      return;
+    }
+
+    // Log what we're recording for debugging
+    console.log(
+      `Recording scheduler state: ${status} for job: ${jobNameToRecord || "none"}`
+    );
+
     await DatabaseService.executeQuery(
       `INSERT INTO PrioritySchedulerState 
-         (SchedulerJobId, CurrentJobId, CurrentJobIndex, Status, LastUpdated)
-       VALUES (@SchedulerJobId, @CurrentJobId, @CurrentJobIndex, @Status, GETDATE())`,
+       (SchedulerJobId, CurrentJobId, CurrentJobIndex, CurrentJobName, Status, LastUpdated)
+       VALUES (@SchedulerJobId, @CurrentJobId, @CurrentJobIndex, @CurrentJobName, @Status, GETDATE())`,
       {
         SchedulerJobId: schedulerJobId,
-        CurrentJobId: currentJobId,
-        CurrentJobIndex: currentJobIndex !== -1 ? currentJobIndex : null,
+        CurrentJobId: jobToRecord,
+        CurrentJobIndex: jobIndexToRecord !== -1 ? jobIndexToRecord : null,
+        CurrentJobName: jobNameToRecord,
         Status: status,
       }
     );
@@ -223,6 +261,8 @@ export async function startJobScheduler(
 
 /**
  * Internal method to start the job scheduler
+ * Initializes the job scheduler with a unique ID if needed, loads the job queue,
+ * and begins processing jobs in sequence with optimized state updates.
  */
 async function startJobSchedulerInternal(): Promise<void> {
   // Generate scheduler ID if not already set from recovery
@@ -238,17 +278,18 @@ async function startJobSchedulerInternal(): Promise<void> {
     await loadJobQueue();
   }
 
-  // Update state in database
+  // Update state in database just once here
   await updateSchedulerState("running");
 
-  // Start processing
-  void processNextJob();
+  // Start processing without updating state again
+  void processNextJobWithoutStateUpdate();
 }
 
 /**
- * Process the next job in the queue
+ * Process the next job in the queue without redundant state updates
+ * Optimized version of processNextJob that minimizes database writes
  */
-async function processNextJob(): Promise<void> {
+async function processNextJobWithoutStateUpdate(): Promise<void> {
   if (jobQueue.length === 0 || !isSchedulerRunning) {
     // No more jobs or scheduler was stopped
     isSchedulerRunning = false;
@@ -261,9 +302,6 @@ async function processNextJob(): Promise<void> {
   nextJob.status = "active";
 
   try {
-    // Update scheduler state before starting job
-    await updateSchedulerState("running");
-
     // Get job details
     const jobResult = await DatabaseService.executeQuery<JobType>(
       `SELECT JobTypeId, JobTypeName, DBTableName, ScreenName, 
@@ -290,6 +328,9 @@ async function processNextJob(): Promise<void> {
       jobTypeId: nextJob.jobTypeId,
       jobTypeName: nextJob.jobTypeName,
     };
+
+    // Update state with the active job info
+    await updateSchedulerState("running");
 
     // Get total record count for the job
     const countResult = await DatabaseService.executeQuery<CountResult>(
@@ -358,15 +399,18 @@ async function processNextJob(): Promise<void> {
   // Clear active job
   activeJob = null;
 
-  // Update state in database before proceeding
-  if (jobQueue.length > 0) {
+  // Update state in database before proceeding to next job
+  // Skip this update if we've been stopped or there are no more jobs
+  if (jobQueue.length > 0 && isSchedulerRunning) {
     await updateSchedulerState("running");
-  } else {
+  } else if (jobQueue.length === 0) {
     await updateSchedulerState("completed");
   }
 
-  // Process the next job with a small delay
-  setTimeout(() => void processNextJob(), 1000);
+  // Process the next job with a small delay to prevent CPU hogging
+  if (isSchedulerRunning) {
+    setTimeout(() => void processNextJobWithoutStateUpdate(), 1000);
+  }
 }
 
 /**
@@ -385,14 +429,137 @@ export function getJobSchedulerStatus(req: Request, res: Response): Response {
  * Stop the job scheduler
  */
 export function stopJobScheduler(req: Request, res: Response): Response {
+  // First check if scheduler is running
+  if (!isSchedulerRunning) {
+    return res.status(400).json({
+      success: false,
+      message: "Job scheduler is not running",
+    });
+  }
+
   isSchedulerRunning = false;
+
+  // Get current job info for state update
+  const currentJobId = activeJob?.jobTypeId || null;
 
   // Update state in database
   void updateSchedulerState("paused");
 
+  // Cancel the currently running job if there is one
+  if (activeJob) {
+    // Request cancellation of the active job
+    JobCancellationService.requestCancellation(activeJob.jobId);
+    console.log(
+      `Requested cancellation of active job ${activeJob.jobId} for pausing`
+    );
+
+    // Make sure the job status in the queue is updated
+    const activeJobIndex = jobQueue.findIndex(
+      (job) => job.jobTypeId === currentJobId
+    );
+    if (activeJobIndex !== -1) {
+      jobQueue[activeJobIndex].status = "pending"; // Reset to pending so it can be rerun
+      console.log(
+        `Reset job ${jobQueue[activeJobIndex].jobTypeName} status to pending for later resumption`
+      );
+    }
+  }
+
   return res.status(200).json({
     success: true,
     message:
-      "Job scheduler stopped successfully. Currently running job will complete before stopping.",
+      "Job scheduler paused successfully. Currently running job will be cancelled.",
   });
+}
+
+/**
+ * Resume a paused job scheduler
+ */
+export async function resumeJobScheduler(
+  req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    if (isSchedulerRunning) {
+      res.status(409).json({
+        success: false,
+        message: "Job scheduler is already running",
+      });
+      return;
+    }
+
+    if (!schedulerJobId) {
+      res.status(400).json({
+        success: false,
+        message: "No paused job scheduler found to resume",
+      });
+      return;
+    }
+
+    // Get the last state to find out which job was paused
+    const schedulerState = await DatabaseService.executeQuery<SchedulerState>(
+      `SELECT TOP 1 SchedulerJobId, CurrentJobId, CurrentJobIndex, Status, LastUpdated
+       FROM PrioritySchedulerState
+       WHERE SchedulerJobId = @schedulerId AND Status = 'paused'
+       ORDER BY LastUpdated DESC`,
+      { schedulerId: schedulerJobId }
+    );
+
+    // Before resuming, reload the entire job queue
+    await loadJobQueue();
+
+    // If we found a valid paused state, restore the job queue to that point
+    if (schedulerState?.length > 0 && schedulerState[0].CurrentJobId !== null) {
+      const pausedJobId = schedulerState[0].CurrentJobId;
+      console.log(
+        `Found paused job ID ${pausedJobId}, will resume from this job`
+      );
+
+      // Find the index of the paused job in the full queue
+      const resumeIndex = jobQueue.findIndex(
+        (job) => job.jobTypeId === pausedJobId
+      );
+
+      if (resumeIndex !== -1) {
+        // Remove all jobs before the paused job
+        if (resumeIndex > 0) {
+          console.log(
+            `Adjusting queue to resume from job ${jobQueue[resumeIndex].jobTypeName} (removing ${resumeIndex} completed jobs)`
+          );
+          jobQueue.splice(0, resumeIndex);
+        }
+      }
+    }
+
+    // Clear any cancellation requests that might be lingering
+    if (activeJob?.jobId) {
+      JobCancellationService.clearCancellationRequest(activeJob.jobId);
+    }
+
+    // Start processing from the adjusted queue
+    await startJobSchedulerInternal();
+
+    console.log(
+      `Scheduler resumed successfully with ${jobQueue.length} jobs remaining`
+    );
+    console.log(
+      `Next job to run: ${jobQueue.length > 0 ? jobQueue[0].jobTypeName : "None"}`
+    );
+
+    res.status(200).json({
+      success: true,
+      schedulerJobId,
+      jobQueue,
+      message: "Job scheduler resumed successfully",
+    });
+  } catch (error) {
+    console.error("Error resuming job scheduler:", error);
+    isSchedulerRunning = false;
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to resume job scheduler",
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
 }
