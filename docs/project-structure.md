@@ -30,7 +30,8 @@
 - jobId: string, // Unique job identifier
 - priorityIdField?: string, // Field name for Priority ID
 - logErrors: boolean = false, // Whether to log detailed errors
-- updateBatchTable: boolean = false // Whether to update batch tracking table
+- updateBatchTable: boolean = false, // Whether to update batch tracking table
+- customWhereClause?: string // Optional WHERE clause to filter source records
 - ): Promise<any[]>
 -
 - Dependencies:
@@ -41,29 +42,40 @@
 - - fetchDataChunk (src/services/dataService.ts) - For retrieving data from database
 - - performBulkUpdateWithService (src/services/dataService.ts) - For updating database records
 - - JobCancellationService (src/utils/jobCancellationService.ts) - For handling job cancellations
+- - PerformanceMonitor (src/utils/performanceMonitor.ts) - For tracking processing performance
 -
 - Processing Flow:
 - 1.  Initialization:
 - - Configures error buffer and progress tracking
 - - Determines batch sizes from configuration
+- - Initializes performance monitoring
 -
 - 2.  Chunk Processing:
-- - Fetches records in chunks from the database
+- - Fetches records in chunks from the database with optional WHERE clause filtering
 - - Distributes chunks across horizontal queues based on workload balancing
 -
 - 3.  Queue Processing:
 - - Each queue processes its assigned items sequentially
 - - Items are sent to the Priority API with appropriate retry logic
 - - Responses are processed and database records are updated
+- - Progress listeners track success/failure for each queue
 -
 - 4.  Progress Tracking:
 - - Each queue reports success/failure metrics
-- - Overall progress is consolidated and reported to the client
+- - Overall progress is consolidated and reported to the client via Socket.IO
+- - Performance metrics are collected for monitoring
 -
 - 5.  Error Handling:
 - - API errors are captured with detailed information
 - - Database updates reflect success/failure status
 - - Error buffering optimizes database writes
+- - Exponential backoff for transient errors
+-
+- 6.  Database Updates:
+- - performDatabaseUpdatesAsync handles asynchronous updates
+- - Records are sanitized before writing to the database
+- - Bulk update operations with retry mechanisms
+- - Handling of deadlock scenarios
 -
 - Usage:
 - Called by JobManager.executeStandardProcessing() in src/jobs/jobManager.ts
@@ -76,7 +88,7 @@
 
 /\*\*
 
-- Location: src/jobs/parentChildsGridProcess.ts
+- Location: src/jobs/jobParentAndChilds.ts
 -
 - Purpose:
 - Process hierarchical data structures efficiently while maintaining referential integrity
@@ -84,7 +96,7 @@
 - hierarchical data structures where parent records contain references to child records.
 -
 - Function Signature:
-- export async function processParentChildGridBatches(
+- export async function processParentChildBatches(
 - totalRecords: number, // Total number of parent records to process
 - startRow: number, // Starting row ID for processing
 - parentTableName: string, // Parent table name
@@ -101,34 +113,54 @@
 - Dependencies:
 - - ErrorBufferService (src/utils/errorBufferService.ts) - For buffered error handling
 - - ProgressTracker (src/utils/progressTracker.ts) - For job progress tracking
-- - QueueProcessor (src/services/queueProcessor.ts) - Core queue processing logic
 - - configService (src/config/configService.ts) - For system configuration
-- - fetchParentChildChunk (src/services/parentChildChunkFetcher.ts) - For retrieving parent-child data
+- - streamParentChildData (src/services/parentChildDataFetcher.ts) - For retrieving parent-child data
 - - sendParentChildBatch (src/services/priorityParentChildSender.ts) - For sending data to Priority API
 - - JobCancellationService (src/utils/jobCancellationService.ts) - For handling job cancellations
-- - performBulkUpdateWithService (src/services/dataService.ts) - For updating database records
+- - PerformanceMonitor (src/utils/performanceMonitor.ts) - For tracking processing performance
+- - pLimit - For controlling concurrency
 -
 - Processing Flow:
 - 1.  Initialization:
 - - Configures processing parameters and error buffer
 - - Extracts child table names for response processing
+- - Sets up concurrency limits based on configuration
+- - Initializes performance monitoring
 -
 - 2.  Data Extraction:
-- - Fetches hierarchical data chunks from the database
-- - Distributes across horizontal queues while maintaining parent-child relationships
+- - Uses streamParentChildData to fetch hierarchical data chunks efficiently
+- - Leverages AsyncGenerator pattern for memory-efficient data loading
+- - Maps child records to their parent records using database foreign keys
 -
-- 3.  Queue Processing:
-- - Each queue processes records using a specialized processor function
-- - Child records are linked to their parents during API submissions
-- - Response processing extracts Priority IDs for both parents and children
+- 3.  Concurrent Batch Processing:
+- - Uses worker pool (pLimit) to control concurrency
+- - Each batch is processed independently with parent-child relationships intact
+- - Tracks active jobs for workload management
 -
-- 4.  Relationship Management:
-- - Priority IDs from parent records are cascaded to children
-- - Database updates maintain relationships between entities
+- 4.  API Interaction:
+- - sendParentChildBatch sends hierarchical data to Priority API
+- - Maintains relationships between parent and child records
+- - Uses specialized request formatting for hierarchical data
 -
-- 5.  Error Handling:
+- 5.  Response Processing:
+- - processParentChildResponse extracts IDs for both parents and children
+- - Handles various response formats including arrays and objects
+- - Cascades IDs from parent records to their children
+-
+- 6.  Database Updates:
+- - Updates parent records with their Priority IDs
+- - Updates child records with related parent IDs and their own IDs
+- - Maintains referential integrity in the database
+-
+- 7.  Error Handling:
 - - Hierarchical error tracking ensures all children are marked when a parent fails
 - - Specialized error record updates maintain integrity in failure scenarios
+- - Tracks consecutive failures for potential intervention
+-
+- 8.  Progress Reporting:
+- - Real-time updates on processing speed and completion percentage
+- - Estimated time remaining calculation
+- - Detailed performance metrics for different processing phases
 -
 - Usage:
 - Called by JobManager.executeParentChildProcessing() in src/jobs/jobManager.ts
@@ -150,9 +182,10 @@
 -
 - Key Methods:
 - - addItems(items: QueueItem[]): Adds items to the queue
-- - process(): Processes all items in the queue
+- - process(): Processes all items in the queue with rate limiting and retry logic
 - - setItemProcessor(processor): Customizes how each item is processed
 - - setProgressListener(listener): Sets callback for progress updates
+- - formatErrorMessage(): Creates user-friendly error messages
 -
 - Relationships:
 - - Used by processWithQueues for regular record processing
@@ -172,9 +205,11 @@
 - - configure(options): Set buffer size and flush intervals
 - - addError(error): Add error to buffer
 - - flushAll(): Force flush all buffered errors
+- - setLoggingEnabled(enabled): Controls detailed error logging
 -
 - Relationships:
 - - Used by both processing methods to optimize error handling performance
+- - Reduces database load during heavy processing
     \*/
 
 /\*\*
@@ -189,30 +224,31 @@
 - - initJob(jobId, totalRecords): Initialize tracking for a job
 - - updateProgress(jobId, processed, success, failures): Update job progress
 - - completeJob(jobId, status): Mark job as complete
+- - getProgress(jobId): Retrieve current progress for a job
 -
 - Relationships:
 - - Used by both processing methods to report progress to clients via Socket.IO
+- - Integrates with EmailNotificationService for periodic status updates
     \*/
 
 /\*\*
 
 - Parent-Child Data Services
 -
-- fetchParentChildChunk
-- Location: src/services/parentChildChunkFetcher.ts
-- Purpose: Fetches parent records with their associated child records
+- streamParentChildData
+- Location: src/services/parentChildDataFetcher.ts
+- Purpose: Creates a memory-efficient stream of parent-child data for processing
+- Implementation: Uses AsyncGenerator pattern for lazy evaluation
 -
 - sendParentChildBatch
 - Location: src/services/priorityParentChildSender.ts
-- Purpose: Sends parent-child data to Priority API
--
-- streamParentChildData
-- Location: src/services/parentChildDataFetcher.ts
-- Purpose: Creates a stream of parent-child data for efficient processing
+- Purpose: Sends parent-child data to Priority API with appropriate formatting
+- Features: Performance monitoring, error handling, retry logic
 -
 - processParentChildResponse
 - Location: src/services/priorityParentChildResponseProcessor.ts
 - Purpose: Processes API responses for parent-child data and updates database records
+- Capabilities: Handles various response formats, extracts IDs, maintains relationships
   \*/
 
 /\*\*
@@ -227,6 +263,7 @@
 - - executeStandardProcessing(): Handles regular queue processing
 - - executeParentChildProcessing(): Handles parent-child grid processing
 - - startJob(): Entry point for job execution
+- - updateJobStatus(): Updates job records in database
 -
 - Processing Selection Logic:
 - Based on job configuration or system defaults, JobManager decides whether to use:
@@ -280,13 +317,11 @@
 - ↓
 - processParentChildGridBatches()
 - ↓
-- Fetch parent-child data ← Database
+- streamParentChildData generates hierarchical records ← Database
 - ↓
-- Distribute to horizontal queues
+- Distribute to concurrent worker pool (pLimit)
 - ↓
-- For each queue:
-- QueueProcessor.process() with custom processor
--       ↓
+- For each batch:
 - sendParentChildBatch() → Priority ERP
 -       ↓                         ↓
 - processParentChildResponse() ← Process hierarchical data
@@ -295,7 +330,7 @@
 -       ↓
 - Update child records with parent IDs → Database
 -       ↓
-- Aggregate results and return
+- Aggregate results and calculate performance metrics
 - ↓
 - JobManager updates job status
 - ↓
@@ -321,11 +356,20 @@
 - Default: 1000
 -
 - CONCURRENT_BATCHES (for parent-child processing)
-- Purpose: Controls the maximum number of concurrent batches
-- Impact: Balanced against server capacity and API rate limits
+- Purpose: Controls the maximum number of concurrent API request batches
+- Impact: Balanced against server capacity, API rate limits, and database load
+- Adaptive: Scales based on available server resources (calculated from server count)
 -
 - Memory Management:
 - - Both processing methods release references to processed data
-- - Parent-child processing carefully manages large object references
+- - Parent-child processing uses AsyncGenerator pattern for memory efficiency
 - - Error buffering prevents memory issues from large error volumes
+- - Garbage collection assistance in cleanup phases
+-
+- Database Optimizations:
+- - Bulk update operations for improved performance
+- - Table schema caching for frequent operations
+- - Temporary tables for large join operations
+- - Deadlock handling and retry mechanisms
+- - Adaptive column type selection based on data content
     \*/
