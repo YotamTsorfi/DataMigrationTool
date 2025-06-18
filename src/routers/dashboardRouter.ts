@@ -419,8 +419,7 @@ router.get(
         FROM ${sourceTableName}
         WHERE is_eligible = 1 
           AND (Status IS NULL OR Status = 'Failed')
-          AND CleanError IS NOT NULL
-          AND CreatedBy = 'Yotam'
+          AND CleanError IS NOT NULL          
         GROUP BY CleanError
         ORDER BY COUNT(*) DESC
       `;
@@ -431,8 +430,7 @@ router.get(
         FROM ${sourceTableName}
         WHERE is_eligible = 1 
           AND (Status IS NULL OR Status = 'Failed')
-          AND CleanError IS NOT NULL
-          AND CreatedBy = 'Yotam'
+          AND CleanError IS NOT NULL          
       `;
 
       const [errorGroups, totalErrorsResult] = await Promise.all([
