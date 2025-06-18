@@ -1,4 +1,6 @@
-// import * as fs from "fs";
+// Main server application entry point - Provides HTTP/WebSocket server and initializes
+// all required services including the resilient job scheduler for recovery from interruptions
+
 import path from "path";
 
 // Load environment variables before anything else
@@ -13,7 +15,6 @@ import { config } from "./config/config";
 import { writeToLogFile } from "./config/logger";
 import PerformanceMonitor from "./utils/performanceMonitor";
 import priorityRoutes from "./routers/priorityRoutes";
-// import userRouter from "./routers/userRouter";
 import jobRoutes from "./routers/jobRouters";
 import configRouter from "./routers/configRouters";
 import dashboardRouter from "./routers/dashboardRouter";
@@ -21,6 +22,8 @@ import authRouter from "./routers/authRouter";
 import whereClauseRouter from "./routers/whereClauseRouter";
 import jobTypesRouter from "./routers/jobTypesRouter";
 import jobSchedulerRouter from "./routers/jobSchedulerRouter";
+// Import the job scheduler initialization function
+import { initializeJobScheduler } from "./controllers/jobSchedulerController";
 
 // Initialize Express app
 const app = express();
@@ -67,13 +70,9 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Add auth middleware globally for optional user identification
-// app.use(authMiddleware.optionalToken);
-
 // Routers
 app.use("/auth", authRouter);
 app.use("/priority", priorityRoutes);
-// app.use("/api", userRouter);
 app.use("/job", jobRoutes);
 app.use("/config", configRouter);
 app.use("/dashboard", dashboardRouter);
@@ -98,6 +97,24 @@ httpServer.listen(port, "0.0.0.0", () => {
     "general.log",
     `[INFO] Server started in ${Date.now() - startupTime}ms`
   );
+
+  // Initialize job scheduler with recovery capability after server has started
+  initializeJobScheduler()
+    .then(() => {
+      console.log("✅ Job scheduler initialized with recovery capabilities");
+      writeToLogFile(
+        "general.log",
+        `[INFO] Job scheduler initialized with recovery capabilities`
+      );
+    })
+    .catch((error) => {
+      console.error("❌ Failed to initialize job scheduler:", error);
+      writeToLogFile(
+        "error.log",
+        `[ERROR] Failed to initialize job scheduler: ${error.message}`
+      );
+    });
+
   PerformanceMonitor.logServerMetrics();
 });
 
