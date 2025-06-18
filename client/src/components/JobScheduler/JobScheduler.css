@@ -1,19 +1,25 @@
 .job-table {
   width: 100%;
   border-collapse: collapse;
+  margin-top: 20px;
   margin-bottom: 20px;
 }
 
 .job-table th,
 .job-table td {
-  padding: 10px;
-  border: 1px solid #ddd;
+  padding: 12px;
   text-align: left;
+  border-bottom: 1px solid #e8e8e8;
 }
 
 .job-table th {
-  background-color: #f2f2f2;
-  font-weight: bold;
+  background-color: #fafafa;
+  font-weight: 500;
+  color: #444;
+}
+
+.job-table tr:hover {
+  background-color: #fafafa;
 }
 
 .active-job {
@@ -27,7 +33,7 @@
 
 .status-active {
   color: #1890ff;
-  font-weight: bold;
+  font-weight: 500;
 }
 
 .status-completed {
@@ -35,5 +41,38 @@
 }
 
 .status-failed {
-  color: #f5222d;
+  color: #ff4d4f;
+}
+
+.pause-button {
+  background-color: #faad14;
+  color: #fff;
+}
+
+.pause-button:hover:not(:disabled) {
+  background-color: #d48806;
+}
+
+.resume-button:hover:not(:disabled) {
+  background-color: #389e0d;
+}
+
+/* Style for the pause button when pausing is in progress */
+.pause-button.pausing {
+  background-color: #d4b106;
+  opacity: 0.8;
+  cursor: not-allowed;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0.6;
+  }
 }

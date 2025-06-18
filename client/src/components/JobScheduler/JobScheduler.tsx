@@ -1,6 +1,7 @@
 /**
- * Job Scheduler component that executes jobs in sequence based on their RunOrder value.
- * Jobs are processed one after another, with each job completing before the next one starts.
+ * JobScheduler component that manages sequential job processing with pause/resume capabilities.
+ * Provides real-time status updates, resilient operation recovery, and a user-friendly
+ * interface for controlling job execution flow.
  */
 import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
@@ -43,58 +44,28 @@ interface SchedulerStatus {
   }>;
 }
 
+// Define job scheduler states for clarity
+enum JobSchedulerState {
+  IDLE = "idle",
+  RUNNING = "running",
+  PAUSING = "pausing",
+  PAUSED = "paused",
+}
+
 const JobScheduler: React.FC = () => {
+  // Use a single state to track the scheduler's current state
+  const [schedulerState, setSchedulerState] = useState<JobSchedulerState>(
+    JobSchedulerState.IDLE
+  );
   const [jobTypes, setJobTypes] = useState<JobType[]>([]);
-  const [isRunning, setIsRunning] = useState(false);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
-  // eslint-disable-next-line
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_schedulerJobId, setSchedulerJobId] = useState<string | null>(null);
+  const [lastActiveJob, setLastActiveJob] = useState<string | null>(null);
   const { disabled, isAuthenticated } = useAuthProtection();
 
-  // Memoize the fetchSchedulerStatus function to prevent unnecessary rerenders
-  const fetchSchedulerStatus = useCallback(async () => {
-    try {
-      const response = await axios.get(
-        `${process.env.REACT_APP_API_URL}/api/job-scheduler/status`
-      );
-      const status: SchedulerStatus = response.data;
-
-      setIsRunning(status.isRunning);
-
-      if (status.activeJob) {
-        setActiveJobId(status.activeJob.jobId);
-      } else {
-        setActiveJobId(null);
-      }
-
-      // Update job statuses based on queue
-      if (status.jobQueue) {
-        setJobTypes((prev) =>
-          prev.map((job) => {
-            const queueItem = status.jobQueue.find(
-              (item) => item.jobTypeId === job.JobTypeId
-            );
-
-            return queueItem ? { ...job, status: queueItem.status } : job;
-          })
-        );
-      }
-
-      // If scheduler is not running anymore and we had it as running, fetch fresh job data
-      if (!status.isRunning && isRunning) {
-        fetchJobTypes();
-      }
-
-      // Store scheduler job ID if available
-      if (status.schedulerJobId) {
-        setSchedulerJobId(status.schedulerJobId);
-      }
-    } catch (error) {
-      console.error("Error fetching scheduler status:", error);
-    }
-  }, [isRunning]); // Include isRunning as a dependency
-
-  const fetchJobTypes = async () => {
+  // Define fetchJobTypes first, wrapped in its own useCallback
+  const fetchJobTypes = useCallback(async (): Promise<void> => {
     try {
       const response = await axios.get(
         `${process.env.REACT_APP_API_URL}/api/jobtypes`
@@ -111,23 +82,171 @@ const JobScheduler: React.FC = () => {
       console.error("Error fetching job types:", error);
       toast.error("Failed to load job types");
     }
+  }, []);
+
+  // Memoize the fetchSchedulerStatus function with fetchJobTypes as dependency
+  const fetchSchedulerStatus = useCallback(async (): Promise<void> => {
+    try {
+      const response = await axios.get(
+        `${process.env.REACT_APP_API_URL}/api/job-scheduler/status`
+      );
+      const status: SchedulerStatus = response.data;
+
+      // Track the last active job ID for comparing state changes
+      const currentActiveJobId = status.activeJob?.jobId || null;
+
+      // Update job statuses based on queue
+      if (status.jobQueue) {
+        setJobTypes((prev) =>
+          prev.map((job) => {
+            const queueItem = status.jobQueue.find(
+              (item) => item.jobTypeId === job.JobTypeId
+            );
+            return queueItem ? { ...job, status: queueItem.status } : job;
+          })
+        );
+      }
+
+      // Update active job information
+      if (status.activeJob) {
+        setActiveJobId(currentActiveJobId);
+      } else {
+        setActiveJobId(null);
+      }
+
+      // Store scheduler job ID if available
+      if (status.schedulerJobId) {
+        setSchedulerJobId(status.schedulerJobId);
+      }
+
+      // Handle state transitions based on server status and current state
+      switch (schedulerState) {
+        case JobSchedulerState.PAUSING:
+          // Only transition to PAUSED when the job is confirmed to be not running
+          // AND we have a scheduler job ID AND the active job has changed or disappeared
+          if (
+            !status.isRunning &&
+            status.schedulerJobId &&
+            (lastActiveJob !== currentActiveJobId ||
+              currentActiveJobId === null)
+          ) {
+            console.log("Pause confirmed: Job has stopped running");
+            setSchedulerState(JobSchedulerState.PAUSED);
+            toast.success("Job sequence paused successfully");
+
+            // If the job completely finished while pausing, refresh job types
+            if (!status.schedulerJobId) {
+              fetchJobTypes();
+            }
+          }
+          break;
+
+        case JobSchedulerState.RUNNING:
+          // If server shows not running but we think we're running,
+          // either job completed or there was an error
+          if (!status.isRunning) {
+            setSchedulerState(JobSchedulerState.IDLE);
+            fetchJobTypes();
+          }
+          break;
+
+        case JobSchedulerState.PAUSED:
+          // If server shows running but we're in paused state,
+          // someone else might have resumed the job
+          if (status.isRunning) {
+            setSchedulerState(JobSchedulerState.RUNNING);
+          }
+          break;
+
+        case JobSchedulerState.IDLE:
+          // If server shows running but we're idle, update to running
+          if (status.isRunning) {
+            setSchedulerState(JobSchedulerState.RUNNING);
+          }
+          break;
+      }
+
+      // Update the last active job ID for comparison in next poll
+      setLastActiveJob(currentActiveJobId);
+    } catch (error) {
+      console.error("Error fetching scheduler status:", error);
+    }
+  }, [schedulerState, fetchJobTypes, lastActiveJob]);
+
+  const pauseJobScheduler = async (): Promise<void> => {
+    try {
+      // Set state to pausing to prevent further interactions
+      setSchedulerState(JobSchedulerState.PAUSING);
+
+      toast.info(
+        "Job sequence pause requested. Processing will stop shortly..."
+      );
+
+      // Send the pause request to the server
+      await axios.post(
+        `${process.env.REACT_APP_API_URL}/api/job-scheduler/stop`
+      );
+
+      // The fetchSchedulerStatus will handle the transition to PAUSED
+      // when it detects the job is truly stopped
+    } catch (error) {
+      console.error("Error pausing job sequence:", error);
+      toast.error("Failed to pause job sequence");
+
+      // Revert to running state if pause request failed
+      setSchedulerState(JobSchedulerState.RUNNING);
+    }
+  };
+
+  const resumeJobScheduler = async (): Promise<void> => {
+    try {
+      // Only proceed if we're in the fully paused state
+      if (schedulerState !== JobSchedulerState.PAUSED) {
+        console.log("Cannot resume - scheduler not in paused state");
+        return;
+      }
+
+      // Set to running first to prevent multiple clicks
+      setSchedulerState(JobSchedulerState.RUNNING);
+
+      await axios.post(
+        `${process.env.REACT_APP_API_URL}/api/job-scheduler/resume`
+      );
+
+      toast.success("Job sequence resumed successfully");
+
+      // Fetch updated status immediately
+      await fetchSchedulerStatus();
+    } catch (error) {
+      console.error("Error resuming job sequence:", error);
+      toast.error("Failed to resume job sequence");
+
+      // Revert to paused state if resume failed
+      setSchedulerState(JobSchedulerState.PAUSED);
+    }
   };
 
   useEffect(() => {
+    // Initial data loading
     fetchJobTypes();
+    fetchSchedulerStatus();
 
-    // Poll for status updates when running
+    // Poll for status updates when in non-idle states
     let intervalId: NodeJS.Timeout;
-    if (isRunning) {
-      intervalId = setInterval(fetchSchedulerStatus, 2000);
+    if (schedulerState !== JobSchedulerState.IDLE) {
+      intervalId = setInterval(
+        fetchSchedulerStatus,
+        // Poll more frequently during transitions
+        schedulerState === JobSchedulerState.PAUSING ? 500 : 2000
+      );
     }
 
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
-  }, [isRunning, fetchSchedulerStatus]); // Added fetchSchedulerStatus as dependency
+  }, [schedulerState, fetchSchedulerStatus, fetchJobTypes]);
 
-  const startJobSequence = async () => {
+  const startJobSequence = async (): Promise<void> => {
     if (!isAuthenticated) {
       toast.error("Please login to perform this action");
       return;
@@ -139,7 +258,8 @@ const JobScheduler: React.FC = () => {
     }
 
     try {
-      setIsRunning(true);
+      // Update state immediately for UI responsiveness
+      setSchedulerState(JobSchedulerState.RUNNING);
 
       const response = await axios.post(
         `${process.env.REACT_APP_API_URL}/api/job-scheduler/start`
@@ -149,11 +269,53 @@ const JobScheduler: React.FC = () => {
       toast.success("Job sequence started successfully");
 
       // Immediately fetch status to get active job
-      fetchSchedulerStatus();
+      await fetchSchedulerStatus();
     } catch (error) {
       console.error("Error starting job sequence:", error);
       toast.error("Failed to start job sequence");
-      setIsRunning(false);
+      setSchedulerState(JobSchedulerState.IDLE);
+    }
+  };
+
+  // Render the appropriate action button based on scheduler state
+  const renderActionButton = (): React.ReactNode => {
+    switch (schedulerState) {
+      case JobSchedulerState.PAUSED:
+        return (
+          <SecureButton
+            onClick={resumeJobScheduler}
+            disabled={disabled}
+            className="resume-button"
+          >
+            Resume Job Sequence
+          </SecureButton>
+        );
+
+      case JobSchedulerState.RUNNING:
+        return (
+          <SecureButton
+            onClick={pauseJobScheduler}
+            disabled={disabled}
+            className="pause-button"
+          >
+            Pause Job Sequence
+          </SecureButton>
+        );
+
+      case JobSchedulerState.PAUSING:
+        return (
+          <SecureButton disabled={true} className="pause-button pausing">
+            Pausing...
+          </SecureButton>
+        );
+
+      case JobSchedulerState.IDLE:
+      default:
+        return (
+          <SecureButton onClick={startJobSequence} disabled={disabled}>
+            Execute Job Sequence
+          </SecureButton>
+        );
     }
   };
 
@@ -169,40 +331,33 @@ const JobScheduler: React.FC = () => {
         <table className="job-table">
           <thead>
             <tr>
-              <th>Run Order</th>
+              <th>Order</th>
               <th>Job Name</th>
               <th>Table Name</th>
-              <th>Processing Method</th>
               <th>Status</th>
             </tr>
           </thead>
           <tbody>
             {jobTypes.map((job) => (
-              <tr
-                key={job.JobTypeId}
-                className={job.status === "active" ? "active-job" : ""}
-              >
+              <tr key={job.JobTypeId}>
                 <td>{job.RunOrder}</td>
                 <td>{job.JobTypeName}</td>
                 <td>{job.DBTableName}</td>
-                <td>{job.linkedField ? "Parent-Child Grid" : "Queue"}</td>
                 <td className={`status-${job.status || "pending"}`}>
                   {job.status || "Pending"}
                 </td>
               </tr>
             ))}
+            {jobTypes.length === 0 && (
+              <tr>
+                <td colSpan={4}>No scheduled jobs found</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </SectionContainer>
 
-      <ButtonGroup>
-        <SecureButton
-          onClick={startJobSequence}
-          disabled={isRunning || disabled}
-        >
-          {isRunning ? "Running..." : "Execute Job Sequence"}
-        </SecureButton>
-      </ButtonGroup>
+      <ButtonGroup>{renderActionButton()}</ButtonGroup>
 
       {activeJobId && (
         <SectionContainer>

@@ -7,6 +7,7 @@ import {
   startJobScheduler,
   getJobSchedulerStatus,
   stopJobScheduler,
+  resumeJobScheduler,
 } from "../controllers/jobSchedulerController";
 
 // Create router instance
@@ -50,6 +51,20 @@ router.post("/stop", (req: Request, res: Response): void => {
     res.status(500).json({
       success: false,
       message: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+});
+
+// Resume the job scheduler - add this new endpoint
+router.post("/resume", (req: Request, res: Response): void => {
+  try {
+    resumeJobScheduler(req, res);
+  } catch (error) {
+    console.error("Error in resume job scheduler route:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to resume job scheduler",
+      error: error instanceof Error ? error.message : "Unknown error",
     });
   }
 });
