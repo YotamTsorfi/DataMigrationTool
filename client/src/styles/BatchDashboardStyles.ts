@@ -131,12 +131,22 @@ export const FilterItem = styled.div`
 export const DataTable = styled.table`
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
 
   th,
   td {
     padding: 10px;
     text-align: left;
     border-bottom: 1px solid #eee;
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
+
+  th:first-child,
+  td:first-child {
+    width: 200px; /* Adjust width for JobId column */
+    white-space: normal;
+    overflow: visible;
   }
 
   th {

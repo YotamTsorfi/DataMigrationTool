@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from "uuid";
 import { DatabaseService } from "../services/databaseService";
 import { JobManager } from "../jobs/jobManager";
 import { JobCancellationService } from "../utils/jobCancellationService";
+import { configService } from "../config/configService";
 
 // Define types for database query results
 interface JobType {
@@ -342,6 +343,9 @@ async function processNextJobWithoutStateUpdate(): Promise<void> {
     // Create job manager instance
     const jobManager = new JobManager();
 
+    const config = await configService.getConfig();
+    const company = config.PRIORITY_COMPANY || "";
+
     // Determine processing type based on linkedField
     const processingType = jobDetails.linkedField
       ? "grid-parent-child"
@@ -350,11 +354,11 @@ async function processNextJobWithoutStateUpdate(): Promise<void> {
     // Create job history record
     await DatabaseService.executeQuery(
       `INSERT INTO PriorityJobsHistory 
-         (JobId, JobName, TableName, ScreenName, StartTime, TotalRecords, 
-          SuccessCount, FailureCount, Status, ProcessingType, IsParentChildJob)
-       VALUES 
-         (@JobId, @JobName, @TableName, @ScreenName, GETDATE(), @TotalRecords,
-          0, 0, 'Running', @ProcessingType, 0)`,
+     (JobId, JobName, TableName, ScreenName, StartTime, TotalRecords, 
+      SuccessCount, FailureCount, Status, ProcessingType, IsParentChildJob, Company, CreatedBy)
+   VALUES 
+     (@JobId, @JobName, @TableName, @ScreenName, GETDATE(), @TotalRecords,
+      0, 0, 'Running', @ProcessingType, 0, @Company, @CreatedBy)`,
       {
         JobId: jobId,
         JobName: nextJob.jobTypeName,
@@ -362,6 +366,8 @@ async function processNextJobWithoutStateUpdate(): Promise<void> {
         ScreenName: jobDetails.ScreenName,
         TotalRecords: totalCount,
         ProcessingType: processingType,
+        Company: company,
+        CreatedBy: "Yotam",
       }
     );
 
