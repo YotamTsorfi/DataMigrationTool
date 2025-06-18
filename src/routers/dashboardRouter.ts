@@ -74,12 +74,14 @@ router.get(
         SUM(CASE WHEN CONVERT(DATE, StartTime) = CONVERT(DATE, GETDATE()) THEN 1 ELSE 0 END) AS todayJobs
       FROM PriorityJobsHistory
       ${whereClause}
+      AND CreatedBy = 'Yotam'
     `;
 
       const tableDistributionQuery = `
       SELECT TableName, COUNT(*) as Count
       FROM PriorityJobsHistory
       ${whereClause}
+      AND CreatedBy = 'Yotam'
       GROUP BY TableName
       ORDER BY Count DESC
     `;
@@ -254,6 +256,7 @@ router.get("/errors", async (req: Request, res: Response): Promise<void> => {
       SELECT *
       FROM PriorityErrorLogs
       ${whereClause}
+      AND CreatedBy = 'Yotam'
       ORDER BY Timestamp DESC
       OFFSET ${offset} ROWS
       FETCH NEXT ${limit} ROWS ONLY
@@ -329,6 +332,7 @@ router.get(
       SELECT *
       FROM PriorityJobsHistory
       ${whereClause}
+      AND CreatedBy = 'Yotam'
       ORDER BY StartTime DESC
     `;
 
@@ -416,6 +420,7 @@ router.get(
         WHERE is_eligible = 1 
           AND (Status IS NULL OR Status = 'Failed')
           AND CleanError IS NOT NULL
+          AND CreatedBy = 'Yotam'
         GROUP BY CleanError
         ORDER BY COUNT(*) DESC
       `;
@@ -427,6 +432,7 @@ router.get(
         WHERE is_eligible = 1 
           AND (Status IS NULL OR Status = 'Failed')
           AND CleanError IS NOT NULL
+          AND CreatedBy = 'Yotam'
       `;
 
       const [errorGroups, totalErrorsResult] = await Promise.all([
@@ -623,7 +629,8 @@ router.post(
           ErrorStatus,
           OriginalRowIdentifier,
           CleanError,
-          StatusCode
+          StatusCode,
+          CreatedBy
         )
         SELECT
           JobName,
@@ -636,7 +643,8 @@ router.post(
           'New' as ErrorStatus,
           reference_id as OriginalRowIdentifier,
           CleanError,
-          StatusCode
+          StatusCode,
+          'Yotam' as CreatedBy
         FROM ${sourceTableName} source
         WHERE Status = 'Failed' AND is_eligible = 1
         AND NOT EXISTS (

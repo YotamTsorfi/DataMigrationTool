@@ -69,8 +69,8 @@ class JobManager {
 
     await DatabaseService.executeQuery(
       `
-    INSERT INTO PriorityJobsHistory (JobId, JobName, TableName, ScreenName, StartTime, TotalRecords, Status, ProcessingType, IsParentChildJob, Company)
-    VALUES (@JobId, @JobName, @TableName, @ScreenName, @StartTime, @TotalRecords, @Status, @ProcessingType, 0, @Company)
+    INSERT INTO PriorityJobsHistory (JobId, JobName, TableName, ScreenName, StartTime, TotalRecords, Status, ProcessingType, IsParentChildJob, Company, CreatedBy)
+    VALUES (@JobId, @JobName, @TableName, @ScreenName, @StartTime, @TotalRecords, @Status, @ProcessingType, 0, @Company, @CreatedBy)
   `,
       {
         JobId: jobId,
@@ -81,7 +81,8 @@ class JobManager {
         TotalRecords: jobRequest.recordCount,
         Status: "Queued",
         ProcessingType: jobRequest.processingType || "batch", // Default to "batch" if not provided
-        Company: company, // Add the company parameter
+        Company: company,
+        CreatedBy: "Yotam",
       }
     );
 
