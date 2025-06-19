@@ -34,9 +34,13 @@ export const JobTypeForm: React.FC<JobTypeFormProps> = ({
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
     const { name, value } = e.target;
+
+    // Convert to number for numeric fields
+    const updatedValue = name === "RunOrder" ? Number(value) : value;
+
     setFormState({
       ...formState,
-      [name]: value,
+      [name]: updatedValue,
     });
 
     // Clear error when field is edited
