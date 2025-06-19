@@ -15,10 +15,16 @@ import {
   ErrorMessage,
   InfoBox,
   ButtonGroup,
+  Table,
+  Th,
+  Td,
+  TableContainer,
 } from "./BatchProcessorStyles";
 import JobProgressTracker from "./JobProgressTracker";
 import SecureButton from "./SecureButton";
 import { useAuthProtection } from "./withAuthProtection";
+import { fetchChildJobs as fetchChildJobsFromService } from "../services/jobTypesService";
+import { IChildJob } from "./JobTypesManager/JobTypesManager";
 //---------------------------------------------
 
 interface JobType {
@@ -29,7 +35,6 @@ interface JobType {
   priority_id: string;
   linkedField: string;
 }
-
 interface ConfigItem {
   ConfigKey: string;
   ConfigValue: string;
@@ -50,13 +55,17 @@ const BatchProcessor: React.FC = () => {
   const [priorityJobTypeId, setPriorityJobTypeId] = useState(0);
   const { disabled, isAuthenticated } = useAuthProtection();
 
-  // New state for WHERE clause functionality
+  // State for WHERE clause functionality
   const [customWhereClause, setCustomWhereClause] = useState<string>("");
   const [whereClauseError, setWhereClauseError] = useState<string | null>(null);
   const [baseWhereClause, setBaseWhereClause] = useState<string>("");
   const [isValidatingWhereClause, setIsValidatingWhereClause] = useState(false);
   const [isSavingWhereClause, setIsSavingWhereClause] = useState(false);
   const [processAllRecords, setProcessAllRecords] = useState(false);
+
+  // State for child jobs
+  const [childJobs, setChildJobs] = useState<IChildJob[]>([]);
+  const [isLoadingChildJobs, setIsLoadingChildJobs] = useState(false);
   //---------------------------------------------
 
   const handleProcessAllRecordsChange = (
@@ -97,6 +106,22 @@ const BatchProcessor: React.FC = () => {
     fetchJobTypes();
     fetchProcessingType();
   }, []);
+  //---------------------------------------------
+  const fetchChildJobs = async (jobTypeId: number): Promise<void> => {
+    if (!jobTypeId) return;
+
+    setIsLoadingChildJobs(true);
+    try {
+      const data = await fetchChildJobsFromService(jobTypeId);
+      setChildJobs(data);
+    } catch (error) {
+      console.error("Error fetching child jobs:", error);
+      toast.error("Failed to load child jobs");
+      setChildJobs([]);
+    } finally {
+      setIsLoadingChildJobs(false);
+    }
+  };
   //---------------------------------------------
   /**
    * Clears the WHERE clause for the selected job type
@@ -229,12 +254,16 @@ const BatchProcessor: React.FC = () => {
       setPriorityIdField(selectedJob.priority_id || "");
       setPriorityLinkedField(selectedJob.linkedField || "");
       setPriorityJobTypeId(selectedJob.JobTypeId || 0);
+
+      // Fetch child jobs when a job type is selected
+      fetchChildJobs(selectedJob.JobTypeId);
     } else {
       setTableName("");
       setPriorityScreenName("");
       setPriorityIdField("");
       setPriorityLinkedField("");
       setPriorityJobTypeId(0);
+      setChildJobs([]);
     }
 
     setSelectedJobType(selectedValue);
@@ -326,8 +355,8 @@ const BatchProcessor: React.FC = () => {
           <h2>Batch/Queue Processor</h2>
 
           <InputContainer>
-            <h3>Processing Type</h3>
             <RadioGroup>
+              <h3>Processing Type</h3>
               <RadioButton>
                 <input
                   type="radio"
@@ -359,135 +388,178 @@ const BatchProcessor: React.FC = () => {
             </RadioGroup>
           </InputContainer>
 
-          <InputContainer>
-            <InputLabel>
-              Job Type:
-              <select value={selectedJobType} onChange={handleJobTypeChange}>
-                <option value="">Select Job Type</option>
-                {jobTypes.map((job: any) => (
-                  <option key={job.JobTypeId} value={job.JobTypeName}>
-                    {job.JobTypeName}
-                  </option>
-                ))}
-              </select>
-            </InputLabel>
-            <InputLabel style={{ display: "flex", alignItems: "center" }}>
-              <br />
-              Process all records:
-              <input
-                type="checkbox"
-                checked={processAllRecords}
-                onChange={handleProcessAllRecordsChange}
-                style={{ marginRight: "8px" }}
-              />
-              <br />
-            </InputLabel>
-            <InputLabel>
-              Record Count:
-              <input
-                type="number"
-                value={recordCount}
-                onChange={(e) => setRecordCount(Number(e.target.value))}
-                disabled={processAllRecords}
-              />
-            </InputLabel>
-            <InputLabel>
-              Start Row:
-              <input
-                type="number"
-                value={startRow}
-                onChange={(e) => setStartRow(Number(e.target.value))}
-                disabled={processAllRecords}
-              />
-            </InputLabel>
-            <InputLabel>
-              DB Table Name:
-              <ReadOnlyInput
-                type="text"
-                value={tableName}
-                onChange={(e) => setTableName(e.target.value)}
-                readOnly
-              />
-            </InputLabel>
-            <InputLabel>
-              Priority Screen Name:
-              <ReadOnlyInput
-                type="text"
-                value={priorityScreenName}
-                onChange={(e) => setPriorityScreenName(e.target.value)}
-                readOnly
-              />
-            </InputLabel>
-            <InputLabel>
-              Priority ID Field:
-              <ReadOnlyInput
-                type="text"
-                value={priorityIdField}
-                onChange={(e) => setPriorityIdField(e.target.value)}
-                readOnly
-              />
-            </InputLabel>
-            <InputLabel>
-              Priority Linked Field:
-              <ReadOnlyInput
-                type="text"
-                value={priorityLinkedField}
-                onChange={(e) => setPriorityLinkedField(e.target.value)}
-                readOnly
-              />
-            </InputLabel>
-
-            {/* Custom WHERE Clause section */}
-            {selectedJobType && (
-              <WhereClauseContainer>
-                <h3>Custom WHERE Clause</h3>
-                <WhereClauseTextarea
-                  value={customWhereClause}
-                  onChange={(e) => setCustomWhereClause(e.target.value)}
-                  placeholder="Enter custom WHERE conditions (e.g. field1 > 100 AND field2 = 'value')"
-                  rows={4}
-                  $hasError={!!whereClauseError}
+          {/* Split InputContainer into two columns for side-by-side layout */}
+          <div style={{ display: "flex", flexDirection: "row", gap: "20px" }}>
+            {/* Left column - Original inputs */}
+            <InputContainer style={{ flex: 0.4 }}>
+              <InputLabel>
+                Job Type:
+                <select value={selectedJobType} onChange={handleJobTypeChange}>
+                  <option value="">Select Job Type</option>
+                  {jobTypes.map((job: any) => (
+                    <option key={job.JobTypeId} value={job.JobTypeName}>
+                      {job.JobTypeName}
+                    </option>
+                  ))}
+                </select>
+              </InputLabel>
+              <InputLabel style={{ display: "flex", alignItems: "center" }}>
+                <br />
+                Process all records:
+                <input
+                  type="checkbox"
+                  checked={processAllRecords}
+                  onChange={handleProcessAllRecordsChange}
+                  style={{ marginRight: "8px" }}
                 />
-                {whereClauseError && (
-                  <ErrorMessage>{whereClauseError}</ErrorMessage>
-                )}
-                <InfoBox>
-                  <strong>Base WHERE clause:</strong>{" "}
-                  <code>{baseWhereClause}</code>
-                  <br />
-                  Your custom clause will be combined with the base clause using
-                  AND.
-                  <br />
-                  Do not include the "WHERE" keyword.
-                </InfoBox>
-                <ButtonGroup>
-                  <SecureButton
-                    onClick={saveWhereClause}
-                    disabled={
-                      isSavingWhereClause || isValidatingWhereClause || disabled
-                    }
-                  >
-                    {isSavingWhereClause ? "Saving..." : "Save WHERE Clause"}
-                  </SecureButton>
-                  <SecureButton
-                    onClick={validateWhereClause}
-                    disabled={isValidatingWhereClause || disabled}
-                  >
-                    {isValidatingWhereClause
-                      ? "Validating..."
-                      : "Validate Syntax"}
-                  </SecureButton>
-                  <SecureButton
-                    onClick={clearWhereClause}
-                    disabled={isSavingWhereClause || disabled}
-                    style={disabled ? {} : { backgroundColor: "#dc3545" }}
-                  >
-                    Clear WHERE Clause
-                  </SecureButton>
-                </ButtonGroup>
-              </WhereClauseContainer>
-            )}
-          </InputContainer>
+                <br />
+              </InputLabel>
+              <InputLabel>
+                Record Count:
+                <input
+                  type="number"
+                  value={recordCount}
+                  onChange={(e) => setRecordCount(Number(e.target.value))}
+                  disabled={processAllRecords}
+                />
+              </InputLabel>
+              <InputLabel>
+                Start Row:
+                <input
+                  type="number"
+                  value={startRow}
+                  onChange={(e) => setStartRow(Number(e.target.value))}
+                  disabled={processAllRecords}
+                />
+              </InputLabel>
+              <InputLabel>
+                DB Table Name:
+                <ReadOnlyInput
+                  type="text"
+                  value={tableName}
+                  onChange={(e) => setTableName(e.target.value)}
+                  readOnly
+                />
+              </InputLabel>
+              <InputLabel>
+                Priority Screen Name:
+                <ReadOnlyInput
+                  type="text"
+                  value={priorityScreenName}
+                  onChange={(e) => setPriorityScreenName(e.target.value)}
+                  readOnly
+                />
+              </InputLabel>
+              <InputLabel>
+                Priority ID Field:
+                <ReadOnlyInput
+                  type="text"
+                  value={priorityIdField}
+                  onChange={(e) => setPriorityIdField(e.target.value)}
+                  readOnly
+                />
+              </InputLabel>
+              <InputLabel>
+                Priority Linked Field:
+                <ReadOnlyInput
+                  type="text"
+                  value={priorityLinkedField}
+                  onChange={(e) => setPriorityLinkedField(e.target.value)}
+                  readOnly
+                />
+              </InputLabel>
+            </InputContainer>
+
+            {/* Right column - Child jobs display */}
+            <InputContainer style={{ flex: 0.6 }}>
+              <h3>Child Jobs</h3>
+              {isLoadingChildJobs ? (
+                <p>Loading child jobs...</p>
+              ) : Array.isArray(childJobs) && childJobs.length > 0 ? (
+                <TableContainer>
+                  <Table>
+                    <thead>
+                      <tr>
+                        <Th>Job Type Name</Th>
+                        <Th>DB Table</Th>
+                        <Th>Screen Name</Th>
+                        <Th>Has Siblings</Th>
+                        <Th>Priority ID</Th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {childJobs.map((childJob) => (
+                        <tr
+                          key={childJob.ChildJobeId || `child-${Math.random()}`}
+                        >
+                          <Td>{childJob.JobTypeName}</Td>
+                          <Td>{childJob.DBTableName}</Td>
+                          <Td>{childJob.ScreenName}</Td>
+                          <Td>{childJob.HasSiblings ? "Yes" : "No"}</Td>
+                          <Td>{childJob.priority_id || "-"}</Td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                </TableContainer>
+              ) : selectedJobType ? (
+                <p>No child jobs found for this job type.</p>
+              ) : (
+                <p>Select a job type to view child jobs.</p>
+              )}
+            </InputContainer>
+          </div>
+
+          {/* Custom WHERE Clause section */}
+          {selectedJobType && (
+            <WhereClauseContainer>
+              <h3>Custom WHERE Clause</h3>
+              <WhereClauseTextarea
+                value={customWhereClause}
+                onChange={(e) => setCustomWhereClause(e.target.value)}
+                placeholder="Enter custom WHERE conditions (e.g. field1 > 100 AND field2 = 'value')"
+                rows={4}
+                $hasError={!!whereClauseError}
+              />
+              {whereClauseError && (
+                <ErrorMessage>{whereClauseError}</ErrorMessage>
+              )}
+              <InfoBox>
+                <strong>Base WHERE clause:</strong>{" "}
+                <code>{baseWhereClause}</code>
+                <br />
+                Your custom clause will be combined with the base clause using
+                AND.
+                <br />
+                Do not include the "WHERE" keyword.
+              </InfoBox>
+              <ButtonGroup>
+                <SecureButton
+                  onClick={saveWhereClause}
+                  disabled={
+                    isSavingWhereClause || isValidatingWhereClause || disabled
+                  }
+                >
+                  {isSavingWhereClause ? "Saving..." : "Save WHERE Clause"}
+                </SecureButton>
+                <SecureButton
+                  onClick={validateWhereClause}
+                  disabled={isValidatingWhereClause || disabled}
+                >
+                  {isValidatingWhereClause
+                    ? "Validating..."
+                    : "Validate Syntax"}
+                </SecureButton>
+                <SecureButton
+                  onClick={clearWhereClause}
+                  disabled={isSavingWhereClause || disabled}
+                  style={disabled ? {} : { backgroundColor: "#dc3545" }}
+                >
+                  Clear WHERE Clause
+                </SecureButton>
+              </ButtonGroup>
+            </WhereClauseContainer>
+          )}
 
           <SecureButton
             onClick={handleBatchProcess}
