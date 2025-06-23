@@ -256,10 +256,6 @@ class JobManager {
           countQuery += ` AND is_new = 1`;
         }
 
-        if (tableInfo.hasColumn("Status")) {
-          countQuery += ` AND (Status IS NULL OR Status = 'Failed')`;
-        }
-
         // Add custom where clause if provided
         if (customWhereClause) {
           countQuery += ` AND ${customWhereClause}`;

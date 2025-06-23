@@ -231,7 +231,7 @@ class ConfigurationService {
    * @returns The base WHERE clause that should always be included
    */
   public getBaseWhereClause(): string {
-    return "is_eligible = 1 AND is_new = 1 AND (Status IS NULL OR Status = 'Failed')";
+    return "is_eligible = 1 AND is_new = 1";
   }
   //------------------------------------------
   /**
