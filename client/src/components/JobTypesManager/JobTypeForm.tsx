@@ -33,10 +33,15 @@ export const JobTypeForm: React.FC<JobTypeFormProps> = ({
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
-    const { name, value } = e.target;
+    const { name, value, type, checked } = e.target;
 
-    // Convert to number for numeric fields
-    const updatedValue = name === "RunOrder" ? Number(value) : value;
+    // Handle different input types
+    const updatedValue =
+      type === "checkbox"
+        ? checked
+        : name === "RunOrder"
+          ? Number(value)
+          : value;
 
     setFormState({
       ...formState,
@@ -192,6 +197,24 @@ export const JobTypeForm: React.FC<JobTypeFormProps> = ({
             disabled={!isAuthenticated}
             data-auth-protected="true"
           />
+        </div>
+
+        <div className="form-group checkbox-group">
+          <input
+            type="checkbox"
+            id="hasDependency"
+            name="hasDependency"
+            checked={formState.hasDependency || false}
+            onChange={(e) => {
+              setFormState({
+                ...formState,
+                hasDependency: e.target.checked,
+              });
+            }}
+            disabled={!isAuthenticated}
+            data-auth-protected="true"
+          />
+          <label htmlFor="hasDependency">Has Dependency</label>
         </div>
 
         <div className="form-group">

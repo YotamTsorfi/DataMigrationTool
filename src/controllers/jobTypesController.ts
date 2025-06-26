@@ -13,7 +13,7 @@ class JobTypesController {
       const jobTypes = await DatabaseService.executeQuery(`
         SELECT 
           JobTypeId, JobTypeName, DBTableName, ScreenName, 
-          SourceSystem, priority_id, linkedField, RunOrder
+          SourceSystem, priority_id, linkedField, RunOrder, isReady, hasDependency
         FROM PriorityJobTypes
         ORDER BY RunOrder ASC
       `);
@@ -36,7 +36,7 @@ class JobTypesController {
         `
         SELECT 
           JobTypeId, JobTypeName, DBTableName, ScreenName, 
-          SourceSystem, priority_id, linkedField, RunOrder
+          SourceSystem, priority_id, linkedField, RunOrder, isReady, hasDependency
         FROM PriorityJobTypes
         WHERE JobTypeId = @id
       `,
@@ -68,24 +68,24 @@ class JobTypesController {
         priority_id,
         linkedField,
         RunOrder,
+        hasDependency,
       } = req.body;
 
       // Validate required fields
       if (!JobTypeName || !DBTableName || !ScreenName) {
-        res
-          .status(400)
-          .json({
-            error: "JobTypeName, DBTableName, and ScreenName are required",
-          });
+        res.status(400).json({
+          error: "JobTypeName, DBTableName, and ScreenName are required",
+        });
         return;
       }
 
       const result = await DatabaseService.executeQuery(
         `
-        INSERT INTO PriorityJobTypes (JobTypeName, DBTableName, ScreenName, SourceSystem, priority_id, linkedField, RunOrder)
+        INSERT INTO PriorityJobTypes (JobTypeName, DBTableName, ScreenName, SourceSystem, priority_id, linkedField, RunOrder, hasDependency)
         OUTPUT INSERTED.JobTypeId, INSERTED.JobTypeName, INSERTED.DBTableName, INSERTED.ScreenName, 
-               INSERTED.SourceSystem, INSERTED.priority_id, INSERTED.linkedField, INSERTED.RunOrder
-        VALUES (@JobTypeName, @DBTableName, @ScreenName, @SourceSystem, @priority_id, @linkedField, @RunOrder)
+            INSERTED.SourceSystem, INSERTED.priority_id, INSERTED.linkedField, INSERTED.RunOrder,
+            INSERTED.isReady, INSERTED.hasDependency
+        VALUES (@JobTypeName, @DBTableName, @ScreenName, @SourceSystem, @priority_id, @linkedField, @RunOrder, @hasDependency)
       `,
         {
           JobTypeName,
@@ -95,6 +95,7 @@ class JobTypesController {
           priority_id: priority_id || null,
           linkedField: linkedField || null,
           RunOrder: RunOrder || 0,
+          hasDependency: hasDependency !== undefined ? hasDependency : false,
         }
       );
 
@@ -119,15 +120,14 @@ class JobTypesController {
         priority_id,
         linkedField,
         RunOrder,
+        hasDependency,
       } = req.body;
 
       // Validate required fields
       if (!JobTypeName || !DBTableName || !ScreenName) {
-        res
-          .status(400)
-          .json({
-            error: "JobTypeName, DBTableName, and ScreenName are required",
-          });
+        res.status(400).json({
+          error: "JobTypeName, DBTableName, and ScreenName are required",
+        });
         return;
       }
 
@@ -154,9 +154,11 @@ class JobTypesController {
           SourceSystem = @SourceSystem,
           priority_id = @priority_id,
           linkedField = @linkedField,
-          RunOrder = @RunOrder
+          RunOrder = @RunOrder,
+          hasDependency = @hasDependency
         OUTPUT INSERTED.JobTypeId, INSERTED.JobTypeName, INSERTED.DBTableName, INSERTED.ScreenName, 
-               INSERTED.SourceSystem, INSERTED.priority_id, INSERTED.linkedField, INSERTED.RunOrder
+              INSERTED.SourceSystem, INSERTED.priority_id, INSERTED.linkedField, INSERTED.RunOrder,
+              INSERTED.isReady, INSERTED.hasDependency
         WHERE JobTypeId = @id
       `,
         {
@@ -168,6 +170,7 @@ class JobTypesController {
           priority_id: priority_id || null,
           linkedField: linkedField || null,
           RunOrder: RunOrder || 0,
+          hasDependency: hasDependency !== undefined ? hasDependency : false,
         }
       );
 
@@ -248,7 +251,7 @@ class JobTypesController {
         `
         SELECT 
           ChildJobeId, JobTypeName, DBTableName, ScreenName, 
-          SourceSystem, priority_id, refParentJobId, HasSiblings
+          SourceSystem, priority_id, refParentJobId, HasSiblings, isReady
         FROM PriorityChildJob
         WHERE refParentJobId = @parentId
       `,
@@ -279,12 +282,10 @@ class JobTypesController {
 
       // Validate required fields
       if (!JobTypeName || !DBTableName || !ScreenName || !refParentJobId) {
-        res
-          .status(400)
-          .json({
-            error:
-              "JobTypeName, DBTableName, ScreenName, and refParentJobId are required",
-          });
+        res.status(400).json({
+          error:
+            "JobTypeName, DBTableName, ScreenName, and refParentJobId are required",
+        });
         return;
       }
 
@@ -344,12 +345,10 @@ class JobTypesController {
 
       // Validate required fields
       if (!JobTypeName || !DBTableName || !ScreenName || !refParentJobId) {
-        res
-          .status(400)
-          .json({
-            error:
-              "JobTypeName, DBTableName, ScreenName, and refParentJobId are required",
-          });
+        res.status(400).json({
+          error:
+            "JobTypeName, DBTableName, ScreenName, and refParentJobId are required",
+        });
         return;
       }
 

@@ -31,6 +31,8 @@ export interface IJobType {
   priority_id: string | null;
   linkedField: string | null;
   RunOrder: number;
+  isReady?: boolean;
+  hasDependency?: boolean;
 }
 
 export interface IChildJob {
@@ -42,6 +44,7 @@ export interface IChildJob {
   priority_id: string | null;
   refParentJobId: number | null;
   HasSiblings: boolean;
+  isReady?: boolean;
 }
 
 const JobTypesManager: React.FC = () => {
@@ -369,6 +372,7 @@ const JobTypesManager: React.FC = () => {
                       <th>Screen Name</th>
                       <th>Has Siblings</th>
                       <th>Priority ID</th>
+                      <th>Ready</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
@@ -387,6 +391,7 @@ const JobTypesManager: React.FC = () => {
                         <td>{childJob.ScreenName}</td>
                         <td>{childJob.HasSiblings ? "Yes" : "No"}</td>
                         <td>{childJob.priority_id || "-"}</td>
+                        <td>{childJob.isReady ? "Yes" : "No"}</td>
                         <td>
                           <SecureButton
                             className="edit-button"
