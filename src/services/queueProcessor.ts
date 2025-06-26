@@ -143,9 +143,9 @@ export class QueueProcessor {
 
   public setRateLimitEnabled(enabled: boolean): void {
     this.enableRateLimit = enabled;
-    console.log(
-      `Queue ${this.queueId}: Rate limiting ${enabled ? "enabled" : "disabled"}`
-    );
+    // console.log(
+    //   `Queue ${this.queueId}: Rate limiting ${enabled ? "enabled" : "disabled"}`
+    // );
   }
   public addItem(item: QueueItem): void {
     this.queue.push(item);
