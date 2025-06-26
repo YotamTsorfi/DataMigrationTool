@@ -21,8 +21,7 @@ export async function fetchDataChunk(
   );
   try {
     // Get base WHERE clause and combine with custom clause if provided
-    const baseWhereClause =
-      "is_eligible = 1 AND is_new = 1 AND (Status IS NULL OR Status = 'Failed')";
+    const baseWhereClause = "is_eligible = 1 AND is_new = 1";
     let whereClause = `RowId > @lastRowId AND ${baseWhereClause}`;
 
     if (customWhereClause) {

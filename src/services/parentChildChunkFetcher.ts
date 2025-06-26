@@ -148,8 +148,7 @@ async function fetchEligibleParentRecords(
       `fetchEligibleParentRecords called with customWhereClause: ${customWhereClause}`
     );
 
-    const baseWhereClause =
-      "is_eligible = 1 AND is_new = 1 AND (Status IS NULL OR Status = 'Failed')";
+    const baseWhereClause = "is_eligible = 1 AND is_new = 1";
     let whereClause = `RowId > @startRow AND ${baseWhereClause}`;
 
     if (customWhereClause) {

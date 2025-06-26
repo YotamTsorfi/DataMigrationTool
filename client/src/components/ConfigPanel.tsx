@@ -105,6 +105,7 @@ const ConfigPanel: React.FC = () => {
           isVisible: config.IsVisible,
         }
       );
+      console.log("Save successful, triggering toast");
       toast.success(`${config.ConfigKey} updated successfully`);
     } catch (error) {
       console.error("Error updating config:", error);

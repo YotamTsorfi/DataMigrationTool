@@ -5,10 +5,11 @@ import { processBatches } from "../jobs/job";
 import ProgressTracker from "../utils/progressTracker";
 import { processWithQueues } from "../jobs/queueJob";
 // import { processParentChildBatches } from "../jobs/jobParentAndChilds";
-import { processParentChildGridBatches } from "../jobs/parentChildsGridProcess";
+// import { processParentChildGridBatches } from "../jobs/parentChildsGridProcess";
 import { ErrorBufferService } from "../utils/errorBufferService";
 import { JobCancellationService } from "../utils/jobCancellationService";
 import { EmailNotificationService } from "../utils/emailNotificationService";
+import { processParentChildWithQueues } from "./parentChildQueueProcessor";
 
 interface JobRequest {
   recordCount: number;
@@ -256,10 +257,6 @@ class JobManager {
           countQuery += ` AND is_new = 1`;
         }
 
-        if (tableInfo.hasColumn("Status")) {
-          countQuery += ` AND (Status IS NULL OR Status = 'Failed')`;
-        }
-
         // Add custom where clause if provided
         if (customWhereClause) {
           countQuery += ` AND ${customWhereClause}`;
@@ -355,22 +352,7 @@ class JobManager {
             flushInterval: 60000, // Longer interval for parent-child operations
           });
 
-          // ** Perform parent-child batch processing **
-          // results = await processParentChildBatches(
-          //   jobRequest.recordCount,
-          //   jobRequest.startRow,
-          //   jobRequest.tableName,
-          //   jobRequest.priorityScreenName,
-          //   jobRequest.jobType,
-          //   jobId,
-          //   jobRequest.priorityIdField,
-          //   jobRequest.priorityLinkedField,
-          //   childJobs,
-          //   logErrors
-          // );
-
-          // Perform parent-child grid processing
-          results = await processParentChildGridBatches(
+          results = await processParentChildWithQueues(
             jobRequest.recordCount,
             jobRequest.startRow,
             jobRequest.tableName,
