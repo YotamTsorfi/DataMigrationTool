@@ -68,11 +68,18 @@ router.get("/:key", function (req, res) {
 // Create a new configuration
 router.post("/", function (req, res) {
   (async function () {
-    const { key, value, description, isVisible = true } = req.body;
+    const { key, value, description, isVisible = true, configId } = req.body;
 
     if (!key || value === undefined) {
       return res.status(400).json({
         error: "Key and value are required",
+      });
+    }
+
+    // Validate configId is provided and is a valid integer
+    if (configId === undefined || !Number.isInteger(Number(configId))) {
+      return res.status(400).json({
+        error: "ConfigId is required and must be an integer",
       });
     }
 
@@ -82,7 +89,7 @@ router.post("/", function (req, res) {
         `
           SELECT * FROM PrioritySystemConfig 
           WHERE ConfigKey = @key
-      `,
+        `,
         { key }
       );
 
@@ -92,13 +99,28 @@ router.post("/", function (req, res) {
         });
       }
 
-      // Insert new configuration
+      // Check if configId already exists
+      const existingId = await DatabaseService.executeQuery(
+        `
+          SELECT * FROM PrioritySystemConfig 
+          WHERE ConfigId = @configId
+        `,
+        { configId }
+      );
+
+      if (existingId && existingId.length > 0) {
+        return res.status(409).json({
+          error: `Configuration ID '${configId}' already exists`,
+        });
+      }
+
+      // Insert new configuration with the provided configId
       await DatabaseService.executeQuery(
         `
-          INSERT INTO PrioritySystemConfig (ConfigKey, ConfigValue, Description, LastUpdated, IsVisible)
-          VALUES (@key, @value, @description, GETDATE(), @isVisible)
-      `,
-        { key, value, description, isVisible }
+          INSERT INTO PrioritySystemConfig (ConfigId, ConfigKey, ConfigValue, Description, LastUpdated, IsVisible)
+          VALUES (@configId, @key, @value, @description, GETDATE(), @isVisible)
+        `,
+        { configId, key, value, description, isVisible }
       );
 
       // Refresh the config service cache

@@ -52,11 +52,13 @@ const ConfigPanel: React.FC = () => {
     value: string;
     description: string;
     isVisible: boolean;
+    configId: string;
   }>({
     key: "",
     value: "",
     description: "",
     isVisible: true,
+    configId: "",
   });
 
   useEffect(() => {
@@ -171,11 +173,19 @@ const ConfigPanel: React.FC = () => {
         return;
       }
 
+      // Validate configId is provided and is an integer
+      const configId = parseInt(newConfig.configId);
+      if (isNaN(configId) || configId.toString() !== newConfig.configId) {
+        toast.error("ConfigId must be a valid integer");
+        return;
+      }
+
       await axios.post(`${process.env.REACT_APP_API_URL}/config`, {
         key: newConfig.key.trim(),
         value: newConfig.value.trim(),
         description: newConfig.description.trim(),
         isVisible: newConfig.isVisible,
+        configId: configId,
       });
 
       toast.success(`${newConfig.key} created successfully`);
@@ -186,6 +196,7 @@ const ConfigPanel: React.FC = () => {
         value: "",
         description: "",
         isVisible: true,
+        configId: "",
       });
       fetchConfigs(); // Refresh the list
     } catch (error) {
@@ -219,6 +230,20 @@ const ConfigPanel: React.FC = () => {
         title="Add New Configuration"
       >
         <div className="modal-content" style={{ padding: "20px" }}>
+          <div style={{ marginBottom: "15px" }}>
+            <label style={{ display: "block", marginBottom: "5px" }}>
+              ConfigId * (int)
+            </label>
+            <input
+              type="text"
+              value={newConfig.configId}
+              onChange={(e) =>
+                setNewConfig({ ...newConfig, configId: e.target.value })
+              }
+              style={{ width: "100%", padding: "8px" }}
+            />
+          </div>
+
           <div style={{ marginBottom: "15px" }}>
             <label style={{ display: "block", marginBottom: "5px" }}>
               Key *
@@ -369,6 +394,8 @@ const ConfigPanel: React.FC = () => {
                             }}
                           >
                             <colgroup>
+                              <col style={{ width: "4%", minWidth: "30px" }} />{" "}
+                              {/* ConfigId - new narrow column */}
                               <col
                                 style={{ width: "32%", minWidth: "180px" }}
                               />
@@ -388,6 +415,15 @@ const ConfigPanel: React.FC = () => {
                             </colgroup>
                             <thead>
                               <tr>
+                                <th
+                                  style={{
+                                    textAlign: "left",
+                                    padding: "4px",
+                                    borderBottom: "1px solid #ddd",
+                                  }}
+                                >
+                                  ID
+                                </th>
                                 <th
                                   style={{
                                     textAlign: "left",
@@ -453,12 +489,27 @@ const ConfigPanel: React.FC = () => {
                                   >
                                     <td
                                       style={{
+                                        padding: "4px",
+                                        borderBottom: "1px solid #eee",
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                        whiteSpace: "nowrap",
+                                        fontFamily: "monospace", // Use monospace font for IDs
+                                        color: "#666", // Slightly muted color
+                                        fontSize: "0.9em", // Slightly smaller font
+                                      }}
+                                      title={`Config ID: ${config.ConfigId}`}
+                                    >
+                                      {config.ConfigId}
+                                    </td>
+                                    <td
+                                      style={{
                                         padding: "8px",
                                         borderBottom: "1px solid #eee",
                                         overflow: "hidden",
                                         textOverflow: "ellipsis",
                                       }}
-                                      title={config.ConfigKey} // Add tooltip
+                                      title={config.ConfigKey}
                                     >
                                       {config.ConfigKey}
                                     </td>

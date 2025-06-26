@@ -20,6 +20,7 @@ export const ChildJobForm: React.FC<ChildJobFormProps> = ({
   isAuthenticated,
 }) => {
   const [formState, setFormState] = useState<IChildJob>({
+    ChildJobeId: undefined,
     JobTypeName: "",
     DBTableName: "",
     ScreenName: "",
@@ -34,9 +35,18 @@ export const ChildJobForm: React.FC<ChildJobFormProps> = ({
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
     const { name, value, type, checked } = e.target;
+
+    // Handle different input types
+    const updatedValue =
+      type === "checkbox"
+        ? checked
+        : name === "ChildJobeId"
+          ? Number(value) || undefined
+          : value;
+
     setFormState({
       ...formState,
-      [name]: type === "checkbox" ? checked : value,
+      [name]: updatedValue,
     });
 
     // Clear error when field is edited
@@ -50,6 +60,13 @@ export const ChildJobForm: React.FC<ChildJobFormProps> = ({
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
+
+    if (
+      formState.ChildJobeId === undefined ||
+      isNaN(Number(formState.ChildJobeId))
+    ) {
+      newErrors.ChildJobeId = "Child Job ID is required and must be a number";
+    }
 
     if (!formState.JobTypeName.trim()) {
       newErrors.JobTypeName = "Job Type Name is required";
@@ -85,6 +102,26 @@ export const ChildJobForm: React.FC<ChildJobFormProps> = ({
       <p>Parent Job Type: {parentJobType.JobTypeName}</p>
 
       <form onSubmit={handleSubmit}>
+        <div className="form-group">
+          <label htmlFor="ChildJobeId">Child Job ID:</label>
+          <input
+            type="number"
+            id="ChildJobeId"
+            name="ChildJobeId"
+            value={formState.ChildJobeId || ""}
+            onChange={handleChange}
+            className={errors.ChildJobeId ? "error" : ""}
+            disabled={!!childJob} // Disable editing ID for existing child jobs
+            data-auth-protected="true"
+          />
+          {errors.ChildJobeId && (
+            <span className="error-text">{errors.ChildJobeId}</span>
+          )}
+          {childJob && (
+            <small>Child Job ID cannot be changed after creation</small>
+          )}
+        </div>
+
         <div className="form-group">
           <label htmlFor="JobTypeName">Job Type Name:</label>
           <input

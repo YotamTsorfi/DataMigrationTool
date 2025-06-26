@@ -367,6 +367,7 @@ const JobTypesManager: React.FC = () => {
                 <table>
                   <thead>
                     <tr>
+                      <th>ID</th>
                       <th>Job Type Name</th>
                       <th>DB Table Name</th>
                       <th>Screen Name</th>
@@ -386,6 +387,7 @@ const JobTypesManager: React.FC = () => {
                             : ""
                         }
                       >
+                        <td>{childJob.ChildJobeId}</td>
                         <td>{childJob.JobTypeName}</td>
                         <td>{childJob.DBTableName}</td>
                         <td>{childJob.ScreenName}</td>
@@ -393,27 +395,29 @@ const JobTypesManager: React.FC = () => {
                         <td>{childJob.priority_id || "-"}</td>
                         <td>{childJob.isReady ? "Yes" : "No"}</td>
                         <td>
-                          <SecureButton
-                            className="edit-button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedChildJob(childJob);
-                              setIsEditingChildJob(true);
-                              setIsAddingChildJob(false);
-                            }}
-                          >
-                            Edit
-                          </SecureButton>
-                          <SecureButton
-                            className="delete-button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteChildJob(childJob.ChildJobeId!);
-                            }}
-                            style={{ backgroundColor: "#dc3545" }}
-                          >
-                            Delete
-                          </SecureButton>
+                          <td className="actions-cell">
+                            <SecureButton
+                              className="edit-button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedChildJob(childJob);
+                                setIsEditingChildJob(true);
+                                setIsAddingChildJob(false);
+                              }}
+                            >
+                              Edit
+                            </SecureButton>
+                            <SecureButton
+                              className="delete-button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteChildJob(childJob.ChildJobeId!);
+                              }}
+                              style={{ backgroundColor: "#dc3545" }}
+                            >
+                              Delete
+                            </SecureButton>
+                          </td>
                         </td>
                       </tr>
                     ))}

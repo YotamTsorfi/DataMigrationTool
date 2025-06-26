@@ -61,6 +61,7 @@ class JobTypesController {
   public async createJobType(req: Request, res: Response): Promise<void> {
     try {
       const {
+        JobTypeId,
         JobTypeName,
         DBTableName,
         ScreenName,
@@ -72,6 +73,13 @@ class JobTypesController {
       } = req.body;
 
       // Validate required fields
+      if (!JobTypeId) {
+        res.status(400).json({
+          error: "JobTypeId is required",
+        });
+        return;
+      }
+
       if (!JobTypeName || !DBTableName || !ScreenName) {
         res.status(400).json({
           error: "JobTypeName, DBTableName, and ScreenName are required",
@@ -79,15 +87,31 @@ class JobTypesController {
         return;
       }
 
+      // Check if a job type with this ID already exists
+      const existingJobType = await DatabaseService.executeQuery(
+        `
+      SELECT JobTypeId FROM PriorityJobTypes WHERE JobTypeId = @JobTypeId
+      `,
+        { JobTypeId }
+      );
+
+      if (existingJobType && existingJobType.length > 0) {
+        res.status(400).json({
+          error: "A job type with this ID already exists",
+        });
+        return;
+      }
+
       const result = await DatabaseService.executeQuery(
         `
-        INSERT INTO PriorityJobTypes (JobTypeName, DBTableName, ScreenName, SourceSystem, priority_id, linkedField, RunOrder, hasDependency)
-        OUTPUT INSERTED.JobTypeId, INSERTED.JobTypeName, INSERTED.DBTableName, INSERTED.ScreenName, 
-            INSERTED.SourceSystem, INSERTED.priority_id, INSERTED.linkedField, INSERTED.RunOrder,
-            INSERTED.isReady, INSERTED.hasDependency
-        VALUES (@JobTypeName, @DBTableName, @ScreenName, @SourceSystem, @priority_id, @linkedField, @RunOrder, @hasDependency)
-      `,
+      INSERT INTO PriorityJobTypes (JobTypeId, JobTypeName, DBTableName, ScreenName, SourceSystem, priority_id, linkedField, RunOrder, hasDependency)
+      OUTPUT INSERTED.JobTypeId, INSERTED.JobTypeName, INSERTED.DBTableName, INSERTED.ScreenName, 
+          INSERTED.SourceSystem, INSERTED.priority_id, INSERTED.linkedField, INSERTED.RunOrder,
+          INSERTED.isReady, INSERTED.hasDependency
+      VALUES (@JobTypeId, @JobTypeName, @DBTableName, @ScreenName, @SourceSystem, @priority_id, @linkedField, @RunOrder, @hasDependency)
+    `,
         {
+          JobTypeId,
           JobTypeName,
           DBTableName,
           ScreenName,
@@ -105,7 +129,6 @@ class JobTypesController {
       res.status(500).json({ error: "Failed to create job type" });
     }
   }
-
   /**
    * Update an existing job type
    */
@@ -271,6 +294,7 @@ class JobTypesController {
   public async createChildJob(req: Request, res: Response): Promise<void> {
     try {
       const {
+        ChildJobeId,
         JobTypeName,
         DBTableName,
         ScreenName,
@@ -281,6 +305,13 @@ class JobTypesController {
       } = req.body;
 
       // Validate required fields
+      if (!ChildJobeId) {
+        res.status(400).json({
+          error: "ChildJobeId is required",
+        });
+        return;
+      }
+
       if (!JobTypeName || !DBTableName || !ScreenName || !refParentJobId) {
         res.status(400).json({
           error:
@@ -289,10 +320,25 @@ class JobTypesController {
         return;
       }
 
+      // Check if a child job with this ID already exists
+      const existingChildJob = await DatabaseService.executeQuery(
+        `
+      SELECT ChildJobeId FROM PriorityChildJob WHERE ChildJobeId = @ChildJobeId
+      `,
+        { ChildJobeId }
+      );
+
+      if (existingChildJob && existingChildJob.length > 0) {
+        res.status(400).json({
+          error: "A child job with this ID already exists",
+        });
+        return;
+      }
+
       // Check if parent job type exists
       const existingJobType = await DatabaseService.executeQuery(
         `
-        SELECT JobTypeId FROM PriorityJobTypes WHERE JobTypeId = @refParentJobId
+      SELECT JobTypeId FROM PriorityJobTypes WHERE JobTypeId = @refParentJobId
       `,
         { refParentJobId }
       );
@@ -304,12 +350,13 @@ class JobTypesController {
 
       const result = await DatabaseService.executeQuery(
         `
-        INSERT INTO PriorityChildJob (JobTypeName, DBTableName, ScreenName, SourceSystem, priority_id, refParentJobId, HasSiblings)
-        OUTPUT INSERTED.ChildJobeId, INSERTED.JobTypeName, INSERTED.DBTableName, INSERTED.ScreenName, 
-               INSERTED.SourceSystem, INSERTED.priority_id, INSERTED.refParentJobId, INSERTED.HasSiblings
-        VALUES (@JobTypeName, @DBTableName, @ScreenName, @SourceSystem, @priority_id, @refParentJobId, @HasSiblings)
+      INSERT INTO PriorityChildJob (ChildJobeId, JobTypeName, DBTableName, ScreenName, SourceSystem, priority_id, refParentJobId, HasSiblings)
+      OUTPUT INSERTED.ChildJobeId, INSERTED.JobTypeName, INSERTED.DBTableName, INSERTED.ScreenName, 
+             INSERTED.SourceSystem, INSERTED.priority_id, INSERTED.refParentJobId, INSERTED.HasSiblings, INSERTED.isReady
+      VALUES (@ChildJobeId, @JobTypeName, @DBTableName, @ScreenName, @SourceSystem, @priority_id, @refParentJobId, @HasSiblings)
       `,
         {
+          ChildJobeId,
           JobTypeName,
           DBTableName,
           ScreenName,

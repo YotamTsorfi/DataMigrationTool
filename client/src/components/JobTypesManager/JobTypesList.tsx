@@ -27,6 +27,7 @@ export const JobTypesList: React.FC<JobTypesListProps> = ({
         <table>
           <thead>
             <tr>
+              <th>ID</th>
               <th>Job Type Name</th>
               <th>DB Table</th>
               <th>Screen Name</th>
@@ -49,6 +50,7 @@ export const JobTypesList: React.FC<JobTypesListProps> = ({
                   }
                   onClick={() => onSelect(jobType)}
                 >
+                  <td>{jobType.JobTypeId}</td>
                   <td>{jobType.JobTypeName}</td>
                   <td>{jobType.DBTableName}</td>
                   <td>{jobType.ScreenName}</td>
