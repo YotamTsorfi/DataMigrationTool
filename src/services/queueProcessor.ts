@@ -760,9 +760,9 @@ export class QueueProcessor {
   // Apply rate limiting between requests
 
   private async applyRateLimit(): Promise<void> {
-    console.log(
-      `Queue ${this.queueId}: queue.length=${this.queue.length}, errorCount503=${this.errorCount503}, backoffActive=${this.backoffActive}`
-    );
+    // console.log(
+    //   `Queue ${this.queueId}: queue.length=${this.queue.length}, errorCount503=${this.errorCount503}, backoffActive=${this.backoffActive}`
+    // );
 
     // Skip rate limiting for very small batches
     if (this.queue.length < 300) {
