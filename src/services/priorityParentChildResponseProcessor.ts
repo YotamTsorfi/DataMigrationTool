@@ -85,7 +85,9 @@ export async function processParentChildResponse(
     const sentToPriority = !!(response && response.data);
     let apiErrorMessage = null;
 
-    if (response?.status >= 400 || response?.data?.error) {
+    // Remove the console.warn for 400 errors - they're expected in many cases
+    // Only log server errors (500+) which might indicate systemic issues
+    if (response?.status >= 500) {
       apiErrorMessage =
         response?.data?.error?.message ||
         `API Error: Status ${response?.status}`;

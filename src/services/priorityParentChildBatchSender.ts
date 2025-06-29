@@ -6,11 +6,8 @@ import {
   buildBatchRequestBody,
   createBatchHeaders,
   generateBoundary,
-} from "../services/requestBuilder";
-import {
-  sendBatchRequest,
-  measureRequestPerformance,
-} from "../services/requestSender";
+} from "./requestBuilder";
+import { sendBatchRequest, measureRequestPerformance } from "./requestSender";
 import { processParentChildResponse } from "./priorityParentChildResponseProcessor";
 import { ChildJob } from "../jobs/jobParentAndChilds";
 // import { writeToLogFile } from "../config/logger";
@@ -56,7 +53,7 @@ export async function sendParentChildBatch(
   childTableNames?: string[],
   childJobs?: ChildJob[],
   logErrors: boolean = false,
-  updateBatchTable: boolean = false,
+  updateBatchTable: boolean = false
 ): Promise<BatchSendResult> {
   // יצירת מזהה ייחודי למנה
   const batchId = uuidv4();
@@ -99,7 +96,7 @@ export async function sendParentChildBatch(
     // יצירת כותרות HTTP עם אימות
     const headers = createBatchHeaders(
       boundary,
-      `Basic ${Buffer.from(`${config.PRIORITY_PAT}:${config.PRIORITY_PASSWORD}`).toString("base64")}`,
+      `Basic ${Buffer.from(`${config.PRIORITY_PAT}:${config.PRIORITY_PASSWORD}`).toString("base64")}`
     );
     perfMonitor.endBatchBuild();
 
@@ -144,7 +141,7 @@ export async function sendParentChildBatch(
 
       // Still continue with response processing to ensure database updates happen
       console.log(
-        "Created fallback response structure to continue with database updates",
+        "Created fallback response structure to continue with database updates"
       );
     }
 
@@ -163,7 +160,7 @@ export async function sendParentChildBatch(
       childTableNames,
       childJobs,
       logErrors,
-      updateBatchTable,
+      updateBatchTable
     );
 
     return {
@@ -214,7 +211,7 @@ export async function sendParentChildBatchesInParallel(
   childTableNames?: string[],
   childJobs?: ChildJob[],
   logErrors: boolean = false,
-  updateBatchTable: boolean = false,
+  updateBatchTable: boolean = false
 ): Promise<BatchSendResult[]> {
   // Explicitly ensure concurrency is capped
   //TODO
@@ -238,7 +235,7 @@ export async function sendParentChildBatchesInParallel(
         childTableNames,
         childJobs,
         logErrors,
-        updateBatchTable,
+        updateBatchTable
       );
       // console.log(`Completed batch ${index + 1}/${batches.length}`);
       return {
@@ -251,7 +248,7 @@ export async function sendParentChildBatchesInParallel(
           totalDuration: "0ms",
         },
       };
-    }),
+    })
   );
 
   // Wait for all batches to complete
