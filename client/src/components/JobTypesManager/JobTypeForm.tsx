@@ -20,6 +20,7 @@ export const JobTypeForm: React.FC<JobTypeFormProps> = ({
   isAuthenticated,
 }) => {
   const [formState, setFormState] = useState<IJobType>({
+    JobTypeId: undefined,
     JobTypeName: "",
     DBTableName: "",
     ScreenName: "",
@@ -33,10 +34,15 @@ export const JobTypeForm: React.FC<JobTypeFormProps> = ({
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
-    const { name, value } = e.target;
+    const { name, value, type, checked } = e.target;
 
-    // Convert to number for numeric fields
-    const updatedValue = name === "RunOrder" ? Number(value) : value;
+    // Handle different input types
+    const updatedValue =
+      type === "checkbox"
+        ? checked
+        : name === "RunOrder" || name === "JobTypeId"
+          ? Number(value) || undefined
+          : value;
 
     setFormState({
       ...formState,
@@ -54,6 +60,13 @@ export const JobTypeForm: React.FC<JobTypeFormProps> = ({
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
+
+    if (
+      formState.JobTypeId === undefined ||
+      isNaN(Number(formState.JobTypeId))
+    ) {
+      newErrors.JobTypeId = "Job Type ID is required and must be a number";
+    }
 
     if (!formState.JobTypeName.trim()) {
       newErrors.JobTypeName = "Job Type Name is required";
@@ -104,6 +117,26 @@ export const JobTypeForm: React.FC<JobTypeFormProps> = ({
       </div>
 
       <form onSubmit={handleSubmit}>
+        <div className="form-group">
+          <label htmlFor="JobTypeId">Job Type ID:</label>
+          <input
+            type="number"
+            id="JobTypeId"
+            name="JobTypeId"
+            value={formState.JobTypeId || ""}
+            onChange={handleChange}
+            className={errors.JobTypeId ? "error" : ""}
+            disabled={!!jobType} // Disable editing ID for existing job types
+            data-auth-protected="true"
+          />
+          {errors.JobTypeId && (
+            <span className="error-text">{errors.JobTypeId}</span>
+          )}
+          {jobType && (
+            <small>Job Type ID cannot be changed after creation</small>
+          )}
+        </div>
+
         <div className="form-group">
           <label htmlFor="JobTypeName">Job Type Name:</label>
           <input
@@ -192,6 +225,24 @@ export const JobTypeForm: React.FC<JobTypeFormProps> = ({
             disabled={!isAuthenticated}
             data-auth-protected="true"
           />
+        </div>
+
+        <div className="form-group checkbox-group">
+          <input
+            type="checkbox"
+            id="hasDependency"
+            name="hasDependency"
+            checked={formState.hasDependency || false}
+            onChange={(e) => {
+              setFormState({
+                ...formState,
+                hasDependency: e.target.checked,
+              });
+            }}
+            disabled={!isAuthenticated}
+            data-auth-protected="true"
+          />
+          <label htmlFor="hasDependency">Has Dependency</label>
         </div>
 
         <div className="form-group">

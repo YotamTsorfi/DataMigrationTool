@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { fetchParentChildChunk } from "../services/parentChildChunkFetcher";
-import { sendParentChildBatch } from "../services/priorityParentChildSender";
+import { sendParentChildBatch } from "../services/priorityParentChildBatchSender";
 import { QueueProcessor, QueueItem } from "../services/queueProcessor";
 import { performBulkUpdateWithService } from "../services/dataService";
 import { configService } from "../config/configService";

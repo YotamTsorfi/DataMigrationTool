@@ -27,10 +27,13 @@ export const JobTypesList: React.FC<JobTypesListProps> = ({
         <table>
           <thead>
             <tr>
+              <th>ID</th>
               <th>Job Type Name</th>
               <th>DB Table</th>
               <th>Screen Name</th>
               <th>Run Order</th>
+              <th>Ready</th>
+              <th>Dependency</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -47,10 +50,13 @@ export const JobTypesList: React.FC<JobTypesListProps> = ({
                   }
                   onClick={() => onSelect(jobType)}
                 >
+                  <td>{jobType.JobTypeId}</td>
                   <td>{jobType.JobTypeName}</td>
                   <td>{jobType.DBTableName}</td>
                   <td>{jobType.ScreenName}</td>
                   <td>{jobType.RunOrder}</td>
+                  <td>{jobType.isReady ? "Yes" : "No"}</td>
+                  <td>{jobType.hasDependency ? "Yes" : "No"}</td>
                   <td className="actions-cell">
                     <button
                       className="edit-button"

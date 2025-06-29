@@ -1,6 +1,6 @@
 import { DatabaseService } from "../services/databaseService";
 import { streamParentChildData } from "../services/parentChildDataFetcher";
-import { sendParentChildBatch } from "../services/priorityParentChildSender";
+import { sendParentChildBatch } from "../services/priorityParentChildBatchSender";
 import ProgressTracker from "../utils/progressTracker";
 import PerformanceMonitor from "../utils/performanceMonitor";
 import { performBulkUpdateWithService } from "../services/dataService";

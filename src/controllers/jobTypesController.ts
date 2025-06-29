@@ -13,7 +13,7 @@ class JobTypesController {
       const jobTypes = await DatabaseService.executeQuery(`
         SELECT 
           JobTypeId, JobTypeName, DBTableName, ScreenName, 
-          SourceSystem, priority_id, linkedField, RunOrder
+          SourceSystem, priority_id, linkedField, RunOrder, isReady, hasDependency
         FROM PriorityJobTypes
         ORDER BY RunOrder ASC
       `);
@@ -36,7 +36,7 @@ class JobTypesController {
         `
         SELECT 
           JobTypeId, JobTypeName, DBTableName, ScreenName, 
-          SourceSystem, priority_id, linkedField, RunOrder
+          SourceSystem, priority_id, linkedField, RunOrder, isReady, hasDependency
         FROM PriorityJobTypes
         WHERE JobTypeId = @id
       `,
@@ -61,6 +61,7 @@ class JobTypesController {
   public async createJobType(req: Request, res: Response): Promise<void> {
     try {
       const {
+        JobTypeId,
         JobTypeName,
         DBTableName,
         ScreenName,
@@ -68,26 +69,49 @@ class JobTypesController {
         priority_id,
         linkedField,
         RunOrder,
+        hasDependency,
       } = req.body;
 
       // Validate required fields
+      if (!JobTypeId) {
+        res.status(400).json({
+          error: "JobTypeId is required",
+        });
+        return;
+      }
+
       if (!JobTypeName || !DBTableName || !ScreenName) {
-        res
-          .status(400)
-          .json({
-            error: "JobTypeName, DBTableName, and ScreenName are required",
-          });
+        res.status(400).json({
+          error: "JobTypeName, DBTableName, and ScreenName are required",
+        });
+        return;
+      }
+
+      // Check if a job type with this ID already exists
+      const existingJobType = await DatabaseService.executeQuery(
+        `
+      SELECT JobTypeId FROM PriorityJobTypes WHERE JobTypeId = @JobTypeId
+      `,
+        { JobTypeId }
+      );
+
+      if (existingJobType && existingJobType.length > 0) {
+        res.status(400).json({
+          error: "A job type with this ID already exists",
+        });
         return;
       }
 
       const result = await DatabaseService.executeQuery(
         `
-        INSERT INTO PriorityJobTypes (JobTypeName, DBTableName, ScreenName, SourceSystem, priority_id, linkedField, RunOrder)
-        OUTPUT INSERTED.JobTypeId, INSERTED.JobTypeName, INSERTED.DBTableName, INSERTED.ScreenName, 
-               INSERTED.SourceSystem, INSERTED.priority_id, INSERTED.linkedField, INSERTED.RunOrder
-        VALUES (@JobTypeName, @DBTableName, @ScreenName, @SourceSystem, @priority_id, @linkedField, @RunOrder)
-      `,
+      INSERT INTO PriorityJobTypes (JobTypeId, JobTypeName, DBTableName, ScreenName, SourceSystem, priority_id, linkedField, RunOrder, hasDependency)
+      OUTPUT INSERTED.JobTypeId, INSERTED.JobTypeName, INSERTED.DBTableName, INSERTED.ScreenName, 
+          INSERTED.SourceSystem, INSERTED.priority_id, INSERTED.linkedField, INSERTED.RunOrder,
+          INSERTED.isReady, INSERTED.hasDependency
+      VALUES (@JobTypeId, @JobTypeName, @DBTableName, @ScreenName, @SourceSystem, @priority_id, @linkedField, @RunOrder, @hasDependency)
+    `,
         {
+          JobTypeId,
           JobTypeName,
           DBTableName,
           ScreenName,
@@ -95,6 +119,7 @@ class JobTypesController {
           priority_id: priority_id || null,
           linkedField: linkedField || null,
           RunOrder: RunOrder || 0,
+          hasDependency: hasDependency !== undefined ? hasDependency : false,
         }
       );
 
@@ -104,7 +129,6 @@ class JobTypesController {
       res.status(500).json({ error: "Failed to create job type" });
     }
   }
-
   /**
    * Update an existing job type
    */
@@ -119,15 +143,14 @@ class JobTypesController {
         priority_id,
         linkedField,
         RunOrder,
+        hasDependency,
       } = req.body;
 
       // Validate required fields
       if (!JobTypeName || !DBTableName || !ScreenName) {
-        res
-          .status(400)
-          .json({
-            error: "JobTypeName, DBTableName, and ScreenName are required",
-          });
+        res.status(400).json({
+          error: "JobTypeName, DBTableName, and ScreenName are required",
+        });
         return;
       }
 
@@ -154,9 +177,11 @@ class JobTypesController {
           SourceSystem = @SourceSystem,
           priority_id = @priority_id,
           linkedField = @linkedField,
-          RunOrder = @RunOrder
+          RunOrder = @RunOrder,
+          hasDependency = @hasDependency
         OUTPUT INSERTED.JobTypeId, INSERTED.JobTypeName, INSERTED.DBTableName, INSERTED.ScreenName, 
-               INSERTED.SourceSystem, INSERTED.priority_id, INSERTED.linkedField, INSERTED.RunOrder
+              INSERTED.SourceSystem, INSERTED.priority_id, INSERTED.linkedField, INSERTED.RunOrder,
+              INSERTED.isReady, INSERTED.hasDependency
         WHERE JobTypeId = @id
       `,
         {
@@ -168,6 +193,7 @@ class JobTypesController {
           priority_id: priority_id || null,
           linkedField: linkedField || null,
           RunOrder: RunOrder || 0,
+          hasDependency: hasDependency !== undefined ? hasDependency : false,
         }
       );
 
@@ -248,7 +274,7 @@ class JobTypesController {
         `
         SELECT 
           ChildJobeId, JobTypeName, DBTableName, ScreenName, 
-          SourceSystem, priority_id, refParentJobId, HasSiblings
+          SourceSystem, priority_id, refParentJobId, HasSiblings, isReady
         FROM PriorityChildJob
         WHERE refParentJobId = @parentId
       `,
@@ -268,6 +294,7 @@ class JobTypesController {
   public async createChildJob(req: Request, res: Response): Promise<void> {
     try {
       const {
+        ChildJobeId,
         JobTypeName,
         DBTableName,
         ScreenName,
@@ -278,20 +305,40 @@ class JobTypesController {
       } = req.body;
 
       // Validate required fields
+      if (!ChildJobeId) {
+        res.status(400).json({
+          error: "ChildJobeId is required",
+        });
+        return;
+      }
+
       if (!JobTypeName || !DBTableName || !ScreenName || !refParentJobId) {
-        res
-          .status(400)
-          .json({
-            error:
-              "JobTypeName, DBTableName, ScreenName, and refParentJobId are required",
-          });
+        res.status(400).json({
+          error:
+            "JobTypeName, DBTableName, ScreenName, and refParentJobId are required",
+        });
+        return;
+      }
+
+      // Check if a child job with this ID already exists
+      const existingChildJob = await DatabaseService.executeQuery(
+        `
+      SELECT ChildJobeId FROM PriorityChildJob WHERE ChildJobeId = @ChildJobeId
+      `,
+        { ChildJobeId }
+      );
+
+      if (existingChildJob && existingChildJob.length > 0) {
+        res.status(400).json({
+          error: "A child job with this ID already exists",
+        });
         return;
       }
 
       // Check if parent job type exists
       const existingJobType = await DatabaseService.executeQuery(
         `
-        SELECT JobTypeId FROM PriorityJobTypes WHERE JobTypeId = @refParentJobId
+      SELECT JobTypeId FROM PriorityJobTypes WHERE JobTypeId = @refParentJobId
       `,
         { refParentJobId }
       );
@@ -303,12 +350,13 @@ class JobTypesController {
 
       const result = await DatabaseService.executeQuery(
         `
-        INSERT INTO PriorityChildJob (JobTypeName, DBTableName, ScreenName, SourceSystem, priority_id, refParentJobId, HasSiblings)
-        OUTPUT INSERTED.ChildJobeId, INSERTED.JobTypeName, INSERTED.DBTableName, INSERTED.ScreenName, 
-               INSERTED.SourceSystem, INSERTED.priority_id, INSERTED.refParentJobId, INSERTED.HasSiblings
-        VALUES (@JobTypeName, @DBTableName, @ScreenName, @SourceSystem, @priority_id, @refParentJobId, @HasSiblings)
+      INSERT INTO PriorityChildJob (ChildJobeId, JobTypeName, DBTableName, ScreenName, SourceSystem, priority_id, refParentJobId, HasSiblings)
+      OUTPUT INSERTED.ChildJobeId, INSERTED.JobTypeName, INSERTED.DBTableName, INSERTED.ScreenName, 
+             INSERTED.SourceSystem, INSERTED.priority_id, INSERTED.refParentJobId, INSERTED.HasSiblings, INSERTED.isReady
+      VALUES (@ChildJobeId, @JobTypeName, @DBTableName, @ScreenName, @SourceSystem, @priority_id, @refParentJobId, @HasSiblings)
       `,
         {
+          ChildJobeId,
           JobTypeName,
           DBTableName,
           ScreenName,
@@ -344,12 +392,10 @@ class JobTypesController {
 
       // Validate required fields
       if (!JobTypeName || !DBTableName || !ScreenName || !refParentJobId) {
-        res
-          .status(400)
-          .json({
-            error:
-              "JobTypeName, DBTableName, ScreenName, and refParentJobId are required",
-          });
+        res.status(400).json({
+          error:
+            "JobTypeName, DBTableName, ScreenName, and refParentJobId are required",
+        });
         return;
       }
 

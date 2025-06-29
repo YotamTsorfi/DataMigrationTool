@@ -27,6 +27,8 @@ interface JobType {
   linkedField: string | null;
   RunOrder: number;
   status?: "pending" | "active" | "completed" | "failed";
+  isReady?: boolean;
+  hasDependency?: boolean;
 }
 
 interface SchedulerStatus {
@@ -334,6 +336,8 @@ const JobScheduler: React.FC = () => {
               <th>Order</th>
               <th>Job Name</th>
               <th>Table Name</th>
+              <th>Ready</th>
+              <th>Dependency</th>
               <th>Status</th>
             </tr>
           </thead>
@@ -343,6 +347,8 @@ const JobScheduler: React.FC = () => {
                 <td>{job.RunOrder}</td>
                 <td>{job.JobTypeName}</td>
                 <td>{job.DBTableName}</td>
+                <td>{job.isReady ? "Yes" : "No"}</td>
+                <td>{job.hasDependency ? "Yes" : "No"}</td>
                 <td className={`status-${job.status || "pending"}`}>
                   {job.status || "Pending"}
                 </td>

@@ -7,7 +7,10 @@
 import { v4 as uuidv4 } from "uuid";
 import { QueueProcessor, QueueItem } from "../services/queueProcessor";
 import { fetchParentChildChunk } from "../services/parentChildChunkFetcher";
-import { sendParentChildBatch } from "../services/priorityParentChildSender";
+
+//import { sendParentChildBatch } from "../services/priorityParentChildBatchSender";
+import { sendParentChildQueue } from "../services/priorityParentChildQueueSender";
+
 import { performBulkUpdateWithService } from "../services/dataService";
 import { configService } from "../config/configService";
 
@@ -215,7 +218,7 @@ export async function processParentChildWithQueues(
     10
   );
   // Updated chunk size to match processWithQueues
-  const CHUNK_SIZE = 2000;
+  const CHUNK_SIZE = 10000;
 
   // Initialize progress tracking
   ProgressTracker.initJob(jobId, totalRecords, jobType);
@@ -407,8 +410,9 @@ export async function processParentChildWithQueues(
               try {
                 const result = await retryWithBackoff(
                   () =>
-                    sendParentChildBatch(
-                      [item.row],
+                    // sendParentChildBatch(
+                    sendParentChildQueue(
+                      item.row,
                       jobType,
                       parentTableName,
                       parentScreenName,
@@ -423,20 +427,28 @@ export async function processParentChildWithQueues(
                   1000 // initialDelay ms
                 );
 
-                const isSuccessful =
-                  result.success &&
-                  (result.successCount || 0) > 0 &&
-                  (result.failureCount || 0) === 0;
+                // Check if API request was successful, not just if the error processing was successful
+                // Fix: Ensure status is a number and explicitly convert result to boolean
+                const status = result.status || 0;
+                const isApiSuccess = Boolean(
+                  result.success && status >= 200 && status < 300
+                );
 
                 return {
-                  success: isSuccessful,
-                  error: result.error,
+                  success: isApiSuccess, // Now guaranteed to be a boolean
+                  error: isApiSuccess
+                    ? undefined
+                    : result.error || `Status code ${status || 400}`,
                   responseStats: {
-                    successCount: result.successCount || 0,
-                    failureCount: result.failureCount || 0,
+                    successCount: isApiSuccess ? result.successCount : 0,
+                    failureCount: isApiSuccess ? 0 : 1,
+                    status: result.status,
+                    errorData: result.errorData,
+                    priorityId: result.priorityId,
                   },
                 };
               } catch (error) {
+                // Error handling remains unchanged
                 console.error(
                   `Error processing parent-child record in queue:`,
                   error

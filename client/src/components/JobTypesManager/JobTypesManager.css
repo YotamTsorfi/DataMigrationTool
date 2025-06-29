@@ -350,3 +350,20 @@ textarea:disabled {
   cursor: not-allowed;
   opacity: 0.7;
 }
+
+/* ensure buttons in action cells are fully visible */
+.actions-cell {
+  min-width: 120px; /* Ensure minimum width for action buttons */
+  max-width: none; /* Override the general max-width constraint */
+  white-space: nowrap; /* Prevent buttons from wrapping */
+}
+
+/* Adjust button spacing in the actions cell */
+.actions-cell button {
+  margin-right: 4px; /* Add consistent spacing between buttons */
+}
+
+/* Make last button (Delete) not have margin to prevent overflow */
+.actions-cell button:last-child {
+  margin-right: 0;
+}
