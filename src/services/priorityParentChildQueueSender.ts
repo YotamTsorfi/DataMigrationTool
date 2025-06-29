@@ -172,6 +172,7 @@ export async function sendParentChildQueue(
     // );
 
     // Send request to Priority API
+    // Send request to Priority API
     perfMonitor.startRequest();
     let response;
     try {
@@ -182,7 +183,7 @@ export async function sendParentChildQueue(
       });
       perfMonitor.endRequest();
 
-      // Convert response to a format compatible with processParentChildResponse
+      // Convert successful response to a format compatible with processParentChildResponse
       response = {
         status: response.status,
         data: {
@@ -190,6 +191,7 @@ export async function sendParentChildQueue(
             {
               status: response.status,
               body: response.data,
+              error: null,
             },
           ],
         },
@@ -248,11 +250,11 @@ export async function sendParentChildQueue(
           responses: [
             {
               status: statusCode,
-              body: null,
+              body: errorData, // THIS IS THE KEY FIX - Use errorData instead of null
               error: errorMessage,
             },
           ],
-          error: errorData, // Add error at data level too for compatibility
+          error: errorData, // Keep this for backward compatibility
         },
       };
     }
