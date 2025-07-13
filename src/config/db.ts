@@ -5,14 +5,14 @@ const poolConfig = {
   ...config.db,
   min: 5,
   max: 20, // Increase max connections
-  idleTimeoutMillis: 30000,
+  idleTimeoutMillis: 3600000, // Increase idle timeout to 1 hour
   connectionTimeout: 15000,
   requestTimeout: 120000, // Increase request timeout
   pool: {
-    acquireTimeoutMillis: 30000, // Timeout for acquiring a connection
+    acquireTimeoutMillis: 3600000, // Timeout for acquiring a connection
     createTimeoutMillis: 30000, // Timeout for creating a new connection
     destroyTimeoutMillis: 5000, // Timeout for destroying a connection
-    idleTimeoutMillis: 30000, // How long a connection can be idle before being removed
+    idleTimeoutMillis: 3600000, // How long a connection can be idle before being removed
     reapIntervalMillis: 1000, // How frequently to check for idle connections
     createRetryIntervalMillis: 200, // Time between connection creation retries
   },
