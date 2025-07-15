@@ -747,153 +747,120 @@ function processApiResponse(
                       ? JSON.parse(apiResponse.body)
                       : apiResponse.body;
 
-                  // console.log(`Processing child record extraction for job: ${jobTypeName}, Screen: ${job.ScreenName}, priority_id: ${job.priority_id}`);
-
-                  // Extract subform key based on job's screen name
+                  // Get the exact subform key based on job's screen name
                   const subformKey = `${job.ScreenName}_SUBFORM`;
 
-                  // Check if subform exists in response
+                  // Check if this subform exists in the response
                   if (responseBody && responseBody[subformKey] !== undefined) {
-                    const matchingItem = responseBody[subformKey].find(
-                      (item: any) =>
-                        item[job.priority_id] === childRecord[job.priority_id]
-                    );
-                    if (matchingItem) {
-                      const idValue = matchingItem[job.priority_id];
-                      childUpdate.priority_id =
-                        idValue !== null ? String(idValue) : null;
-                      childUpdate.RowId = childRecord.RowId; // עדכון ה-RowId המתאים
-                    }
+                    console.log(`Found subform ${subformKey} in response`);
 
-                    // Case 1: HasSiblings=true - רשומות במערך (לדוגמה NATF_ACCPERSONNEL_SUBFORM)
+                    // For HasSiblings=true (array of records)
                     if (
                       job.HasSiblings &&
                       Array.isArray(responseBody[subformKey])
                     ) {
-                      // console.log(`Found array subform ${subformKey} with ${responseBody[subformKey].length} items`);
+                      const subformArray = responseBody[subformKey];
 
-                      // לולאה על כל הרשומות במערך בחיפוש אחר התאמה
-                      let foundMatch = false;
+                      if (subformArray.length > 0) {
+                        // Find matching record in the response array based on any available field
+                        let matchedItem = null;
 
-                      for (
-                        let i = 0;
-                        i < responseBody[subformKey].length;
-                        i++
-                      ) {
-                        const item = responseBody[subformKey][i];
+                        // Extract fields from child record that can be used for matching
+                        // Only use fields that have values and aren't internal fields
+                        const matchFields = Object.keys(childRecord).filter(
+                          (key) =>
+                            !key.startsWith("_") &&
+                            key !== "RowId" &&
+                            childRecord[key] !== undefined &&
+                            childRecord[key] !== null
+                        );
 
-                        // בדוק אם השדה המבוקש קיים ברשומה הנוכחית
-                        if (item && item[job.priority_id] !== undefined) {
-                          const idValue = item[job.priority_id];
-                          childUpdate.priority_id =
-                            idValue !== null && idValue !== undefined
-                              ? String(idValue)
-                              : null;
+                        // Try to find a matching record using available fields
+                        if (matchFields.length > 0) {
+                          for (const field of matchFields) {
+                            const matchValue = childRecord[field];
 
-                          // console.log(`✓ Found child ID in array item ${i}: ${childUpdate.priority_id}`);
-                          foundMatch = true;
-                          break;
+                            // Find a record in the response with the same field value
+                            matchedItem = subformArray.find(
+                              (item) =>
+                                item[field] !== undefined &&
+                                item[field] === matchValue
+                            );
+
+                            if (matchedItem) {
+                              console.log(
+                                `Matched child record using field ${field}=${matchValue}`
+                              );
+                              break;
+                            }
+                          }
                         }
-                      }
 
-                      // אם לא נמצאה התאמה, ננסה לקחת מהרשומה הראשונה
-                      if (!foundMatch && responseBody[subformKey].length > 0) {
-                        const firstItem = responseBody[subformKey][0];
-                        if (firstItem[job.priority_id] !== undefined) {
-                          const idValue = firstItem[job.priority_id];
+                        // If no match found, fall back to the first item (but log a warning)
+                        if (!matchedItem) {
+                          matchedItem = subformArray[0];
+                          console.log(
+                            `No match found for child record in ${subformKey}, using first item`
+                          );
+                        }
+
+                        // Extract the priority_id from the matched item
+                        if (
+                          matchedItem &&
+                          matchedItem[job.priority_id] !== undefined
+                        ) {
+                          const idValue = matchedItem[job.priority_id];
+                          // Ensure proper type conversion to string for SQL compatibility
                           childUpdate.priority_id =
                             idValue !== null ? String(idValue) : null;
                           console.log(
-                            `Using first item's ${job.priority_id} as fallback: ${childUpdate.priority_id}`
+                            `Found child ID in ${subformKey}: ${childUpdate.priority_id}`
                           );
                         } else {
                           console.log(
-                            `No ${job.priority_id} field found in first array item`
+                            `Field ${job.priority_id} not found in ${subformKey} item`
                           );
                         }
                       }
                     }
-                    // Case 2: HasSiblings=false - אובייקט בודד (לדוגמה PAYMENTDEF_SUBFORM)
-                    else if (!job.HasSiblings) {
-                      const subformData = responseBody[subformKey];
-                      console.log(
-                        `Found single object subform ${subformKey}: ${typeof subformData}`
-                      );
-
-                      // אם הנתונים הם אובייקט ישיר (לא מערך)
-                      if (
-                        typeof subformData === "object" &&
-                        subformData !== null &&
-                        !Array.isArray(subformData)
-                      ) {
-                        if (subformData[job.priority_id] !== undefined) {
-                          const idValue = subformData[job.priority_id];
-                          childUpdate.priority_id =
-                            idValue !== null ? String(idValue) : null;
-                          // console.log(`✓ Found child ID in object: ${childUpdate.priority_id}`);
-                        } else {
-                          console.log(
-                            `Field ${job.priority_id} not found in subform object`
-                          );
-                        }
-                      }
-                      // אם במקרה הנתונים הם מערך (למרות שהוגדר HasSiblings=false)
-                      else if (
-                        Array.isArray(subformData) &&
-                        subformData.length > 0
-                      ) {
-                        if (subformData[0][job.priority_id] !== undefined) {
-                          const idValue = subformData[0][job.priority_id];
-                          childUpdate.priority_id =
-                            idValue !== null ? String(idValue) : null;
-                          // console.log(`✓ Found child ID in array item (unexpected format): ${childUpdate.priority_id}`);
-                        }
-                      }
-                    }
-                    // טיפול במקרה חריג שבו HasSiblings=true אבל התקבל אובייקט בודד
+                    // Case for HasSiblings=false - expect a single object
                     else if (
-                      job.HasSiblings &&
-                      typeof responseBody[subformKey] === "object" &&
-                      !Array.isArray(responseBody[subformKey])
+                      !job.HasSiblings &&
+                      typeof responseBody[subformKey] === "object"
                     ) {
+                      const subformData = responseBody[subformKey];
+
                       if (
-                        responseBody[subformKey][job.priority_id] !== undefined
+                        subformData &&
+                        subformData[job.priority_id] !== undefined
                       ) {
-                        const idValue =
-                          responseBody[subformKey][job.priority_id];
+                        const idValue = subformData[job.priority_id];
+                        // Ensure proper type conversion to string for SQL compatibility
                         childUpdate.priority_id =
                           idValue !== null ? String(idValue) : null;
-                        // console.log(`✓ Found child ID in direct object (unexpected format): ${childUpdate.priority_id}`);
+                        console.log(
+                          `Found child ID in single object: ${childUpdate.priority_id}`
+                        );
+                      } else {
+                        console.log(
+                          `Field ${job.priority_id} not found in ${subformKey} object`
+                        );
                       }
                     }
+                  } else {
+                    console.log(
+                      `Subform ${subformKey} not found in response. Available keys: ${Object.keys(responseBody).join(", ")}`
+                    );
                   }
-                  // אם לא נמצא תת-מבנה בתשובה, בדוק אם המזהה קיים ישירות בשורש
-                  else {
-                    // console.log(`⚠️ Subform ${subformKey} not found in response. Available keys: ${Object.keys(responseBody).join(', ')}`);
-
-                    // בדיקה אם המזהה קיים ברמה העליונה של התשובה
-                    if (responseBody[job.priority_id] !== undefined) {
-                      const idValue = responseBody[job.priority_id];
-                      childUpdate.priority_id =
-                        idValue !== null ? String(idValue) : null;
-                      console.log(
-                        `Found child ID at root level: ${childUpdate.priority_id}`
-                      );
-                    }
-                  }
-
-                  // תיעוד סופי של המזהה שהתקבל
-                  // console.log(`Final priority_id for child record (RowId ${childRecord.RowId}): ${childUpdate.priority_id}`);
                 } catch (e) {
                   console.error(
                     `Error extracting child ID for ${jobTypeName}:`,
                     e
                   );
                 }
-              } else {
-                // console.log(`No job.priority_id defined for child job ${jobTypeName} or no response body`);
               }
 
+              // Add this to the childUpdateRows array
               childUpdateRows.push(childUpdate);
             });
           } else {
