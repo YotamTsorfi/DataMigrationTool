@@ -5,7 +5,7 @@
 import { Button } from "./BatchProcessorStyles";
 import { withAuthProtection } from "./withAuthProtection";
 
-// יצירת גרסה מאובטחת של הכפתור הקיים
+// Create a secure version of the existing button
 const SecureButton = withAuthProtection(Button);
 
 export default SecureButton;

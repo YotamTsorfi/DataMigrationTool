@@ -205,46 +205,38 @@ export function processApiResponse(
     // the API request was processed (even with business logic errors)
     const status = responseItem.status < 400 ? "Completed" : "Failed";
 
-    // שינוי כאן: חילוץ קוד השגיאה בנוסף להודעת השגיאה
+    // Debug: Log the response item status
     let errorMessage = null;
     let errorStatus = null;
 
     if (responseItem.status >= 400) {
-      // נסה לחלץ את קוד השגיאה
+      // Extract the error status code
       errorStatus = responseItem.status.toString();
 
-      // אם יש גם קוד שגיאה פנימי, השתמש בו
+      // Extract the error message from the response
+      // Check if the response item has an error object
       if (responseItem?.body?.error?.code) {
         errorStatus = responseItem.body.error.code;
       }
 
-      // חלץ את הודעת השגיאה - מטפל במספר תבניות אפשריות
+      // Extract the error message - handle multiple possible formats
       let errorSource = null;
 
-      // בדיקה האם השגיאה נמצאת בפורמט XML/FORM
+      // Check if the error is in XML/FORM format
       if (responseItem?.body?.FORM?.InterfaceErrors) {
         if (responseItem.body.FORM.InterfaceErrors.text) {
-          // מקרה שבו יש שדה text מפורש
           errorSource = responseItem.body.FORM.InterfaceErrors.text;
         } else {
-          // אחרת קח את כל אובייקט ה-InterfaceErrors
           errorSource = responseItem.body.FORM.InterfaceErrors;
         }
-      }
-      // בדיקה האם השגיאה במבנה error.message
-      else if (responseItem?.body?.error?.message) {
+      } else if (responseItem?.body?.error?.message) {
         errorSource = responseItem.body.error.message;
-      }
-      // בדיקה האם השגיאה היא האובייקט error עצמו
-      else if (responseItem?.body?.error) {
+      } else if (responseItem?.body?.error) {
         errorSource = responseItem.body.error;
-      }
-      // אם אין מקור שגיאה מזוהה
-      else {
+      } else {
         errorSource = "Unknown error structure";
       }
 
-      // אם המקור הוא מחרוזת, השתמש בה ישירות, אחרת המר ל-JSON
       errorMessage =
         typeof errorSource === "string"
           ? errorSource

@@ -32,7 +32,7 @@ function isTVP(value: any): value is TableValuedParameter {
 }
 
 export class DatabaseService {
-  // מטמון סכמות טבלאות
+  // Cache for table schemas to avoid re-creating them
   private static tableSchemaCache: Map<string, sql.Table> = new Map();
 
   //---------------------------------------------
@@ -59,7 +59,7 @@ export class DatabaseService {
   }
 
   //--------------------------------------------------------------------------------
-  // מתודה לקבלת או יצירת סכמת טבלה
+  // Creates or retrieves a cached table schema based on the provided TVP type and sample data
   private static getOrCreateTableSchema(
     tvpType: string,
     sampleData: Record<string, any>
@@ -70,14 +70,14 @@ export class DatabaseService {
       const cachedTable = this.tableSchemaCache.get(cacheKey)!;
       const newTable = new sql.Table(tvpType);
 
-      // העתק את הגדרות העמודות מהמבנה הקיים תוך התייחסות לבעיות טיפוס
+      // Copy columns from the cached table to the new table
       cachedTable.columns.forEach((column) => {
-        // יצירת אובייקט אפשרויות עם רק תכונות שקיימות בפועל
+        // Create an options object with only the properties that exist on the column
         const options: sql.IColumnOptions = {
           nullable: column.nullable,
         };
 
-        // הוספת תכונות אופציונליות רק אם קיימות בפועל
+        // Check for additional properties and add them if they exist
         if ("length" in column) {
           options.length = (column as any).length;
         }
@@ -96,7 +96,7 @@ export class DatabaseService {
       return newTable;
     }
 
-    // אחרת, צור מבנה חדש
+    // If not cached, create a new table schema
     const table = new sql.Table(tvpType);
     const columns = Object.keys(sampleData);
 
@@ -105,13 +105,13 @@ export class DatabaseService {
       this.addColumnWithAppropriateType(table, colName, sampleValue);
     });
 
-    // שמור במטמון לשימוש עתידי
+    // Cache the created table schema
     this.tableSchemaCache.set(cacheKey, table);
 
     return table;
   }
   //--------------------------------------------------------------------------------
-  // טיפול בסוגי נתונים שונים
+  // Sends a batch of records to the database, handling parent-child relationships
   private static addColumnWithAppropriateType(
     table: sql.Table,
     colName: string,
@@ -139,7 +139,7 @@ export class DatabaseService {
     }
   }
   //--------------------------------------------------------------------------------
-  // טיפול בטיפוסי מספרים
+  // Handles numeric types for table columns
   private static handleNumericType(
     table: sql.Table,
     colName: string,

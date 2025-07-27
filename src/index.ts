@@ -53,7 +53,20 @@ const io = new Server(httpServer, {
 export { io };
 
 io.on("connection", (socket) => {
-  console.log("🟢 Client connected:", socket.id);
+  // Extract client information to identify users
+  const clientInfo = {
+    id: socket.id,
+    ip: socket.handshake.address,
+    origin: socket.handshake.headers.origin || "Unknown",
+    userAgent: socket.handshake.headers["user-agent"],
+  };
+
+  console.log("🟢 Client connected:", {
+    id: clientInfo.id,
+    ip: clientInfo.ip,
+    origin: clientInfo.origin,
+  });
+
   socket.on("disconnect", () => {
     console.log("🔴 Client disconnected:", socket.id);
   });

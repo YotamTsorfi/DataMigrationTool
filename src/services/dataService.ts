@@ -63,7 +63,7 @@ export async function fetchDataChunk(
  */
 export function sanitizeForSqlUpdate(updates: any[]): any[] {
   return updates.map((update) => {
-    // החזר אובייקט חדש עם רק השדות שאנחנו צריכים
+    // Ensure all fields are strings or numbers, and handle nulls
     return {
       RowId: update.RowId,
       BatchId: update.BatchId,
@@ -192,7 +192,7 @@ export async function performBulkUpdateWithService(
       // Update to use accepted status value
       for (const update of updates) {
         try {
-          // עדכון טבלת המקור
+          // Update the status to 'Completed' with an explanatory message
           await DatabaseService.executeQuery(
             `
             UPDATE ${tableName}
@@ -380,14 +380,14 @@ export async function recordBatchProcessing(
   } catch (error: any) {
     console.error(`Error recording batch processing:`, error);
 
-    // אם הבעיה היא deadlock, נסה לעדכן את סטטוס הבאצ' בנפרד
+    // Check if the error is a deadlock
     const isDeadlock =
       error?.number === 1205 ||
       error?.originalError?.info?.number === 1205 ||
       (error instanceof Error && error.message.includes("deadlock"));
 
     if (isDeadlock) {
-      // נסה לרשום את הבאצ' עם סטטוס 'PartialSync'
+      // If we had a deadlock, we can retry the operation
       try {
         await DatabaseService.executeQuery(
           `

@@ -13,22 +13,34 @@ interface ChildRecord {
   [key: string]: any;
 }
 //---------------------------------------------------------------------------
-// תוצאת הפונקציה תהיה סטרים של אובייקטי JSON מוכנים לשליחה
-/*
-לעצור ולהמשיך את הריצה שלה - הפונקציה יכולה "להפסיק" באמצע הריצה ולהמשיך מאותה נקודה בפעם הבאה שהיא מתבקשת לרוץ
-להחזיר ערכים מרובים לאורך זמן - באמצעות מילת המפתח yield
-לייצר ערכים לפי דרישה (lazy evaluation) - במקום לייצר את כל הערכים בבת אחת
-צריכת זיכרון מינימלית - במקום לטעון את כל מיליוני הרשומות לזיכרון, היא מעבדת ומחזירה אותן אחת אחת
-יעילות תהליכית - מאפשרת לעבד כל רשומה מיד כשהיא זמינה
-הימנעות מ-Out of Memory - חיוני כשעובדים עם מיליוני רשומות
-*/
+/**
+ * Streams parent records from the specified table, enriching each with its associated child records
+ * according to the provided child job definitions. The function yields each enriched parent record
+ * as a JSON object, including child records organized by job type and screen name.
+ *
+ * The function processes records in batches, starting from a given row and up to a maximum number of rows.
+ * For each parent record, it fetches all relevant child records, merges them into the parent object,
+ * and yields the result. Child records are included according to the HasSiblings property of each job:
+ * - If HasSiblings is true, an array of child objects is added.
+ * - If HasSiblings is false, a single child object is added (if available).
+ *
+ * The function also tracks and logs performance for batch fetching and merging operations.
+ *
+ * @param parentTableName - The name of the parent table to fetch records from.
+ * @param batchSize - The number of parent records to fetch per batch.
+ * @param startRow - The RowId to start fetching records from.
+ * @param maxRows - The maximum number of parent records to process.
+ * @param linkedField - The field name used to link parent and child records.
+ * @param childJobs - An array of ChildJob definitions specifying child tables and merge logic.
+ * @yields Enriched parent record objects, each including child records and tracking metadata.
+ */
 export async function* streamParentChildData(
   parentTableName: string,
   batchSize: number,
   startRow: number,
   maxRows: number,
   linkedField: string,
-  childJobs: ChildJob[],
+  childJobs: ChildJob[]
 ): AsyncGenerator<any> {
   let processedRows = 0;
   let currentOffset = startRow;
@@ -36,8 +48,7 @@ export async function* streamParentChildData(
   while (processedRows < maxRows) {
     const currentBatchSize = Math.min(batchSize, maxRows - processedRows);
 
-    // הדפס רק אם עברה כמות מסוימת של זמן או רשומות:
-    const shouldLog = processedRows % 1000 === 0; // לוג רק כל 1000 רשומות
+    const shouldLog = processedRows % 1000 === 0;
     if (shouldLog) {
       console.time(`Fetch parent records ${currentOffset}`);
     }
@@ -47,7 +58,7 @@ export async function* streamParentChildData(
       currentOffset,
       currentBatchSize,
       linkedField,
-      startRow,
+      startRow
     );
     if (shouldLog) {
       console.timeEnd(`Fetch parent records ${currentOffset}`);
@@ -55,26 +66,23 @@ export async function* streamParentChildData(
 
     if (parentRecords.length === 0) {
       console.log(
-        `No more parent records available at offset ${currentOffset}`,
+        `No more parent records available at offset ${currentOffset}`
       );
-      break; // אין עוד רשומות לעיבוד
+      break;
     }
 
-    // מיצוי ערכי המפתח לצורך שליפת ילדים
     const linkedValues = parentRecords.map((record) => record[linkedField]);
     // console.log(`Extracted ${linkedValues.length} linked values from parent records`);
 
     const label = `Fetch child data for ${linkedValues.length} parents`;
     console.time(label);
-    // שליפת נתוני ילדים לכל סוגי הילדים
     const childDataMap = await fetchAllChildData(
       childJobs,
       linkedValues,
-      linkedField,
+      linkedField
     );
     console.timeEnd(label);
 
-    // עיבוד כל רשומת אב בנפרד ויצירת JSON מוכן
     for (const parent of parentRecords) {
       const mergeLabel = `Merge parent-child JSON for parent ${parent.RowId}`;
       console.time(mergeLabel);
@@ -82,39 +90,23 @@ export async function* streamParentChildData(
       const linkValue = parent[linkedField];
       const parsedParentData = parseJsonData(parent.Data);
 
-      // שימוש ישיר באובייקט המקורי
       const priorityObject = parsedParentData;
 
       // Create a tracking structure to store child records by job type
       const childRecordsByType: Record<string, any[]> = {};
 
-      // הוספת הילדים הרלוונטיים לכל אב בהתאם להגדרת HasSiblings
+      // Iterate over each child job to merge child records
       for (const job of childJobs) {
         const childRecords =
           childDataMap.get(job.DBTableName)?.get(linkValue) || [];
 
-        // שמירת נתוני ילדים מקוריים לצרכי מעקב
+        // Initialize the child records array for this job type
         childRecordsByType[job.JobTypeName] = [];
 
         if (childRecords.length === 0) {
-          // אין ילדים לסוג זה - נמשיך לסוג הבא בלי להוסיף שדה ריק!
+          // No child records for this job type, continue to next job
           continue;
         }
-
-        // if (childRecords.length === 0) {
-        //   // אין ילדים לסוג זה - נמשיך לסוג הבא
-        //   childRecordsByType[job.DBTableName] = [];
-
-        //   // במקרה שאין ילדים, נוסיף מבנה ריק למסך המתאים
-        //   const subformKey = `${job.ScreenName}_SUBFORM`;
-        //   if (job.HasSiblings) {
-        //     priorityObject[subformKey] = [];
-        //   } else {
-        //     priorityObject[subformKey] = {};
-        //   }
-
-        //   continue;
-        // }
 
         // Preserve both parsed data AND RowId for each child record
         const parsedChildData = childRecords.map((child) => {
@@ -135,10 +127,10 @@ export async function* streamParentChildData(
         const uniqueKey = `${job.JobTypeName}_${job.DBTableName}`;
         childRecordsByType[uniqueKey] = parsedChildData;
 
-        // שם המפתח נקבע לפי ScreenName + _SUBFORM
+        // Add the child records to the priority object under the appropriate subform key
         const subformKey = `${job.ScreenName}_SUBFORM`;
 
-        // הוספת הילדים לפי הגדרת HasSiblings
+        // If HasSiblings is true, we add an array of child objects
         if (job.HasSiblings) {
           if (parsedChildData.length > 0) {
             priorityObject[subformKey] = parsedChildData.map((item) => {
@@ -151,16 +143,17 @@ export async function* streamParentChildData(
               return childWithoutMetadata;
             });
           }
-          // אם אין ילדים, לא נוסיף את השדה בכלל
+          // If HasSiblings is false, we add a single child object
         } else {
           if (parsedChildData.length > 0) {
             if (parsedChildData.length > 1) {
               console.warn(
-                `נמצאו ${parsedChildData.length} רשומות ילד עבור ${job.ScreenName}, אך HasSiblings=false. משתמש ברשומה הראשונה בלבד.`,
+                `נמצאו ${parsedChildData.length} רשומות ילד עבור ${job.ScreenName}, אך HasSiblings=false. משתמש ברשומה הראשונה בלבד.`
               );
             }
 
-            // הסרת שדות מעקב והשמה כאובייקט בודד
+            // Use the first child record for this job type
+            // Remove metadata fields before adding to priority object
             const {
               RowId,
               __tableName,
@@ -169,7 +162,7 @@ export async function* streamParentChildData(
             } = parsedChildData[0];
             priorityObject[subformKey] = childWithoutMetadata;
           }
-          // אם אין ילדים, לא נוסיף את השדה בכלל
+          // If no child records, we leave the subform key undefined
         }
       }
 
@@ -189,8 +182,6 @@ export async function* streamParentChildData(
 
       processedRows++;
     }
-    // התקדמות לחלק הבא
-    //currentOffset += parentRecords.length;
 
     // Get the highest RowId from this batch to use as the next starting point
     const lastRowId = Math.max(...parentRecords.map((record) => record.RowId));
@@ -201,12 +192,12 @@ export async function* streamParentChildData(
 }
 //---------------------------------------------------------------------------
 /**
- * Map-בניית מבנה היררכי של נתוני הילדים באמצעות מבני נתונים מסוג
+ * Fetches all child records for the given child jobs and linked values.
  */
 async function fetchAllChildData(
   childJobs: ChildJob[],
   linkedValues: any[],
-  linkedField: string,
+  linkedField: string
 ): Promise<Map<string, Map<any, ChildRecord[]>>> {
   const childDataMap = new Map<string, Map<any, ChildRecord[]>>();
 
@@ -217,7 +208,7 @@ async function fetchAllChildData(
       const childRecords = await fetchChildRecords(
         childJob.DBTableName,
         linkedField,
-        linkedValues,
+        linkedValues
       );
 
       const innerMap = new Map<any, ChildRecord[]>();
@@ -231,7 +222,7 @@ async function fetchAllChildData(
       }
 
       childDataMap.set(mapKey, innerMap);
-    }),
+    })
   );
 
   return childDataMap;
@@ -245,7 +236,7 @@ async function fetchEligibleParentRecords(
   offset: number,
   limit: number,
   linkedField: string,
-  startRow: number,
+  startRow: number
 ): Promise<ParentRecord[]> {
   try {
     // console.log(`Starting to fetch parent records from ${tableName}`);
@@ -270,24 +261,24 @@ async function fetchEligibleParentRecords(
 }
 //---------------------------------------------------------------------------
 /**
- * שליפת רשומות ילדים על פי רשימת ערכי קישור
- * משתמש בשאילתה מותאמת כדי לטפל ביעילות במספר גדול של ערכים
+ * Fetches child records based on a list of link values.
+ * Uses a tailored query to efficiently handle a large number of values.
  */
 async function fetchChildRecords(
   tableName: string,
   linkFieldName: string,
-  linkValues: any[],
+  linkValues: any[]
 ): Promise<ChildRecord[]> {
   if (linkValues.length === 0) {
     return [];
   }
 
-  // בדיקה האם מדובר במספר גדול של ערכים ושימוש בטבלה זמנית במידת הצורך
+  // Check if this is a large number of values and use a temporary table if necessary
   if (linkValues.length > 2000) {
     return await fetchChildRecordsWithTempTable(
       tableName,
       linkFieldName,
-      linkValues,
+      linkValues
     );
   }
 
@@ -312,22 +303,23 @@ async function fetchChildRecords(
 }
 //---------------------------------------------------------------------------
 /**
- * שליפת רשומות ילדים עם טבלה זמנית עבור מספר גדול של ערכי קישור
+ * Fetches child records with a temporary table for a large number of link values.
  */
 async function fetchChildRecordsWithTempTable(
   tableName: string,
   linkFieldName: string,
-  linkValues: any[],
+  linkValues: any[]
 ): Promise<ChildRecord[]> {
   const tempTableName = `#Temp_LinkValues_${Date.now()}`;
 
   try {
-    // יצירת טבלה זמנית
+    // Create the temporary table
     await DatabaseService.executeQuery(`
       CREATE TABLE ${tempTableName} (LinkValue NVARCHAR(255))
     `);
 
-    // הכנסת הערכים לטבלה הזמנית (בקבוצות)
+    // Insert link values into the temporary table in batches
+    // This prevents SQL Server from hitting the maximum number of parameters limit
     const batchSize = 1000;
     for (let i = 0; i < linkValues.length; i += batchSize) {
       const batch = linkValues.slice(i, i + batchSize);
@@ -337,11 +329,11 @@ async function fetchChildRecordsWithTempTable(
         INSERT INTO ${tempTableName} (LinkValue)
         VALUES ${valuePlaceholders}
       `,
-        batch,
+        batch
       );
     }
 
-    // שליפת הנתונים המקושרים באמצעות הטבלה הזמנית
+    // Fetch the child records using the temporary table
     return await DatabaseService.executeQuery(`
       SELECT c.RowId, c.Data, c.${linkFieldName}
       FROM ${tableName} c
@@ -350,7 +342,7 @@ async function fetchChildRecordsWithTempTable(
       ORDER BY c.RowId ASC
     `);
   } finally {
-    // מחיקת הטבלה הזמנית
+    // Clean up the temporary table
     await DatabaseService.executeQuery(`DROP TABLE IF EXISTS ${tempTableName}`);
   }
 }

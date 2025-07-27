@@ -271,8 +271,6 @@ export async function processParentChildResponse(
             // console.log(`Processing child table ${tableName} with ${updatesWithExplicitTypes.length} records`);
             // console.log(`First record sample: ${JSON.stringify(updatesWithExplicitTypes[0])}`);
 
-            // ====== התיקון המוצע מסתיים כאן ======
-
             const childResult = await performBulkUpdateWithService(
               tableName,
               updatesWithExplicitTypes,
@@ -282,7 +280,6 @@ export async function processParentChildResponse(
               sentToPriority
             );
 
-            // לוג הצלחה לאחר העדכון
             // console.log(`✅ Updated ${updates.length} records in child table ${tableName}, success: ${childResult.successful}`);
 
             totalDbUpdateTime += childResult.updateTime;
@@ -752,7 +749,7 @@ function processApiResponse(
 
                   // Check if this subform exists in the response
                   if (responseBody && responseBody[subformKey] !== undefined) {
-                    console.log(`Found subform ${subformKey} in response`);
+                    // console.log(`Found subform ${subformKey} in response`);
 
                     // For HasSiblings=true (array of records)
                     if (
@@ -788,9 +785,9 @@ function processApiResponse(
                             );
 
                             if (matchedItem) {
-                              console.log(
-                                `Matched child record using field ${field}=${matchValue}`
-                              );
+                              // console.log(
+                              //   `Matched child record using field ${field}=${matchValue}`
+                              // );
                               break;
                             }
                           }
@@ -799,9 +796,9 @@ function processApiResponse(
                         // If no match found, fall back to the first item (but log a warning)
                         if (!matchedItem) {
                           matchedItem = subformArray[0];
-                          console.log(
-                            `No match found for child record in ${subformKey}, using first item`
-                          );
+                          // console.log(
+                          //   `No match found for child record in ${subformKey}, using first item`
+                          // );
                         }
 
                         // Extract the priority_id from the matched item
@@ -813,13 +810,13 @@ function processApiResponse(
                           // Ensure proper type conversion to string for SQL compatibility
                           childUpdate.priority_id =
                             idValue !== null ? String(idValue) : null;
-                          console.log(
-                            `Found child ID in ${subformKey}: ${childUpdate.priority_id}`
-                          );
+                          // console.log(
+                          //   `Found child ID in ${subformKey}: ${childUpdate.priority_id}`
+                          // );
                         } else {
-                          console.log(
-                            `Field ${job.priority_id} not found in ${subformKey} item`
-                          );
+                          // console.log(
+                          //   `Field ${job.priority_id} not found in ${subformKey} item`
+                          // );
                         }
                       }
                     }
@@ -838,19 +835,19 @@ function processApiResponse(
                         // Ensure proper type conversion to string for SQL compatibility
                         childUpdate.priority_id =
                           idValue !== null ? String(idValue) : null;
-                        console.log(
-                          `Found child ID in single object: ${childUpdate.priority_id}`
-                        );
+                        // console.log(
+                        //   `Found child ID in single object: ${childUpdate.priority_id}`
+                        // );
                       } else {
-                        console.log(
-                          `Field ${job.priority_id} not found in ${subformKey} object`
-                        );
+                        // console.log(
+                        //   `Field ${job.priority_id} not found in ${subformKey} object`
+                        // );
                       }
                     }
                   } else {
-                    console.log(
-                      `Subform ${subformKey} not found in response. Available keys: ${Object.keys(responseBody).join(", ")}`
-                    );
+                    // console.log(
+                    //   `Subform ${subformKey} not found in response. Available keys: ${Object.keys(responseBody).join(", ")}`
+                    // );
                   }
                 } catch (e) {
                   console.error(

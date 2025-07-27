@@ -143,11 +143,11 @@ async function fetchEligibleParentRecords(
   customWhereClause?: string
 ): Promise<any[]> {
   try {
-    // Get base WHERE clause and combine with custom clause if provided
     console.log(
       `fetchEligibleParentRecords called with customWhereClause: ${customWhereClause}`
     );
 
+    // Add query hint to optimize execution
     const baseWhereClause = "is_eligible = 1 AND is_new = 1";
     let whereClause = `RowId > @startRow AND ${baseWhereClause}`;
 
@@ -155,14 +155,15 @@ async function fetchEligibleParentRecords(
       whereClause = `${whereClause} AND (${customWhereClause})`;
     }
 
-    // Maintain the original query structure with OFFSET/FETCH
+    // Add OPTION hints for query optimization
     const query = `
       SELECT RowId, Data, ${linkedField}
-      FROM ${tableName}
+      FROM ${tableName} WITH (NOLOCK)
       WHERE ${whereClause}
       ORDER BY RowId ASC
       OFFSET 0 ROWS
-      FETCH NEXT @limit ROWS ONLY`;
+      FETCH NEXT @limit ROWS ONLY
+      OPTION (OPTIMIZE FOR UNKNOWN, MAXDOP 4)`;
 
     const results = await DatabaseService.executeQuery(query, {
       startRow,
