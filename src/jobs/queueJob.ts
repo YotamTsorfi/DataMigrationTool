@@ -205,14 +205,14 @@ export async function processWithQueues(
             });
           }
 
-          // **שינוי 2**: הוספת מאזין התקדמות לכל תור
+          // Get the queue ID for progress tracking
           const queueId = queue.getQueueId();
 
-          // פונקציה שתקרא בכל פעם שתור מעדכן את ההתקדמות שלו
+          // Initialize progress tracking for this queue
           const updateListener = (success: number, failure: number) => {
             progressUpdates.set(queueId, { success, failure });
 
-            // חישוב סך הכל מכל התורים
+            // Update the total success and failure counts
             let currentSuccess = 0;
             let currentFailure = 0;
 
@@ -221,7 +221,7 @@ export async function processWithQueues(
               currentFailure += update.failure;
             });
 
-            // עדכון המעקב הכללי - מוסיפים למספרים המצטברים הכוללים
+            // Update the progress tracker with the total counts
             ProgressTracker.updateProgress(
               jobId,
               totalProcessedRecords + currentSuccess + currentFailure,
@@ -230,10 +230,10 @@ export async function processWithQueues(
             );
           };
 
-          // הוספת המאזין לתור
+          // Set the progress listener for this queue
           queue.setProgressListener(updateListener);
 
-          // עיבוד התור כרגיל
+          // Process the queue and return the result
           return queue.process();
         });
 
@@ -329,7 +329,7 @@ async function performDatabaseUpdatesAsync(
   perfMonitor: PerformanceMonitor
 ): Promise<void> {
   try {
-    // 1. נשמור את מבנה הטבלה בתחילת הפונקציה במקום לשאול שוב ושוב
+    // Cache table structure
     let tableColumns;
     const availableColumns = new Set();
     let errorColumn: string | null = null;
@@ -337,18 +337,18 @@ async function performDatabaseUpdatesAsync(
     let hasStatusCode = false;
 
     try {
-      // בדיקת מבנה טבלה - פעם אחת בלבד
+      // Fetch table structure only once
       tableColumns = await DatabaseService.executeQuery(
         `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @tableName`,
         { tableName }
       );
 
-      // יצירת מפת שמות עמודות לחיפוש מהיר
+      // Populate available columns set
       tableColumns.forEach((col: any) => {
         availableColumns.add(col.COLUMN_NAME);
       });
 
-      // בדיקה אם קיימת עמודת הודעת שגיאה ומה שמה
+      // Determine the error column based on available columns
       errorColumn = availableColumns.has("ErrorMessage")
         ? "ErrorMessage"
         : availableColumns.has("Error")
@@ -359,11 +359,11 @@ async function performDatabaseUpdatesAsync(
       hasStatusCode = availableColumns.has("StatusCode");
     } catch (error) {
       console.error(`Error fetching table structure for ${tableName}:`, error);
-      // אפילו אם נכשלנו בשליפת מבנה הטבלה, ננסה להמשיך עם ברירות מחדל סבירות
-      errorColumn = "ErrorMessage"; // ברירת מחדל סבירה
+      // Default to a reasonable error column if not found
+      errorColumn = "ErrorMessage";
     }
 
-    // 2. עדכון במסה עם טיפול בשגיאות משופר
+    //  if (resultData.updateRows.length === 0 && resultData.errorRows.length === 0) {
     const MAX_BULK_RETRIES = 3;
     let bulkUpdateSuccessful = false;
     let bulkRetryCount = 0;
@@ -386,7 +386,6 @@ async function performDatabaseUpdatesAsync(
         row.CleanError = null;
       }
 
-      // טיפול מחמיר יותר ב-priority_id
       try {
         if (
           row.priority_id === undefined ||
@@ -401,19 +400,16 @@ async function performDatabaseUpdatesAsync(
           // });
           row.priority_id = null;
         } else {
-          // המרה לstring ובדיקה שהערך תקין
           const strValue = String(row.priority_id).trim();
           if (!strValue) {
             row.priority_id = null;
           } else {
-            // הסרת תווים בעייתיים ובדיקת תקינות
             const sanitized = strValue
-              .replace(/\p{C}/gu, "") // הסרת תווי בקרה (כלליים, כולל Unicode)
-              .replace(/[\\"']/g, "") // הסרת תווים מיוחדים
+              .replace(/\p{C}/gu, "")
+              .replace(/[\\"']/g, "")
               .substring(0, 50);
             row.priority_id = sanitized || null;
 
-            // וידוא שהערך עדיין תקין אחרי הניקוי
             if (!sanitized || sanitized.length === 0) {
               row.priority_id = null;
             } else {
@@ -449,7 +445,6 @@ async function performDatabaseUpdatesAsync(
         );
 
         if (bulkRetryCount < MAX_BULK_RETRIES) {
-          // המתנה הדרגתית בין ניסיונות
           console.log(`Waiting before retry ${bulkRetryCount}...`);
           await new Promise((resolve) =>
             setTimeout(resolve, 1000 * bulkRetryCount)
@@ -458,16 +453,15 @@ async function performDatabaseUpdatesAsync(
       }
     }
 
-    // 3. אם העדכון במסה נכשל, ננסה עדכונים בודדים עם ניסיונות חוזרים
     if (!bulkUpdateSuccessful) {
       console.warn(
         `Bulk update failed after ${MAX_BULK_RETRIES} attempts, trying individual updates...`
       );
 
-      // שמירת רשימת מזהי השורות שעודכנו בהצלחה כדי למנוע כפילויות
+      // If bulk update failed, try individual updates
       const successfullyUpdatedRowIds = new Set<number>();
 
-      // עיבוד כל השורות בנפרד
+      // Individual update with retries
       for (const row of resultData.updateRows) {
         if (!row.RowId || successfullyUpdatedRowIds.has(row.RowId)) continue;
 
@@ -562,7 +556,7 @@ async function performDatabaseUpdatesAsync(
       }
     }
 
-    // 4. רישום לוג שגיאות
+    // Process error rows if any
     if (resultData.errorRows.length > 0 && logErrors) {
       try {
         ErrorBufferService.getInstance().addErrors(resultData.errorRows);

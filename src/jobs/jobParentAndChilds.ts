@@ -62,9 +62,9 @@ async function processParentChildBatches(
   console.log("---------------END DEBUG ---------------------");
 
   const lastProgressUpdate = { time: Date.now(), records: 0 };
-  const logInterval = 1000; // הדפס לוג רק כל 1000 רשומות
+  const logInterval = 1000;
   let lastLogTime = Date.now();
-  const logIntervalTime = 30000; // או כל 30 שניות, מה שקורה קודם
+  const logIntervalTime = 30000;
 
   const phaseMetrics = {
     dbFetch: { total: 0, count: 0 },
@@ -90,11 +90,9 @@ async function processParentChildBatches(
   const config = await configService.getConfig();
   const maxConcurrentBatches = config.CONCURRENT_BATCHES;
 
-  // סט מירבי של באצ'ים לשרת (מגבלה יעילה)
   const maxBatchesPerServer = 8;
-  const serverCount = 4; // מספר השרתים בלואד-באלאנסר
+  const serverCount = 4;
 
-  // ערך מירבי של מקביליות - לפי כמות השרתים והערך שהוגדר
   const effectiveConcurrency = Math.min(
     maxConcurrentBatches,
     maxBatchesPerServer * serverCount
@@ -104,10 +102,8 @@ async function processParentChildBatches(
     `Using concurrency of ${effectiveConcurrency} batches (${serverCount} servers with ${maxBatchesPerServer} batches per server)`
   );
 
-  // יצירת בריכת העובדים המקבילים - לפי הערך האפקטיבי שחישבנו
   const workerPool = pLimit(effectiveConcurrency);
 
-  // רשימת העבודות הפעילות
   const activeJobs = new Set();
 
   // Configure error buffer for more efficient error logging
@@ -124,34 +120,32 @@ async function processParentChildBatches(
   let consecutiveFailedBatches = 0;
   const maxConsecutiveFailures = 3;
 
-  // נקודת התחלה ומעקב אחר התקדמות
   let currentRow = 0;
   let currentStartRow = startRow;
 
   // Prepare child table names for response processor
   const childTableNames = childJobs.map((job) => job.DBTableName);
 
-  // פונקציה לטיפול בסיום באצ'
+  // Prepare child job types for response processor
   const handleBatchCompletion = (promise: Promise<any>) => {
     activeJobs.delete(promise);
 
-    // אם יש עוד רשומות לעיבוד ויש מקום בבריכת העובדים, נמשיך לשלוף ולשלוח
+    // Update progress after each batch completion
     if (currentRow < totalRecords) {
       fetchAndProcessBatch();
     }
   };
 
-  // פונקציה לשליפה ושליחה של באצ' בודד
+  // Function to fetch and process the next batch of records
   async function fetchAndProcessBatch() {
     // Check for cancellation before processing each batch
     if (JobCancellationService.isCancellationRequested(jobId)) {
       console.log(`Job ${jobId} cancelled - stopping processing`);
       return; // Exit the function
     }
-    // אם הגענו לסוף הרשומות, נסיים
+
     if (currentRow >= totalRecords) return;
 
-    // נשלוף כמות רשומות המתאימה לבאצ' אחד (100 רשומות)
     const batchRemaining = Math.min(
       maxBatchSizeForApi,
       totalRecords - currentRow
@@ -161,11 +155,9 @@ async function processParentChildBatches(
       `Fetching next batch at offset ${currentStartRow}, remaining: ${batchRemaining}`
     );
 
-    // 1. התחלת מדידת זמן שליפה
     const fetchMonitor = new PerformanceMonitor();
     fetchMonitor.startDbFetch();
 
-    // 2. יצירת הסטרים ושליפת הנתונים
     const dataStream = streamParentChildData(
       parentTableName,
       batchSize,
@@ -175,7 +167,6 @@ async function processParentChildBatches(
       childJobs
     );
 
-    // 3. עיבוד הסטרים וקריאת הנתונים
     const records: any[] = [];
     let lastRowId = currentStartRow;
 
@@ -185,7 +176,6 @@ async function processParentChildBatches(
         continue;
       }
 
-      // שמירת ה-RowId הגבוה ביותר
       if (record.RowId && record.RowId > lastRowId) {
         lastRowId = record.RowId;
       }
@@ -194,11 +184,9 @@ async function processParentChildBatches(
       processedRecords++;
       currentRow++;
 
-      // אם הגענו לגודל באצ' מלא, נפסיק את הלולאה
       if (records.length >= maxBatchSizeForApi) break;
     }
 
-    // 4. סיום מדידת זמן שליפה
     fetchMonitor.endDbFetch();
     phaseMetrics.dbFetch.total += fetchMonitor.metrics.dbFetchTime || 0;
     phaseMetrics.dbFetch.count++;
@@ -216,22 +204,17 @@ async function processParentChildBatches(
       lastLogTime = Date.now();
     }
 
-    // עדכון נקודת ההתחלה לבאצ' הבא
     currentStartRow = lastRowId + 1;
 
-    // אם אין יותר רשומות, נסיים
     if (records.length === 0) {
       console.log(`No more records available at offset ${currentStartRow}`);
       return;
     }
 
-    // 5. שליחת הבאצ' דרך בריכת העובדים
     const sendPromise = workerPool(async () => {
-      // 5.1 מדידת זמן שליחה לAPI
       const apiStartTime = performance.now();
 
       try {
-        // 5.2 שליחת הבאצ' לAPI
         const result = await sendParentChildBatch(
           records,
           jobType,
@@ -244,7 +227,6 @@ async function processParentChildBatches(
           logErrors
         );
 
-        // 5.3 מדידת זמן סיום API
         const apiTime = performance.now() - apiStartTime;
         phaseMetrics.apiRequest.total += apiTime;
         phaseMetrics.apiRequest.count++;
@@ -252,8 +234,7 @@ async function processParentChildBatches(
         console.log(
           `Batch API request completed in ${apiTime.toFixed(2)}ms for ${records.length} records`
         );
-
-        // 5.4 עיבוד התוצאות ועדכון הסטטיסטיקה
+        // Update performance metrics
         if (result.performanceMetrics?.dbUpdateTime) {
           const dbUpdateTimeStr = result.performanceMetrics.dbUpdateTime;
           const dbUpdateTime = parseFloat(dbUpdateTimeStr.replace("ms", ""));
@@ -263,11 +244,9 @@ async function processParentChildBatches(
           }
         }
 
-        // עדכון סטטיסטיקות הצלחה וכישלון
         totalSuccessCount += result.successCount || 0;
         totalFailureCount += result.failureCount || 0;
 
-        // עדכון מעקב התקדמות
         ProgressTracker.updateProgress(
           jobId,
           totalSuccessCount + totalFailureCount,
@@ -275,7 +254,6 @@ async function processParentChildBatches(
           totalFailureCount
         );
 
-        // בדיקת כישלונות רצופים
         if (
           (result.failureCount || 0) > 0 &&
           (result.successCount || 0) === 0
@@ -291,11 +269,9 @@ async function processParentChildBatches(
             );
           }
         } else {
-          // איפוס מונה כישלונות רצופים בהצלחה כלשהי
           consecutiveFailedBatches = 0;
         }
 
-        // הוספת התוצאות למערך הכולל
         results.push({
           success: result.success,
           successCount: result.successCount,
@@ -305,11 +281,9 @@ async function processParentChildBatches(
 
         return result;
       } catch (error) {
-        // 5.5 טיפול בשגיאות
         console.error(`Error processing batch:`, error);
         consecutiveFailedBatches++;
 
-        // עדכוני DB במקרה של שגיאה
         await forceErrorRecordUpdates(records, jobId, error);
 
         totalFailureCount += records.length;
@@ -320,7 +294,6 @@ async function processParentChildBatches(
           totalFailureCount
         );
 
-        // הוספת שגיאה לתוצאות
         const errorResult = {
           success: false,
           successCount: 0,
@@ -331,22 +304,19 @@ async function processParentChildBatches(
         results.push(errorResult);
         return errorResult;
       } finally {
-        // עזרה ל-garbage collection
         records.length = 0;
       }
     });
 
-    // הוספת הפרומיס למעקב
     activeJobs.add(sendPromise);
 
-    // טיפול בסיום העבודה
     sendPromise
       .then(() => handleBatchCompletion(sendPromise))
       .catch(() => handleBatchCompletion(sendPromise));
   }
 
   try {
-    // התחלת התהליך - אתחול של מספר עבודות בהתאם למקביליות המותרת
+    // Start processing the first batch
     const initialBatches = Math.min(
       effectiveConcurrency,
       Math.ceil(totalRecords / maxBatchSizeForApi)
@@ -364,7 +334,6 @@ async function processParentChildBatches(
       }
     }
 
-    // המתנה לסיום כל העבודות הפעילות
     while (activeJobs.size > 0) {
       // Check for cancellation before processing each batch
       if (JobCancellationService.isCancellationRequested(jobId)) {
@@ -373,20 +342,17 @@ async function processParentChildBatches(
       }
 
       await Promise.race(Array.from(activeJobs));
-      // המשך התהליך אוטומטית דרך handleBatchCompletion
 
-      // לוג התקדמות
       // if (processedRecords % 10000 === 0 || processedRecords >= totalRecords) {
       //   console.log(
       //     `Progress: ${processedRecords}/${totalRecords} records processed (${Math.floor((processedRecords / totalRecords) * 100)}%)`
       //   );
       // }
-
-      // הוסף הצגת קצב עיבוד:
+      // Update progress every 10 seconds
       const now = Date.now();
       const timeDiff = now - lastProgressUpdate.time;
       if (timeDiff > 60000) {
-        // כל דקה
+        // Calculate records processed since last update
         const recordDiff = processedRecords - lastProgressUpdate.records;
         const recordsPerMinute = (recordDiff / timeDiff) * 60000;
 
@@ -402,19 +368,15 @@ async function processParentChildBatches(
       }
     }
 
-    // ריקון כל השגיאות שנותרו בבאפר
     await errorBuffer.flushAll();
 
-    // סיום המדידה הכוללת
     overallPerformance.endOperation();
     const metrics = overallPerformance.getFormattedMetrics();
 
-    // לוג סיום העבודה
     console.log(
       `Parent-child job completed: ${processedRecords} records (${totalSuccessCount} success, ${totalFailureCount} failed), duration: ${metrics.totalDuration}`
     );
 
-    // סיכום ביצועים
     const avgDbFetchTime =
       phaseMetrics.dbFetch.count > 0
         ? (phaseMetrics.dbFetch.total / phaseMetrics.dbFetch.count).toFixed(2)
@@ -448,7 +410,7 @@ async function processParentChildBatches(
   } catch (error) {
     console.error(`Fatal error in processParentChildBatches:`, error);
 
-    // ריקון הבאפר גם במקרה של שגיאה
+    // Force update all records with error status
     try {
       await errorBuffer.flushAll();
     } catch (flushError) {

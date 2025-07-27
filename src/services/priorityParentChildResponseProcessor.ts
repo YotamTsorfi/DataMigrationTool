@@ -271,8 +271,6 @@ export async function processParentChildResponse(
             // console.log(`Processing child table ${tableName} with ${updatesWithExplicitTypes.length} records`);
             // console.log(`First record sample: ${JSON.stringify(updatesWithExplicitTypes[0])}`);
 
-            // ====== התיקון המוצע מסתיים כאן ======
-
             const childResult = await performBulkUpdateWithService(
               tableName,
               updatesWithExplicitTypes,
@@ -282,7 +280,6 @@ export async function processParentChildResponse(
               sentToPriority
             );
 
-            // לוג הצלחה לאחר העדכון
             // console.log(`✅ Updated ${updates.length} records in child table ${tableName}, success: ${childResult.successful}`);
 
             totalDbUpdateTime += childResult.updateTime;

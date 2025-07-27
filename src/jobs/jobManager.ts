@@ -98,7 +98,7 @@ class JobManager {
     totalFailures?: number,
     errorMessage?: string
   ): Promise<void> {
-    // עדכון זמן סיום רק כאשר העבודה מסתיימת
+    // Check if the jobId is valid
     const isCompleted = status === "Completed" || status === "Failed";
 
     let query = `
@@ -106,7 +106,7 @@ class JobManager {
     SET Status = @Status, SuccessCount = @SuccessCount, FailureCount = @FailureCount, ErrorMessage = @ErrorMessage
   `;
 
-    // הוסף את EndTime לשאילתה רק אם העבודה מסתיימת
+    // Add EndTime only if the job is completed
     if (isCompleted) {
       query += `, EndTime = @EndTime`;
     }
@@ -121,7 +121,7 @@ class JobManager {
       ErrorMessage: errorMessage ?? null,
     };
 
-    // הוסף פרמטר EndTime רק אם העבודה מסתיימת
+    // Add EndTime only if the job is completed
     if (isCompleted) {
       params.EndTime = adjustTimeZone(new Date());
     }

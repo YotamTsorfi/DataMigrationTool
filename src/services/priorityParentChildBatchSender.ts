@@ -12,7 +12,8 @@ import { processParentChildResponse } from "./priorityParentChildResponseProcess
 import { ChildJob } from "../jobs/jobParentAndChilds";
 // import { writeToLogFile } from "../config/logger";
 
-// תוצאת שליחה של מנה (Batch)
+// -------------------------------------------------------------------------
+// Define the structure of the result returned by the batch send operation
 export interface BatchSendResult {
   success: boolean;
   batchId: string;
@@ -34,14 +35,7 @@ export interface BatchSendResult {
 }
 //-------------------------------------------------------------------------
 /**
- * שליחת רשומות אב-ילדים מאוחדות לשרת Priority
- * @param records - מערך של אובייקטי JSON מאוחדים (אב + ילדים)
- * @param jobType - סוג העבודה
- * @param tableName - שם טבלת האב
- * @param priorityScreenName - שם המסך בפריוריטי
- * @param jobId - מזהה העבודה
- * @param priorityIdField - שדה המזהה בפריוריטי (אופציונלי)
- * @param childTableNames - מערך של שמות טבלאות הילדים (אופציונלי)
+ * Sends a batch of parent-child records to the Priority API.
  */
 export async function sendParentChildBatch(
   records: any[],
@@ -55,11 +49,9 @@ export async function sendParentChildBatch(
   logErrors: boolean = false,
   updateBatchTable: boolean = false
 ): Promise<BatchSendResult> {
-  // יצירת מזהה ייחודי למנה
   const batchId = uuidv4();
   const config = await configService.getConfig();
 
-  // הגדרת מונה ביצועים
   const perfMonitor = new PerformanceMonitor();
   perfMonitor.startOperation();
 
@@ -68,7 +60,6 @@ export async function sendParentChildBatch(
       throw new Error("Invalid records data");
     }
 
-    // הוספת מידע נוסף לכל רשומה
     perfMonitor.startBatchBuild();
     const enrichedRecords = records.map((record) => ({
       ...record,
@@ -86,21 +77,19 @@ export async function sendParentChildBatch(
       return cleanRecord;
     });
 
-    // מדידת זמן הבקשה
     measureRequestPerformance(cleanRecordsForApi, perfMonitor);
 
-    // בניית גוף הבקשה
     const boundary = generateBoundary();
     const batchBody = buildBatchRequestBody(cleanRecordsForApi, boundary);
 
-    // יצירת כותרות HTTP עם אימות
+    // Prepare headers for the batch request
     const headers = createBatchHeaders(
       boundary,
       `Basic ${Buffer.from(`${config.PRIORITY_PAT}:${config.PRIORITY_PASSWORD}`).toString("base64")}`
     );
     perfMonitor.endBatchBuild();
 
-    // מדידת זמן השליחה
+    // Log the request performance
     perfMonitor.startRequest();
 
     //--------------------------------------
@@ -120,7 +109,6 @@ export async function sendParentChildBatch(
     // );
     //--------------------------------------
 
-    // שליחת הבקשה
     let response;
     try {
       response = await sendBatchRequest(batchBody, headers);

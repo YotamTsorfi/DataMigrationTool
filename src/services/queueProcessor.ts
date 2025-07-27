@@ -207,13 +207,13 @@ export class QueueProcessor {
         const batchPromises = batch.map((item) => this.processItem(item));
         await Promise.all(batchPromises);
 
-        // רק השהיה אחת בין אצוות, לא בין כל פריט
+        // Log progress after each batch
         // Only apply rate limiting if enabled
         if (this.enableRateLimit) {
           await this.applyRateLimit();
         }
 
-        // עדכן progress אחרי כל אצווה
+        // Update progress tracker
         this.updateProgress();
       }
 
@@ -238,9 +238,9 @@ export class QueueProcessor {
           this.updateBatchTable
         );
       }
-      console.log(
-        `Queue ${this.queueId} stats: ${this.total503Errors}/${this.totalRequests} requests resulted in 503 errors (${((this.total503Errors / this.totalRequests) * 100).toFixed(2)}%)`
-      );
+      // console.log(
+      //   `Queue ${this.queueId} stats: ${this.total503Errors}/${this.totalRequests} requests resulted in 503 errors (${((this.total503Errors / this.totalRequests) * 100).toFixed(2)}%)`
+      // );
 
       return {
         success: true,
@@ -269,7 +269,7 @@ export class QueueProcessor {
     | ((successCount: number, failureCount: number) => void)
     | null = null;
   //-------------------------
-  // הוספת שיטה להגדרת מאזין התקדמות
+  // Set a listener for progress updates
   public setProgressListener(
     listener: (successCount: number, failureCount: number) => void
   ): void {

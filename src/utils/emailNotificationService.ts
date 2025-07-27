@@ -60,11 +60,11 @@ export class EmailNotificationService {
   }
 
   public async sendJobStartNotification(
-    details: JobNotificationDetails,
+    details: JobNotificationDetails
   ): Promise<void> {
     if (this.isNotificationDisabled()) return;
 
-    // שמירת מטא-דאטה של הג'וב לשימוש עתידי
+    // Save job metadata for future reference
     this.jobMetadata.set(details.jobId, {
       jobType: details.jobType,
       tableName: details.tableName,
@@ -86,14 +86,14 @@ export class EmailNotificationService {
 
     await this.sendEmail(subject, text);
 
-    // תזמון התראות תקופתיות
+    // Schedule progress notifications for this job
     this.scheduleProgressNotifications(details.jobId);
   }
 
   public async sendJobProgressNotification(jobId: string): Promise<void> {
     if (this.isNotificationDisabled()) return;
 
-    // קבלת הנתונים העדכניים מ-ProgressTracker
+    // Check if the job is still active
     const progress = ProgressTracker.getProgress(jobId);
     if (!progress) return;
 
@@ -117,11 +117,11 @@ export class EmailNotificationService {
   }
 
   public async sendJobCompletionNotification(
-    details: JobNotificationDetails,
+    details: JobNotificationDetails
   ): Promise<void> {
     if (this.isNotificationDisabled()) return;
 
-    // ניקוי טיימר התראות התקדמות
+    // Clear any active progress notifications for this job
     this.clearProgressNotificationsForJob(details.jobId);
 
     const subject = `ג'וב הושלם: ${details.jobId} (${details.status})`;
@@ -141,7 +141,7 @@ export class EmailNotificationService {
 
     await this.sendEmail(subject, text);
 
-    // ניקוי מטא-דאטה
+    // Remove job metadata after completion
     this.jobMetadata.delete(details.jobId);
   }
 
@@ -164,14 +164,14 @@ export class EmailNotificationService {
   }
 
   private scheduleProgressNotifications(jobId: string): void {
-    // ניקוי טיימר קודם אם קיים
+    // Clear any existing timer
     this.clearProgressNotificationsForJob(jobId);
 
-    // קבלת זמן העדכון מהגדרות התצורה
+    // Get the notification interval from the config
     const notificationInterval =
       this.config.EMAIL_NOTIFICATION_INTERVAL || 7200000;
 
-    // תזמון טיימר חדש - כל שעתיים (7,200,000 מילישניות)
+    // Schedule a timer to send progress notifications
     const timer = setInterval(async () => {
       try {
         const progress = ProgressTracker.getProgress(jobId);
@@ -185,15 +185,15 @@ export class EmailNotificationService {
           return;
         }
 
-        // שליחת התראת התקדמות
+        // Send the progress notification
         await this.sendJobProgressNotification(jobId);
       } catch (error) {
         console.error(
           `Error sending progress notification for job ${jobId}:`,
-          error,
+          error
         );
       }
-    }, notificationInterval); // שעתיים במילישניות
+    }, notificationInterval); // default to 2 hours if not set
 
     this.activeJobTimers.set(jobId, timer);
   }
