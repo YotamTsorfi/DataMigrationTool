@@ -179,7 +179,8 @@ export async function processParentChildWithQueues(
   childJobs: ChildJob[],
   logErrors: boolean = false,
   updateBatchTable: boolean = false,
-  customWhereClause?: string
+  customWhereClause?: string,
+  caseId?: string
 ): Promise<BatchResult[]> {
   console.log(
     "------------- PARENT-CHILD GRID PROCESSING --------------------"
@@ -261,7 +262,8 @@ export async function processParentChildWithQueues(
         linkedField,
         childJobs,
         perfMonitor,
-        customWhereClause
+        customWhereClause,
+        caseId
       );
       perfMonitor.endDbFetch();
 

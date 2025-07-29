@@ -12,7 +12,8 @@ export async function fetchDataChunk(
   tableName: string,
   lastRowId: number,
   chunkSize: number,
-  customWhereClause?: string
+  customWhereClause?: string,
+  caseId?: string
 ): Promise<any[]> {
   const perfMonitor = new PerformanceMonitor();
   perfMonitor.startDbFetch();
@@ -24,11 +25,16 @@ export async function fetchDataChunk(
     const baseWhereClause = "is_eligible = 1 AND is_new = 1";
     let whereClause = `RowId > @lastRowId AND ${baseWhereClause}`;
 
+    // Add case_id filter to the WHERE clause if provided
+    if (caseId) {
+      whereClause += ` AND case_id = @caseId`;
+    }
+
+    // Append custom WHERE clause if provided
     if (customWhereClause) {
       whereClause = `${whereClause} AND (${customWhereClause})`;
     }
 
-    // Fix: Use consistent parameter naming in both query and params object
     const query = `
       SELECT TOP (@chunkSize) RowId, Data
       FROM ${tableName}
@@ -36,10 +42,17 @@ export async function fetchDataChunk(
       ORDER BY RowId ASC
     `;
 
-    const rowsData = await DatabaseService.executeQuery(query, {
+    // Add caseId to query parameters if provided
+    const params: any = {
       lastRowId,
       chunkSize,
-    });
+    };
+
+    if (caseId) {
+      params.caseId = caseId;
+    }
+
+    const rowsData = await DatabaseService.executeQuery(query, params);
 
     perfMonitor.endDbFetch();
 

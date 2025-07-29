@@ -1,6 +1,6 @@
 import express, { Request, Response, Router } from "express";
 import { priorityAuthMiddleware } from "../middleware/priorityAuth";
-import { getJobTypes } from "../controllers/jobController";
+import { getJobTypes, getActiveCaseIds } from "../controllers/jobController";
 import { JobManager } from "../jobs/jobManager";
 import ProgressTracker from "../utils/progressTracker";
 import { formatErrorMessage } from "../utils/errorHandler";
@@ -8,6 +8,10 @@ import { JobCancellationService } from "../utils/jobCancellationService";
 
 const router: Router = express.Router();
 router.use(priorityAuthMiddleware);
+
+//-----------------------------------
+//Router for case-related API endpoints
+router.get("/active-case-ids", getActiveCaseIds);
 //-----------------------------------
 // For BatchDashboard.tsx & BathProcessor.tsx
 router.get("/job-types", getJobTypes);

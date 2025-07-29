@@ -31,6 +31,7 @@ interface SchedulerState {
   CurrentJobIndex: number | null;
   Status: "running" | "paused" | "completed" | "failed";
   LastUpdated: Date;
+  CaseId?: string;
 }
 
 // Job queue and state management
@@ -50,6 +51,7 @@ let activeJob: {
 
 // Scheduler job ID
 let schedulerJobId: string | null = null;
+let selectedCaseId: string | null = null;
 
 /**
  * Initialize and potentially recover job scheduler state
@@ -61,13 +63,19 @@ export async function initializeJobScheduler(): Promise<void> {
 
     // Check if there was a previously running scheduler session
     const schedulerState = await DatabaseService.executeQuery<SchedulerState>(
-      `SELECT TOP 1 SchedulerJobId, CurrentJobId, CurrentJobIndex, Status, LastUpdated
+      `SELECT TOP 1 SchedulerJobId, CurrentJobId, CurrentJobIndex, Status, LastUpdated, case_id as CaseId
        FROM PrioritySchedulerState
        ORDER BY LastUpdated DESC`
     );
 
     if (schedulerState?.length > 0) {
       const state = schedulerState[0];
+
+      // Restore case ID if available
+      if (state.CaseId) {
+        selectedCaseId = state.CaseId;
+        console.log(`Restored case ID: ${selectedCaseId}`);
+      }
 
       // If state is less than 24 hours old and was running or paused
       const lastUpdated = new Date(state.LastUpdated);
@@ -202,19 +210,20 @@ async function updateSchedulerState(
 
     // Log what we're recording for debugging
     console.log(
-      `Recording scheduler state: ${status} for job: ${jobNameToRecord || "none"}`
+      `Recording scheduler state: ${status} for job: ${jobNameToRecord || "none"} with case ID: ${selectedCaseId || "none"}`
     );
 
     await DatabaseService.executeQuery(
       `INSERT INTO PrioritySchedulerState 
-       (SchedulerJobId, CurrentJobId, CurrentJobIndex, CurrentJobName, Status, LastUpdated)
-       VALUES (@SchedulerJobId, @CurrentJobId, @CurrentJobIndex, @CurrentJobName, @Status, GETDATE())`,
+       (SchedulerJobId, CurrentJobId, CurrentJobIndex, CurrentJobName, Status, LastUpdated, case_id)
+       VALUES (@SchedulerJobId, @CurrentJobId, @CurrentJobIndex, @CurrentJobName, @Status, GETDATE(), @CaseId)`,
       {
         SchedulerJobId: schedulerJobId,
         CurrentJobId: jobToRecord,
         CurrentJobIndex: jobIndexToRecord !== -1 ? jobIndexToRecord : null,
         CurrentJobName: jobNameToRecord,
         Status: status,
+        CaseId: selectedCaseId, // Include the selected case ID
       }
     );
   } catch (error) {
@@ -239,6 +248,12 @@ export async function startJobScheduler(
       return;
     }
 
+    // Extract case ID from request body
+    selectedCaseId = req.body.caseId || null;
+    console.log(
+      `Starting job scheduler with case ID: ${selectedCaseId || "none"}`
+    );
+
     await startJobSchedulerInternal();
 
     res.status(200).json({
@@ -251,6 +266,7 @@ export async function startJobScheduler(
     console.error("Error starting job scheduler:", error);
     isSchedulerRunning = false;
     schedulerJobId = null;
+    selectedCaseId = null;
 
     res.status(500).json({
       success: false,
@@ -385,6 +401,7 @@ async function processNextJobWithoutStateUpdate(): Promise<void> {
       processAllRecords: true,
       retryOnConnectionFailure: true, // Enable network resilience
       maxRetries: 0, // Set to 0 for infinite retries
+      caseId: selectedCaseId ?? undefined, // Include the selected case ID
     };
 
     // Execute job with retries for network issues
@@ -428,6 +445,7 @@ export function getJobSchedulerStatus(req: Request, res: Response): Response {
     schedulerJobId,
     activeJob,
     jobQueue,
+    caseId: selectedCaseId, // Include the selected case ID in the response
   });
 }
 
@@ -502,6 +520,12 @@ export async function resumeJobScheduler(
       return;
     }
 
+    // Extract case ID from request body or use the existing one
+    if (req.body.caseId) {
+      selectedCaseId = req.body.caseId;
+      console.log(`Resuming job scheduler with new case ID: ${selectedCaseId}`);
+    }
+
     // Get the last state to find out which job was paused
     const schedulerState = await DatabaseService.executeQuery<SchedulerState>(
       `SELECT TOP 1 SchedulerJobId, CurrentJobId, CurrentJobIndex, Status, LastUpdated
@@ -557,6 +581,7 @@ export async function resumeJobScheduler(
       schedulerJobId,
       jobQueue,
       message: "Job scheduler resumed successfully",
+      caseId: selectedCaseId, // Include caseId in response
     });
   } catch (error) {
     console.error("Error resuming job scheduler:", error);
