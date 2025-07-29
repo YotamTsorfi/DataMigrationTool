@@ -8,7 +8,7 @@ import { processWithQueues } from "../jobs/queueJob";
 // import { processParentChildGridBatches } from "../jobs/parentChildsGridProcess";
 import { ErrorBufferService } from "../utils/errorBufferService";
 import { JobCancellationService } from "../utils/jobCancellationService";
-import { EmailNotificationService } from "../utils/emailNotificationService";
+// import { EmailNotificationService } from "../utils/emailNotificationService";
 import { processParentChildWithQueues } from "./parentChildQueueProcessor";
 
 interface JobRequest {
@@ -24,6 +24,7 @@ interface JobRequest {
   logErrors?: boolean;
   updateBatchTable?: boolean;
   processAllRecords?: boolean;
+  caseId?: string;
 }
 
 interface ChildJob {
@@ -55,11 +56,11 @@ const adjustTimeZone = (date: Date): Date => {
 };
 
 class JobManager {
-  private emailService: EmailNotificationService;
+  // private emailService: EmailNotificationService;
 
-  constructor() {
-    this.emailService = EmailNotificationService.getInstance();
-  }
+  // constructor() {
+  //   this.emailService = EmailNotificationService.getInstance();
+  // }
   //   ----------------------------
   async createJob(jobRequest: JobRequest): Promise<string> {
     const jobId = uuidv4();
@@ -70,8 +71,14 @@ class JobManager {
 
     await DatabaseService.executeQuery(
       `
-    INSERT INTO PriorityJobsHistory (JobId, JobName, TableName, ScreenName, StartTime, TotalRecords, Status, ProcessingType, IsParentChildJob, Company, CreatedBy)
-    VALUES (@JobId, @JobName, @TableName, @ScreenName, @StartTime, @TotalRecords, @Status, @ProcessingType, 0, @Company, @CreatedBy)
+    INSERT INTO PriorityJobsHistory (
+      JobId, JobName, TableName, ScreenName, StartTime, TotalRecords, 
+      Status, ProcessingType, IsParentChildJob, Company, CreatedBy, case_id
+    )
+    VALUES (
+      @JobId, @JobName, @TableName, @ScreenName, @StartTime, @TotalRecords, 
+      @Status, @ProcessingType, 0, @Company, @CreatedBy, @CaseId
+    )
   `,
       {
         JobId: jobId,
@@ -81,9 +88,10 @@ class JobManager {
         StartTime: adjustTimeZone(new Date()),
         TotalRecords: jobRequest.recordCount,
         Status: "Queued",
-        ProcessingType: jobRequest.processingType || "batch", // Default to "batch" if not provided
+        ProcessingType: jobRequest.processingType || "queue",
         Company: company,
         CreatedBy: "Yotam",
+        CaseId: jobRequest.caseId || null,
       }
     );
 
@@ -203,6 +211,10 @@ class JobManager {
       recordCount: jobRequest.recordCount,
       tableName: jobRequest.tableName,
       processingType: jobRequest.processingType || "default not set",
+      priorityScreenName: jobRequest.priorityScreenName,
+      priorityIdField: jobRequest.priorityIdField,
+      processAllRecords: jobRequest.processAllRecords,
+      caseId: jobRequest.caseId,
       logErrors: logErrors,
     });
 
@@ -210,13 +222,13 @@ class JobManager {
     await this.updateJobStatus(jobId, "Running");
 
     // Send email notification for job start
-    await this.emailService.sendJobStartNotification({
-      jobId,
-      jobType: jobRequest.jobType,
-      tableName: jobRequest.tableName,
-      screenName: jobRequest.priorityScreenName,
-      totalRecords: jobRequest.recordCount,
-    });
+    // await this.emailService.sendJobStartNotification({
+    //   jobId,
+    //   jobType: jobRequest.jobType,
+    //   tableName: jobRequest.tableName,
+    //   screenName: jobRequest.priorityScreenName,
+    //   totalRecords: jobRequest.recordCount,
+    // });
 
     // Get the processing type from the job request or default to system config
     const processingType =
@@ -255,6 +267,10 @@ class JobManager {
 
         if (tableInfo.hasColumn("is_new")) {
           countQuery += ` AND is_new = 1`;
+        }
+
+        if (jobRequest.caseId && tableInfo.hasColumn("case_id")) {
+          countQuery += ` AND case_id = @CaseId`;
         }
 
         // Add custom where clause if provided
@@ -364,7 +380,8 @@ class JobManager {
             childJobs,
             logErrors,
             updateBatchTable,
-            customWhereClause
+            customWhereClause,
+            jobRequest.caseId
           );
 
           // Reset error buffer configuration to default after parent-child processing
@@ -461,19 +478,20 @@ class JobManager {
       // End job progress tracking
       ProgressTracker.completeJob(jobId, totalSuccess, totalFailures);
 
-      // Send email notification for job completion
       const jobDurationSec = ((Date.now() - jobStartTime) / 1000).toFixed(2);
-      await this.emailService.sendJobCompletionNotification({
-        jobId,
-        jobType: jobRequest.jobType,
-        tableName: jobRequest.tableName,
-        screenName: jobRequest.priorityScreenName,
-        totalRecords: jobRequest.recordCount,
-        successCount: totalSuccess,
-        failureCount: totalFailures,
-        status: "Completed",
-        duration: `${jobDurationSec} שניות`,
-      });
+
+      // Send email notification for job completion
+      // await this.emailService.sendJobCompletionNotification({
+      //   jobId,
+      //   jobType: jobRequest.jobType,
+      //   tableName: jobRequest.tableName,
+      //   screenName: jobRequest.priorityScreenName,
+      //   totalRecords: jobRequest.recordCount,
+      //   successCount: totalSuccess,
+      //   failureCount: totalFailures,
+      //   status: "Completed",
+      //   duration: `${jobDurationSec} שניות`,
+      // });
 
       // Update the job status to "Completed"
       await this.updateJobStatus(
@@ -519,19 +537,19 @@ class JobManager {
       }
 
       // Send email notification for job failure
-      const jobDurationSec = ((Date.now() - jobStartTime) / 1000).toFixed(2);
-      await this.emailService.sendJobCompletionNotification({
-        jobId,
-        jobType: jobRequest.jobType,
-        tableName: jobRequest.tableName,
-        screenName: jobRequest.priorityScreenName,
-        totalRecords: jobRequest.recordCount,
-        successCount: 0,
-        failureCount: jobRequest.recordCount,
-        status: "Failed",
-        duration: `${jobDurationSec} שניות`,
-        // Include error message in the notification
-      });
+      //const jobDurationSec = ((Date.now() - jobStartTime) / 1000).toFixed(2);
+      // await this.emailService.sendJobCompletionNotification({
+      //   jobId,
+      //   jobType: jobRequest.jobType,
+      //   tableName: jobRequest.tableName,
+      //   screenName: jobRequest.priorityScreenName,
+      //   totalRecords: jobRequest.recordCount,
+      //   successCount: 0,
+      //   failureCount: jobRequest.recordCount,
+      //   status: "Failed",
+      //   duration: `${jobDurationSec} שניות`,
+      //   // Include error message in the notification
+      // });
 
       throw error;
     }
@@ -580,7 +598,8 @@ class JobManager {
         jobRequest.priorityIdField,
         logErrors,
         updateBatchTable,
-        customWhereClause
+        customWhereClause,
+        jobRequest.caseId
       );
     } else {
       // Process in batches
@@ -594,7 +613,8 @@ class JobManager {
         jobRequest.priorityIdField,
         logErrors,
         updateBatchTable,
-        customWhereClause
+        customWhereClause,
+        jobRequest.caseId
       );
     }
 

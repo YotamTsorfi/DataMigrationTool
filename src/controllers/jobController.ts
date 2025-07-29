@@ -68,3 +68,40 @@ export const getJobTypes = async (req: Request, res: Response) => {
     });
   }
 };
+
+// -----------------------------------------------------------------
+/**
+ * Retrieves all active case IDs from the sample_case_id_stg table.
+ * Uses the database connection pool for querying.
+ * @param req - Express request object
+ * @param res - Express response object
+ */
+export const getActiveCaseIds = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const pool = await poolPromise;
+    if (!pool) {
+      throw new Error("Database connection pool is null");
+    }
+    const result = await pool.request().query(`
+      SELECT case_id 
+      FROM sample_case_id_stg
+      WHERE state = 'Active'
+      ORDER BY case_id
+    `);
+
+    res.status(200).json({
+      success: true,
+      data: result.recordset.map((row: any) => row.case_id),
+    });
+  } catch (error) {
+    console.error("Error fetching active case IDs:", error);
+    res.status(500).json({
+      success: false,
+      error:
+        error instanceof Error ? error.message : "Failed to fetch case IDs",
+    });
+  }
+};

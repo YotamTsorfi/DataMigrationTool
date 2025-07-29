@@ -25,6 +25,7 @@ import SecureButton from "./SecureButton";
 import { useAuthProtection } from "./withAuthProtection";
 import { fetchChildJobs as fetchChildJobsFromService } from "../services/jobTypesService";
 import { IChildJob } from "./JobTypesManager/JobTypesManager";
+import CaseIdSelector from "./CaseIdSelector";
 //---------------------------------------------
 
 interface JobType {
@@ -66,6 +67,8 @@ const BatchProcessor: React.FC = () => {
   // State for child jobs
   const [childJobs, setChildJobs] = useState<IChildJob[]>([]);
   const [isLoadingChildJobs, setIsLoadingChildJobs] = useState(false);
+
+  const [selectedCaseId, setSelectedCaseId] = useState<string>("");
   //---------------------------------------------
 
   const handleProcessAllRecordsChange = (
@@ -320,6 +323,7 @@ const BatchProcessor: React.FC = () => {
           priorityLinkedField,
           priorityJobTypeId,
           customWhereClause: customWhereClause.trim() || undefined,
+          caseId: selectedCaseId,
         }
       );
 
@@ -414,6 +418,14 @@ const BatchProcessor: React.FC = () => {
                 />
                 <br />
               </InputLabel>
+              <InputLabel>
+                Case ID:
+                <CaseIdSelector
+                  onCaseIdSelect={setSelectedCaseId}
+                  selectedCaseId={selectedCaseId}
+                />
+              </InputLabel>
+              <br />
               <InputLabel>
                 Record Count:
                 <input

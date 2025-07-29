@@ -301,7 +301,8 @@ async function processBatches(
   priorityIdField: string,
   logErrors: boolean = false,
   updateBatchTable: boolean = false,
-  customWhereClause?: string
+  customWhereClause?: string,
+  caseId?: string
 ): Promise<any[]> {
   const config = await configService.getConfig();
   const BATCH_SIZE = config.BATCH_SIZE;
@@ -350,7 +351,8 @@ async function processBatches(
         tableName,
         lastRowId,
         chunkSize,
-        customWhereClause
+        customWhereClause,
+        caseId
       );
       perfMonitor.endDbFetch();
 

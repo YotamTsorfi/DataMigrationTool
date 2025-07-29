@@ -8,6 +8,7 @@ import axios from "axios";
 import { toast } from "react-toastify";
 import JobProgressTracker from "../JobProgressTracker";
 import { useAuthProtection } from "../withAuthProtection";
+import CaseIdSelector from "../CaseIdSelector";
 import {
   MainContainer,
   SectionContainer,
@@ -44,6 +45,7 @@ interface SchedulerStatus {
     jobTypeName: string;
     status: "pending" | "active" | "completed" | "failed";
   }>;
+  caseId?: string;
 }
 
 // Define job scheduler states for clarity
@@ -65,6 +67,7 @@ const JobScheduler: React.FC = () => {
   const [_schedulerJobId, setSchedulerJobId] = useState<string | null>(null);
   const [lastActiveJob, setLastActiveJob] = useState<string | null>(null);
   const { disabled, isAuthenticated } = useAuthProtection();
+  const [selectedCaseId, setSelectedCaseId] = useState<string>("");
 
   // Define fetchJobTypes first, wrapped in its own useCallback
   const fetchJobTypes = useCallback(async (): Promise<void> => {
@@ -93,6 +96,11 @@ const JobScheduler: React.FC = () => {
         `${process.env.REACT_APP_API_URL}/api/job-scheduler/status`
       );
       const status: SchedulerStatus = response.data;
+
+      // If the status includes a caseId and we don't have one selected, use it
+      if (status.caseId && !selectedCaseId) {
+        setSelectedCaseId(status.caseId);
+      }
 
       // Track the last active job ID for comparing state changes
       const currentActiveJobId = status.activeJob?.jobId || null;
@@ -173,7 +181,7 @@ const JobScheduler: React.FC = () => {
     } catch (error) {
       console.error("Error fetching scheduler status:", error);
     }
-  }, [schedulerState, fetchJobTypes, lastActiveJob]);
+  }, [schedulerState, fetchJobTypes, lastActiveJob, selectedCaseId]);
 
   const pauseJobScheduler = async (): Promise<void> => {
     try {
@@ -212,7 +220,8 @@ const JobScheduler: React.FC = () => {
       setSchedulerState(JobSchedulerState.RUNNING);
 
       await axios.post(
-        `${process.env.REACT_APP_API_URL}/api/job-scheduler/resume`
+        `${process.env.REACT_APP_API_URL}/api/job-scheduler/resume`,
+        { caseId: selectedCaseId }
       );
 
       toast.success("Job sequence resumed successfully");
@@ -264,7 +273,8 @@ const JobScheduler: React.FC = () => {
       setSchedulerState(JobSchedulerState.RUNNING);
 
       const response = await axios.post(
-        `${process.env.REACT_APP_API_URL}/api/job-scheduler/start`
+        `${process.env.REACT_APP_API_URL}/api/job-scheduler/start`,
+        { caseId: selectedCaseId } // Send the selected case ID
       );
 
       setSchedulerJobId(response.data.schedulerJobId);
@@ -329,6 +339,14 @@ const JobScheduler: React.FC = () => {
           These jobs will run in sequence based on their Run Order. Each job
           must complete before the next one starts.
         </InfoBox>
+
+        <div className="case-id-selector-container">
+          <label htmlFor="case-id-selector">Select Case ID:</label>
+          <CaseIdSelector
+            onCaseIdSelect={setSelectedCaseId}
+            selectedCaseId={selectedCaseId}
+          />
+        </div>
 
         <table className="job-table">
           <thead>

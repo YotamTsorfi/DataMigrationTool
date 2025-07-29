@@ -25,7 +25,8 @@ export async function processWithQueues(
   priorityIdField?: string,
   logErrors: boolean = false,
   updateBatchTable: boolean = false,
-  customWhereClause?: string
+  customWhereClause?: string,
+  caseId?: string
 ): Promise<any[]> {
   // Get system configuration
   const config = await configService.getConfig();
@@ -55,7 +56,7 @@ export async function processWithQueues(
   // TODO - Check CHUNK_SIZE
   // Set chunk size for processing
   // This is the number of rows to process in each database fetch operation
-  const CHUNK_SIZE = 2000;
+  const CHUNK_SIZE = 40000;
 
   // Initialize progress tracking for this job
   ProgressTracker.initJob(jobId, recordCount, jobType);
@@ -89,7 +90,8 @@ export async function processWithQueues(
       tableName,
       lastRowId,
       chunkSize,
-      customWhereClause
+      customWhereClause,
+      caseId
     );
     perfMonitor.endDbFetch();
 
@@ -292,8 +294,7 @@ export async function processWithQueues(
 }
 
 // Process queue results by updating the database and inserting error logs
-// Process queue results by updating the database and inserting error logs
-function processQueueResults(
+async function processQueueResults(
   resultData: {
     updateRows: any[];
     errorRows: any[];
@@ -309,7 +310,12 @@ function processQueueResults(
   perfMonitor.startOperation();
 
   // Start database operations in the background but don't wait for them
-  performDatabaseUpdatesAsync(resultData, tableName, logErrors, perfMonitor);
+  await performDatabaseUpdatesAsync(
+    resultData,
+    tableName,
+    logErrors,
+    perfMonitor
+  );
 
   // Return immediately without awaiting database operations
   return Promise.resolve();
@@ -367,6 +373,21 @@ async function performDatabaseUpdatesAsync(
     const MAX_BULK_RETRIES = 3;
     let bulkUpdateSuccessful = false;
     let bulkRetryCount = 0;
+
+    // console.log(
+    //   `Sending ${resultData.updateRows.length} updates to database (Success: ${resultData.successCount}, Failed: ${resultData.failureCount})`
+    // );
+    // console.log(
+    //   "First few update rows:",
+    //   resultData.updateRows.slice(0, 3).map((row) => ({
+    //     RowId: row.RowId,
+    //     Status: row.Status,
+    //     BatchId: row.BatchId,
+    //     JobName: row.JobName,
+    //     priority_id: row.priority_id,
+    //     StatusCode: row.StatusCode,
+    //   }))
+    // );
 
     resultData.updateRows.forEach((row) => {
       // Sanitize ErrorMessage

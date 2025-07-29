@@ -14,7 +14,8 @@ export async function fetchParentChildChunk(
   linkedField: string,
   childJobs: ChildJob[],
   perfMonitor?: PerformanceMonitor,
-  customWhereClause?: string
+  customWhereClause?: string,
+  caseId?: string
 ): Promise<any[]> {
   const startMonitoring = !perfMonitor;
   if (startMonitoring) {
@@ -32,7 +33,8 @@ export async function fetchParentChildChunk(
       startRow,
       chunkSize,
       linkedField,
-      customWhereClause
+      customWhereClause,
+      caseId
     );
 
     if (parentRecords.length === 0) {
@@ -55,7 +57,8 @@ export async function fetchParentChildChunk(
     const childDataMap = await fetchAllChildData(
       childJobs,
       linkedValues,
-      linkedField
+      linkedField,
+      caseId
     );
 
     // Merge parent and child data
@@ -140,7 +143,8 @@ async function fetchEligibleParentRecords(
   startRow: number,
   limit: number,
   linkedField: string,
-  customWhereClause?: string
+  customWhereClause?: string,
+  caseId?: string
 ): Promise<any[]> {
   try {
     console.log(
@@ -150,6 +154,10 @@ async function fetchEligibleParentRecords(
     // Add query hint to optimize execution
     const baseWhereClause = "is_eligible = 1 AND is_new = 1";
     let whereClause = `RowId > @startRow AND ${baseWhereClause}`;
+
+    if (caseId) {
+      whereClause += ` AND case_id = @caseId`;
+    }
 
     if (customWhereClause) {
       whereClause = `${whereClause} AND (${customWhereClause})`;
@@ -165,10 +173,17 @@ async function fetchEligibleParentRecords(
       FETCH NEXT @limit ROWS ONLY
       OPTION (OPTIMIZE FOR UNKNOWN, MAXDOP 4)`;
 
-    const results = await DatabaseService.executeQuery(query, {
+    // Add case_id to query parameters
+    const params: any = {
       startRow,
       limit,
-    });
+    };
+
+    if (caseId) {
+      params.caseId = caseId;
+    }
+
+    const results = await DatabaseService.executeQuery(query, params);
     return results;
   } catch (error) {
     console.error(`Error in fetchEligibleParentRecords: ${error}`);
@@ -182,7 +197,8 @@ async function fetchEligibleParentRecords(
 async function fetchAllChildData(
   childJobs: ChildJob[],
   linkedValues: any[],
-  linkedField: string
+  linkedField: string,
+  caseId?: string
 ): Promise<Map<string, Map<any, any[]>>> {
   const childDataMap = new Map<string, Map<any, any[]>>();
 
@@ -192,7 +208,8 @@ async function fetchAllChildData(
       const childRecords = await fetchChildRecords(
         childJob.DBTableName,
         linkedField,
-        linkedValues
+        linkedValues,
+        caseId
       );
 
       const innerMap = new Map<any, any[]>();
@@ -218,7 +235,8 @@ async function fetchAllChildData(
 async function fetchChildRecords(
   tableName: string,
   linkFieldName: string,
-  linkValues: any[]
+  linkValues: any[],
+  caseId?: string
 ): Promise<any[]> {
   if (linkValues.length === 0) return [];
 
@@ -231,21 +249,32 @@ async function fetchChildRecords(
       params[`p${i}`] = value;
     });
 
-    return await DatabaseService.executeQuery(
-      `SELECT RowId, Data, ${linkFieldName}
+    // Add case_id to parameters if provided
+    if (caseId) {
+      params.caseId = caseId;
+    }
+
+    let query = `SELECT RowId, Data, ${linkFieldName}
        FROM ${tableName}
        WHERE ${linkFieldName} IN (${placeholders})
-       AND is_eligible = 1
-       ORDER BY RowId ASC`,
-      params
-    );
+       AND is_eligible = 1`;
+
+    // Add case_id filter to WHERE clause if provided
+    if (caseId) {
+      query += ` AND case_id = @caseId`;
+    }
+
+    query += ` ORDER BY RowId ASC`;
+
+    return await DatabaseService.executeQuery(query, params);
   }
 
   // For larger sets, use temp table approach
   return await fetchChildRecordsWithTempTable(
     tableName,
     linkFieldName,
-    linkValues
+    linkValues,
+    caseId
   );
 }
 
@@ -255,7 +284,8 @@ async function fetchChildRecords(
 async function fetchChildRecordsWithTempTable(
   tableName: string,
   linkFieldName: string,
-  linkValues: any[]
+  linkValues: any[],
+  caseId?: string
 ): Promise<any[]> {
   // Use global temporary table (note the double ##)
   const tempTableName = `##Temp_LinkValues_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
@@ -283,14 +313,27 @@ async function fetchChildRecordsWithTempTable(
       );
     }
 
+    // Initialize query parameters
+    const params: any = {};
+    if (caseId) {
+      params.caseId = caseId;
+    }
+
     // Fetch linked records using the temp table
-    return await DatabaseService.executeQuery(`
+    let query = `
       SELECT c.RowId, c.Data, c.${linkFieldName}
       FROM ${tableName} c
       INNER JOIN ${tempTableName} t ON c.${linkFieldName} = t.LinkValue
-      WHERE c.is_eligible = 1
-      ORDER BY c.RowId ASC
-    `);
+      WHERE c.is_eligible = 1`;
+
+    // Add case_id filter to WHERE clause if provided
+    if (caseId) {
+      query += ` AND c.case_id = @caseId`;
+    }
+
+    query += ` ORDER BY c.RowId ASC`;
+
+    return await DatabaseService.executeQuery(query, params);
   } finally {
     // Clean up temp table - add error handling
     try {
