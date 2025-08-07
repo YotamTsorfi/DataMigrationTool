@@ -56,7 +56,7 @@ export async function processWithQueues(
   // TODO - Check CHUNK_SIZE
   // Set chunk size for processing
   // This is the number of rows to process in each database fetch operation
-  const CHUNK_SIZE = 40000;
+  const CHUNK_SIZE = 100000;
 
   // Initialize progress tracking for this job
   ProgressTracker.initJob(jobId, recordCount, jobType);
@@ -75,7 +75,9 @@ export async function processWithQueues(
       console.log(`Job ${jobId} cancelled - stopping queue processing`);
       break; // Exit the processing loop
     }
-    const chunkSize = Math.min(CHUNK_SIZE, recordCount - processedCount);
+
+    //const chunkSize = Math.min(CHUNK_SIZE, recordCount - processedCount);
+    const chunkSize = CHUNK_SIZE;
 
     // Get custom WHERE clause from config if not provided directly
     if (!customWhereClause) {

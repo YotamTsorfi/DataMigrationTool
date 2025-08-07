@@ -394,7 +394,7 @@ const ConfigPanel: React.FC = () => {
                             }}
                           >
                             <colgroup>
-                              <col style={{ width: "4%", minWidth: "30px" }} />{" "}
+                              <col style={{ width: "4%", minWidth: "30px" }} />
                               {/* ConfigId - new narrow column */}
                               <col
                                 style={{ width: "32%", minWidth: "180px" }}
