@@ -367,3 +367,17 @@ textarea:disabled {
 .actions-cell button:last-child {
   margin-right: 0;
 }
+
+/* Column width control */
+.job-types-list table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.job-types-list .narrow-column {
+  width: 80px;
+}
+
+.job-types-list .id-column {
+  width: 20px;
+}
