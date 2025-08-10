@@ -32,6 +32,7 @@ export const JobTypesList: React.FC<JobTypesListProps> = ({
               <th>DB Table</th>
               <th>Screen Name</th>
               <th>Run Order</th>
+              <th>Priority ID</th>
               <th>Ready</th>
               <th>Dependency</th>
               <th>Actions</th>
@@ -55,6 +56,7 @@ export const JobTypesList: React.FC<JobTypesListProps> = ({
                   <td>{jobType.DBTableName}</td>
                   <td>{jobType.ScreenName}</td>
                   <td>{jobType.RunOrder}</td>
+                  <td>{jobType.priority_id}</td>
                   <td>{jobType.isReady ? "Yes" : "No"}</td>
                   <td>{jobType.hasDependency ? "Yes" : "No"}</td>
                   <td className="actions-cell">
