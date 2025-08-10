@@ -27,12 +27,14 @@ export const JobTypesList: React.FC<JobTypesListProps> = ({
         <table>
           <thead>
             <tr>
-              <th>ID</th>
+              <th className="narrow-column id-column">ID</th>
               <th>Job Type Name</th>
-              <th>DB Table</th>
               <th>Screen Name</th>
-              <th>Run Order</th>
-              <th>Ready</th>
+              <th className="narrow-column">Run Order</th>
+              <th>DB Table</th>
+              <th>Priority ID</th>
+              <th>Reference ID</th>
+              <th className="narrow-column">Ready</th>
               <th>Dependency</th>
               <th>Actions</th>
             </tr>
@@ -52,9 +54,11 @@ export const JobTypesList: React.FC<JobTypesListProps> = ({
                 >
                   <td>{jobType.JobTypeId}</td>
                   <td>{jobType.JobTypeName}</td>
-                  <td>{jobType.DBTableName}</td>
                   <td>{jobType.ScreenName}</td>
                   <td>{jobType.RunOrder}</td>
+                  <td>{jobType.DBTableName}</td>
+                  <td>{jobType.priority_id}</td>
+                  <td>{jobType.linkedField}</td>
                   <td>{jobType.isReady ? "Yes" : "No"}</td>
                   <td>{jobType.hasDependency ? "Yes" : "No"}</td>
                   <td className="actions-cell">
