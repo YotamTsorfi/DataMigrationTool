@@ -13,8 +13,21 @@
   }
 }
 
+/* Production header style */
 .App-header {
-  background-color: #282c34;
+  background-color: #282c34; /* Original production color */
+  min-height: 20vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(10px + 2vmin);
+  color: white;
+}
+
+/* Development header style */
+.App-header-dev {
+  background-color: #616877; /* Your development color */
   min-height: 20vh;
   display: flex;
   flex-direction: column;
