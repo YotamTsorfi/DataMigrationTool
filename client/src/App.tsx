@@ -51,12 +51,23 @@ const Navigation = styled.nav`
 
 function App() {
   useGlobalAuthCheck();
+
+  const isDevelopment =
+    process.env.REACT_APP_ENV === "development" ||
+    process.env.NODE_ENV === "development";
+
+  // Set header text and CSS class based on environment
+  const headerText = isDevelopment
+    ? "Carmelton Data Migration System - DEV"
+    : "Carmelton Data Migration System";
+
+  const headerClass = isDevelopment ? "App-header-dev" : "App-header";
   return (
     <AuthProvider>
       <BrowserRouter>
         <div className="App">
-          <Header className="App-header">
-            <h1>Carmelton Data Migration System</h1>
+          <Header className={headerClass}>
+            <h1>{headerText}</h1>
             <AuthStatus />
           </Header>
           <Navigation>
