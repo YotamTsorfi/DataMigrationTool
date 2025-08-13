@@ -1,3 +1,4 @@
+import { writeToLogFile } from "../config/logger";
 import PerformanceMonitor from "../utils/performanceMonitor";
 import { measureResponsePerformance } from "../services/requestSender";
 import {
@@ -24,6 +25,68 @@ export interface ProcessResponseResult {
   };
 }
 
+/**
+ * Logs when a Priority ID field is missing from an API response.
+ * Helps identify field mapping issues between the system and Priority.
+ *
+ * @param recordId - The record ID that was processed
+ * @param tableName - The source table name
+ * @param fieldName - The expected field name that was missing
+ * @param jobId - The job identifier
+ */
+function logMissingPriorityField(
+  recordId: string | number,
+  tableName: string,
+  fieldName: string,
+  jobId: string
+): void {
+  try {
+    const logEntry = `Missing field in Priority response: Record ID ${recordId} from ${tableName} - Field '${fieldName}' not found in response`;
+    writeToLogFile("missing_priority_fields.log", logEntry);
+  } catch (loggingError) {
+    console.error("Failed to log missing Priority field:", loggingError);
+  }
+}
+
+/**
+ * Logs detailed information about failures detected during response processing.
+ * Used to capture API responses that contain business logic errors even when
+ * the HTTP request itself was successful.
+ *
+ * @param response - The API response
+ * @param record - The record that failed processing
+ * @param error - Error information
+ * @param jobId - The job identifier
+ */
+function logResponseError(
+  response: any,
+  record: any,
+  error: any,
+  jobId: string
+): void {
+  try {
+    const timestamp = new Date().toISOString();
+    const recordId = record.RowId || "unknown";
+    const errorMessage =
+      typeof error === "string"
+        ? error
+        : error?.message || JSON.stringify(error);
+    const statusCode = response?.status || "unknown";
+
+    // Format the log entry
+    const logEntry = [
+      `[RESPONSE ERROR] [${timestamp}] [JobId: ${jobId}] [RecordId: ${recordId}] [Status: ${statusCode}]`,
+      `Error: ${errorMessage}`,
+      `Response Body:`,
+      JSON.stringify(response?.data, null, 2),
+    ].join("\n");
+
+    // Write to a dedicated log file for failed responses
+    writeToLogFile("failed_responses.log", logEntry);
+  } catch (loggingError) {
+    console.error("Failed to log response error:", loggingError);
+  }
+}
 //-------------------------------------------------------------------------
 /**
  * Adjusts the date to the local timezone by removing the timezone offset.
@@ -121,6 +184,10 @@ export async function processParentChildResponse(
     // IMPORTANT: If API failed but we didn't capture failures in processing,
     // make sure we mark all records as failed
     if (apiErrorMessage && failureCount === 0) {
+      // This is where we detect an API error but don't have specific failures
+      // Add logging here:
+      logResponseError(response, enrichedRecords[0], apiErrorMessage, jobId);
+
       // Force all parent records to be updated as failed
       parentUpdateRows.length = 0; // Clear any existing updates
 
@@ -674,7 +741,14 @@ function processApiResponse(
               idValue !== null && idValue !== undefined
                 ? String(idValue) // Convert to string
                 : null;
-            // console.log(`Found parent priority_id: ${parentUpdate.priority_id} from field: ${priorityIdField}`);
+          } else {
+            // Log missing parent field
+            logMissingPriorityField(
+              record.RowId,
+              record.__tableName || "unknown",
+              priorityIdField,
+              record.__jobId
+            );
           }
         } catch (e) {
           console.warn(`Failed to parse response body for record ${index}`, e);
@@ -747,6 +821,9 @@ function processApiResponse(
                   // Get the exact subform key based on job's screen name
                   const subformKey = `${job.ScreenName}_SUBFORM`;
 
+                  // Track if we found the field in any record
+                  let fieldFound = false;
+
                   // Check if this subform exists in the response
                   if (responseBody && responseBody[subformKey] !== undefined) {
                     // console.log(`Found subform ${subformKey} in response`);
@@ -810,13 +887,16 @@ function processApiResponse(
                           // Ensure proper type conversion to string for SQL compatibility
                           childUpdate.priority_id =
                             idValue !== null ? String(idValue) : null;
-                          // console.log(
-                          //   `Found child ID in ${subformKey}: ${childUpdate.priority_id}`
-                          // );
-                        } else {
-                          // console.log(
-                          //   `Field ${job.priority_id} not found in ${subformKey} item`
-                          // );
+                          fieldFound = true;
+                        }
+
+                        // Check if the field exists in any record in the subform array
+                        // This handles cases where the field might exist in records other than the matched one
+                        if (!fieldFound) {
+                          fieldFound = subformArray.some(
+                            (item) =>
+                              item && item[job.priority_id] !== undefined
+                          );
                         }
                       }
                     }
@@ -835,19 +915,27 @@ function processApiResponse(
                         // Ensure proper type conversion to string for SQL compatibility
                         childUpdate.priority_id =
                           idValue !== null ? String(idValue) : null;
-                        // console.log(
-                        //   `Found child ID in single object: ${childUpdate.priority_id}`
-                        // );
-                      } else {
-                        // console.log(
-                        //   `Field ${job.priority_id} not found in ${subformKey} object`
-                        // );
+                        fieldFound = true;
                       }
                     }
+
+                    // Log if field wasn't found anywhere in the subform
+                    if (!fieldFound) {
+                      logMissingPriorityField(
+                        childRecord.RowId,
+                        childTableName,
+                        job.priority_id,
+                        record.__jobId
+                      );
+                    }
                   } else {
-                    // console.log(
-                    //   `Subform ${subformKey} not found in response. Available keys: ${Object.keys(responseBody).join(", ")}`
-                    // );
+                    // Subform not found, definitely can't find the field
+                    logMissingPriorityField(
+                      childRecord.RowId,
+                      childTableName,
+                      `${subformKey}.${job.priority_id}`,
+                      record.__jobId
+                    );
                   }
                 } catch (e) {
                   console.error(
