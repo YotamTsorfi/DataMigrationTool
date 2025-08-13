@@ -2,7 +2,7 @@
  * This module provides a specialized service for sending individual parent-child records to Priority API.
  * It works with the queue processor to handle one record at a time with proper error handling and retries.
  */
-
+import { writeToLogFile } from "../config/logger";
 import { v4 as uuidv4 } from "uuid";
 import axios from "axios";
 import { configService } from "../config/configService";
@@ -24,6 +24,44 @@ export interface ParentChildQueueResult {
   priorityId?: string | null;
   duration?: number;
 }
+
+/**
+ * Logs detailed information about failed API requests including the complete request body.
+ * This helps with debugging by capturing exactly what was sent when an error occurred.
+ *
+ * @param record - The record that failed processing
+ * @param error - The error that occurred
+ * @param requestBody - The complete request body that was sent to the API
+ * @param jobId - The job identifier
+ */
+const logFailedRequestBody = (
+  record: any,
+  error: any,
+  requestBody: any,
+  jobId: string
+): void => {
+  try {
+    // Create a detailed error message
+    const timestamp = new Date().toISOString();
+    const recordId = record.RowId || "unknown";
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const statusCode = error?.response?.status || "unknown";
+
+    // Format the log entry
+    const logEntry = [
+      `[ERROR] [${timestamp}] [JobId: ${jobId}] [RecordId: ${recordId}] [Status: ${statusCode}]`,
+      `Error: ${errorMessage}`,
+      `Request Body:`,
+      JSON.stringify(requestBody, null, 2),
+    ].join("\n");
+
+    // Write to a dedicated log file for failed requests
+    writeToLogFile("failed_requests.log", logEntry);
+  } catch (loggingError) {
+    // Ensure logging errors don't disrupt processing
+    console.error("Failed to log request body:", loggingError);
+  }
+};
 
 /**
  * Sends a single parent-child record to Priority API and processes the response
@@ -92,47 +130,40 @@ export async function sendParentChildQueue(
       }
     });
 
-    // Format the data structure to match Priority API expectations
-    // Handle subform data properly - extract from childRecords and add to proper subform properties
-    if (enrichedRecord.childRecords) {
-      // Process each child record type
-      Object.keys(enrichedRecord.childRecords).forEach((key) => {
-        const childArray = enrichedRecord.childRecords[key];
-        if (Array.isArray(childArray) && childArray.length > 0) {
-          // Find matching child job to get the proper screen name for the subform
-          const matchingChildJob = childJobs?.find(
-            (job) =>
-              job.JobTypeName === key ||
-              job.DBTableName === key ||
-              `${job.JobTypeName}_${job.DBTableName}` === key
-          );
-
-          if (matchingChildJob && matchingChildJob.ScreenName) {
-            // Create subform array with clean child records
-            const cleanChildRecords = childArray.map((child) => {
-              // Create a clean copy without internal fields
-              const cleanChild = { ...child };
-
-              // Remove internal fields
-              Object.keys(cleanChild).forEach((childKey) => {
-                if (
-                  childKey.startsWith("__") ||
-                  internalFields.includes(childKey)
-                ) {
-                  delete cleanChild[childKey];
-                }
-              });
-
-              return cleanChild;
+    // Clean existing subform data that was already formatted by the fetcher
+    Object.keys(cleanRecordForApi).forEach((key) => {
+      if (key.endsWith("_SUBFORM")) {
+        // This subform was already created by the fetcher
+        if (Array.isArray(cleanRecordForApi[key])) {
+          // Clean array elements (HasSiblings=true case)
+          cleanRecordForApi[key] = cleanRecordForApi[key].map((item) => {
+            // Remove internal fields from each item
+            const cleanItem = { ...item };
+            Object.keys(cleanItem).forEach((itemKey) => {
+              if (
+                itemKey.startsWith("__") ||
+                internalFields.includes(itemKey)
+              ) {
+                delete cleanItem[itemKey];
+              }
             });
-
-            // Add to the parent record using the proper subform name
-            const subformName = `${matchingChildJob.ScreenName}_SUBFORM`;
-            cleanRecordForApi[subformName] = cleanChildRecords;
-          }
+            return cleanItem;
+          });
+        } else if (cleanRecordForApi[key]) {
+          // Clean single object (HasSiblings=false case)
+          const cleanItem = { ...cleanRecordForApi[key] };
+          Object.keys(cleanItem).forEach((itemKey) => {
+            if (itemKey.startsWith("__") || internalFields.includes(itemKey)) {
+              delete cleanItem[itemKey];
+            }
+          });
+          cleanRecordForApi[key] = cleanItem;
         }
-      });
-    }
+      }
+    });
+
+    // Remove childRecords entirely as we don't need to send it
+    delete cleanRecordForApi.childRecords;
 
     // Debug log the request data
     // console.log(
@@ -200,6 +231,9 @@ export async function sendParentChildQueue(
       perfMonitor.endRequest(); // Ensure performance timing ends properly
       perfMonitor.logError(error);
 
+      // Log the failed request body for debugging
+      logFailedRequestBody(record, error, cleanRecordForApi, jobId);
+
       // Extract error details efficiently without verbose logging
       const statusCode =
         axios.isAxiosError(error) && error.response
@@ -250,7 +284,7 @@ export async function sendParentChildQueue(
           responses: [
             {
               status: statusCode,
-              body: errorData, // THIS IS THE KEY FIX - Use errorData instead of null
+              body: errorData,
               error: errorMessage,
             },
           ],
@@ -273,6 +307,17 @@ export async function sendParentChildQueue(
       logErrors,
       updateBatchTable
     );
+
+    // Additional error logging for business logic errors
+    // These are cases where the HTTP request succeeded but the business logic failed
+    if (!result.success) {
+      logFailedRequestBody(
+        record,
+        { message: result.message },
+        cleanRecordForApi,
+        jobId
+      );
+    }
 
     // Extract priority ID if available
     let priorityId = null;
@@ -309,6 +354,23 @@ export async function sendParentChildQueue(
     };
   } catch (error) {
     console.error("Fatal error in sendParentChildQueue:", error);
+
+    // Log the failed request for unexpected errors
+    try {
+      // We need to reconstruct what the request body would have been
+      const cleanRecordForApi = { ...record };
+      // Remove internal fields
+      Object.keys(cleanRecordForApi).forEach((key) => {
+        if (key.startsWith("__") || ["childRecords", "RowId"].includes(key)) {
+          delete cleanRecordForApi[key];
+        }
+      });
+
+      // Log the error with the best approximation of the request body
+      logFailedRequestBody(record, error, cleanRecordForApi, jobId);
+    } catch (loggingError) {
+      console.error("Failed to log error request body:", loggingError);
+    }
 
     // Handle error by creating error records
     try {

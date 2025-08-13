@@ -76,8 +76,7 @@ export async function processWithQueues(
       break; // Exit the processing loop
     }
 
-    //const chunkSize = Math.min(CHUNK_SIZE, recordCount - processedCount);
-    const chunkSize = CHUNK_SIZE;
+    const chunkSize = Math.min(CHUNK_SIZE, recordCount - processedCount);
 
     // Get custom WHERE clause from config if not provided directly
     if (!customWhereClause) {
