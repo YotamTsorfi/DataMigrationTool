@@ -1,4 +1,4 @@
-USE [CarmeltonDB_STG]
+USE [CarmeltonDB_PRD]
 GO
 
 /****** Object:  UserDefinedTableType [dbo].[BatchUpdateTableType]    Script Date: 07/06/2025 07:53:15 ******/
