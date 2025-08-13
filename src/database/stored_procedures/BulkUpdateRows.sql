@@ -1,10 +1,13 @@
-USE [CarmeltonDB_STG]
+USE [CarmeltonDB_PRD]
 GO
 
--- Drop existing procedure
-IF EXISTS (SELECT * FROM sys.procedures WHERE name = 'BulkUpdateRows')
-    DROP PROCEDURE [dbo].[BulkUpdateRows]
+/****** Object:  StoredProcedure [dbo].[BulkUpdateRows]    Script Date: 13/08/2025 10:05:06 ******/
+SET ANSI_NULLS ON
 GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
 
 CREATE PROCEDURE [dbo].[BulkUpdateRows]
     @TableName NVARCHAR(255),
@@ -21,9 +24,9 @@ BEGIN
                     t.Error = u.Error,
                     t.CleanError = u.CleanError,
                     t.JobId = u.JobId,
-                    t.priority_id = u.priority_id,
-                    t.StatusCode = u.StatusCode,
-                    t.is_new = u.is_new
+                    t.priority_id = u.priority_id,                    
+                    t.is_new = u.is_new,
+					t.StatusCode = u.StatusCode
                 FROM ' + QUOTENAME(@TableName) + ' t
                 INNER JOIN @Updates u ON t.RowId = u.RowId';
     
@@ -31,3 +34,5 @@ BEGIN
     EXEC sp_executesql @sql, N'@Updates dbo.BatchUpdateTableType READONLY', @Updates;
 END;
 GO
+
+

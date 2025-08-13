@@ -1,4 +1,4 @@
-USE [CarmeltonDB_STG]
+USE [CarmeltonDB_PRD]
 GO
 
 /****** Object:  StoredProcedure [dbo].[BulkInsertErrorLogs]    Script Date: 10/05/2025 08:54:01 ******/
