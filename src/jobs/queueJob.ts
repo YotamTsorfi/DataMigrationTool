@@ -31,6 +31,8 @@ export async function processWithQueues(
   // Get system configuration
   const config = await configService.getConfig();
 
+  // TODO - Check new personal access token expiration
+
   // console.log(
   //   `processWithQueues received customWhereClause: ${customWhereClause}`
   // );
