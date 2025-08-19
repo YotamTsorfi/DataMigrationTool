@@ -1,16 +1,16 @@
 import { v4 as uuidv4 } from "uuid";
-import { fetchDataChunk } from "../services/dataService";
-import { configService } from "../config/configService";
 import PerformanceMonitor from "../utils/performanceMonitor";
 import ProgressTracker from "../utils/progressTracker";
+import { ErrorBufferService } from "../utils/errorBufferService";
+import { JobCancellationService } from "../utils/jobCancellationService";
+import { configService } from "../config/configService";
+import { DatabaseService } from "../services/databaseService";
 import { QueueProcessor, QueueItem } from "../services/queueProcessor";
 import {
+  fetchDataChunk,
   performBulkUpdateWithService,
   // performBulkErrorInsertWithService,
 } from "../services/dataService";
-import { ErrorBufferService } from "../utils/errorBufferService";
-import { DatabaseService } from "../services/databaseService";
-import { JobCancellationService } from "../utils/jobCancellationService";
 
 /**
  * Process records using grid-based processing (horizontal parallel, vertical sequential)
