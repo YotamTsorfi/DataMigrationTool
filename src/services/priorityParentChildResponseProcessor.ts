@@ -810,24 +810,28 @@ function processApiResponse(
                 StatusCode: statusCode,
               };
 
-              // Extract Priority ID for child record if available
+              // Enhanced child record ID extraction with better field lookup strategies
               if (apiResponse.body && job.priority_id) {
                 try {
+                  // Parse response body if it's a string
                   const responseBody =
                     typeof apiResponse.body === "string"
                       ? JSON.parse(apiResponse.body)
                       : apiResponse.body;
 
-                  // Get the exact subform key based on job's screen name
+                  // Get the subform key based on job's screen name
                   const subformKey = `${job.ScreenName}_SUBFORM`;
 
                   // Track if we found the field in any record
                   let fieldFound = false;
 
-                  // Check if this subform exists in the response
-                  if (responseBody && responseBody[subformKey] !== undefined) {
-                    // console.log(`Found subform ${subformKey} in response`);
+                  // Debug the priority ID field we're looking for
+                  // console.log(
+                  //   `Looking for priority_id '${job.priority_id}' in child record ${childRecord.RowId} in subform ${subformKey}`
+                  // );
 
+                  // Check if the subform exists in the response
+                  if (responseBody && responseBody[subformKey] !== undefined) {
                     // For HasSiblings=true (array of records)
                     if (
                       job.HasSiblings &&
@@ -862,41 +866,85 @@ function processApiResponse(
                             );
 
                             if (matchedItem) {
-                              // console.log(
-                              //   `Matched child record using field ${field}=${matchValue}`
-                              // );
+                              // console.log(`Matched child record using field ${field}=${matchValue}`);
                               break;
                             }
                           }
                         }
 
-                        // If no match found, fall back to the first item (but log a warning)
+                        // If no match found, fall back to the first item
                         if (!matchedItem) {
                           matchedItem = subformArray[0];
-                          // console.log(
-                          //   `No match found for child record in ${subformKey}, using first item`
-                          // );
+                          // console.log(`No match found for child record in ${subformKey}, using first item`);
                         }
 
-                        // Extract the priority_id from the matched item
-                        if (
-                          matchedItem &&
-                          matchedItem[job.priority_id] !== undefined
-                        ) {
-                          const idValue = matchedItem[job.priority_id];
-                          // Ensure proper type conversion to string for SQL compatibility
-                          childUpdate.priority_id =
-                            idValue !== null ? String(idValue) : null;
-                          fieldFound = true;
+                        // ENHANCED PRIORITY ID EXTRACTION LOGIC
+                        if (matchedItem) {
+                          // Strategy 1: Direct field lookup using job.priority_id
+                          if (matchedItem[job.priority_id] !== undefined) {
+                            const idValue = matchedItem[job.priority_id];
+                            childUpdate.priority_id =
+                              idValue !== null ? String(idValue) : null;
+                            fieldFound = true;
+                            // console.log(
+                            //   `Found priority_id directly as '${job.priority_id}' with value '${idValue}'`
+                            // );
+                          }
+                          // Strategy 2: Look for fields ending with the priority_id
+                          else {
+                            const allFields = Object.keys(matchedItem);
+
+                            // Log available fields for debugging
+                            console.log(
+                              `Available fields in response: ${allFields.join(", ")}`
+                            );
+
+                            // Look for fields containing or ending with the priority_id
+                            const priorityField = allFields.find(
+                              (field) =>
+                                field === job.priority_id ||
+                                field.endsWith(`.${job.priority_id}`) ||
+                                field.endsWith(`_${job.priority_id}`)
+                            );
+
+                            if (priorityField) {
+                              const idValue = matchedItem[priorityField];
+                              childUpdate.priority_id =
+                                idValue !== null ? String(idValue) : null;
+                              fieldFound = true;
+                              console.log(
+                                `Found priority_id using alternative field '${priorityField}' with value '${idValue}'`
+                              );
+                            }
+                          }
                         }
 
                         // Check if the field exists in any record in the subform array
-                        // This handles cases where the field might exist in records other than the matched one
                         if (!fieldFound) {
-                          fieldFound = subformArray.some(
-                            (item) =>
-                              item && item[job.priority_id] !== undefined
-                          );
+                          // Try to find field in any record that might match the pattern
+                          for (const item of subformArray) {
+                            const allFields = Object.keys(item);
+                            const possibleFields = allFields.filter(
+                              (field) =>
+                                field === job.priority_id ||
+                                field.includes(job.priority_id)
+                            );
+
+                            if (possibleFields.length > 0) {
+                              console.log(
+                                `Found possible priority_id fields in other records: ${possibleFields.join(", ")}`
+                              );
+                              const firstMatchField = possibleFields[0];
+                              const idValue = item[firstMatchField];
+                              childUpdate.priority_id =
+                                idValue !== null ? String(idValue) : null;
+                              fieldFound = true;
+                              console.log(
+                                `Using field '${firstMatchField}' from another record with value '${idValue}'`
+                              );
+                              break;
+                            }
+                          }
                         }
                       }
                     }
@@ -907,34 +955,64 @@ function processApiResponse(
                     ) {
                       const subformData = responseBody[subformKey];
 
+                      // Apply the same multi-strategy approach for single objects
                       if (
                         subformData &&
                         subformData[job.priority_id] !== undefined
                       ) {
                         const idValue = subformData[job.priority_id];
-                        // Ensure proper type conversion to string for SQL compatibility
                         childUpdate.priority_id =
                           idValue !== null ? String(idValue) : null;
                         fieldFound = true;
+                        console.log(
+                          `Found priority_id directly in single object as '${job.priority_id}' with value '${idValue}'`
+                        );
+                      } else if (subformData) {
+                        // Try alternative field lookups
+                        const allFields = Object.keys(subformData);
+                        const priorityField = allFields.find(
+                          (field) =>
+                            field.endsWith(`.${job.priority_id}`) ||
+                            field.endsWith(`_${job.priority_id}`)
+                        );
+
+                        if (priorityField) {
+                          const idValue = subformData[priorityField];
+                          childUpdate.priority_id =
+                            idValue !== null ? String(idValue) : null;
+                          fieldFound = true;
+                          console.log(
+                            `Found priority_id using alternative field '${priorityField}' in single object`
+                          );
+                        }
                       }
                     }
+                  }
 
-                    // Log if field wasn't found anywhere in the subform
-                    if (!fieldFound) {
-                      logMissingPriorityField(
-                        childRecord.RowId,
-                        childTableName,
-                        job.priority_id,
-                        record.__jobId
-                      );
-                    }
-                  } else {
-                    // Subform not found, definitely can't find the field
+                  // If field still not found, check if it might be directly in the response
+                  if (
+                    !fieldFound &&
+                    responseBody[job.priority_id] !== undefined
+                  ) {
+                    const idValue = responseBody[job.priority_id];
+                    childUpdate.priority_id =
+                      idValue !== null ? String(idValue) : null;
+                    fieldFound = true;
+                    console.log(
+                      `Found priority_id directly in main response for child ${childRecord.RowId}`
+                    );
+                  }
+
+                  // Log missing field if still not found
+                  if (!fieldFound) {
                     logMissingPriorityField(
                       childRecord.RowId,
                       childTableName,
-                      `${subformKey}.${job.priority_id}`,
+                      job.priority_id,
                       record.__jobId
+                    );
+                    console.log(
+                      `Could not find priority_id '${job.priority_id}' for child record ${childRecord.RowId}`
                     );
                   }
                 } catch (e) {
