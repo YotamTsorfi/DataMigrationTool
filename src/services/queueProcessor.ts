@@ -580,12 +580,35 @@ export class QueueProcessor {
       // Silent fail and continue
     }
 
-    // Check for 409 Conflict (this is a special case worth keeping)
+    // Check for 409 Conflict - extract actual error message if available
     if (
       status === 409 ||
       (errorMessage && errorMessage.includes("status code 409"))
     ) {
-      return "Conflict: A record with the specified key already exists";
+      // First try to extract detailed error from errorData
+      if (errorData) {
+        // Try all the error extraction patterns we already have above
+        if (errorData.FORM?.InterfaceErrors?.text) {
+          return errorData.FORM.InterfaceErrors.text;
+        }
+
+        if (errorData.error?.message) {
+          return errorData.error.message;
+        }
+
+        if (errorData.message) {
+          return errorData.message;
+        }
+
+        // If it's a string, use it directly
+        if (typeof errorData === "string" && errorData.trim()) {
+          return errorData;
+        }
+      }
+
+      // If we couldn't extract a specific message, then use a more specific
+      // conflict message that indicates this is from the API
+      return "Priority API Conflict: A record with the specified key already exists (Status 409)";
     }
 
     // Clean up URLs from error messages
