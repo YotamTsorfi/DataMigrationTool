@@ -585,27 +585,6 @@ export class QueueProcessor {
       status === 409 ||
       (errorMessage && errorMessage.includes("status code 409"))
     ) {
-      // Print complete raw response for debugging
-      console.log("\n======== COMPLETE 409 CONFLICT RESPONSE ========");
-      console.log("Status:", status);
-      console.log("Raw Error Message:", errorMessage);
-      console.log("Error Data (complete):");
-
-      try {
-        // Handle different response formats
-        if (typeof errorData === "string") {
-          console.log("Raw String Response:", errorData);
-        } else if (errorData) {
-          console.log(JSON.stringify(errorData, null, 2));
-        } else {
-          console.log("No error data available");
-        }
-      } catch (e) {
-        console.log("Error stringifying response:", e);
-        console.log("Raw error data:", errorData);
-      }
-      console.log("================================================\n");
-
       // First try to extract detailed error from errorData
       if (errorData) {
         // Try all the error extraction patterns we already have above
