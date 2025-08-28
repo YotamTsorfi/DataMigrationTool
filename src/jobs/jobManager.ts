@@ -9,7 +9,7 @@ import { processWithQueues } from "../jobs/queueJob";
 import { ErrorBufferService } from "../utils/errorBufferService";
 import { JobCancellationService } from "../utils/jobCancellationService";
 // import { EmailNotificationService } from "../utils/emailNotificationService";
-import { processParentChildWithQueues } from "./parentChildQueueProcessor";
+import { processParentChildWithQueues } from "./parentChildQueueJob";
 
 interface JobRequest {
   recordCount: number;

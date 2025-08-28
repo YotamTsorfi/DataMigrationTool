@@ -184,6 +184,16 @@ export async function sendParentChildQueue(
     const url = `${baseUrl}${company}/${priorityScreenName}`;
 
     // Create headers with authentication
+
+    //TODO - Add Debugging headers
+    // "X-App-Trace"="1"
+    // const headers = {
+    //   "Content-Type": "application/json",
+    //   Accept: "application/json",
+    //   "OData-Version": "4.0",
+    //   Authorization: `Basic ${Buffer.from(`${config.PRIORITY_PAT}:${config.PRIORITY_PASSWORD}`).toString("base64")}`,
+    //   "X-App-Trace": "1",
+    // };
     const headers = {
       "Content-Type": "application/json",
       Accept: "application/json",
