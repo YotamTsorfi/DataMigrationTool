@@ -1,4 +1,4 @@
-import { DatabaseService } from "../services/databaseService";
+import { DatabaseService } from "../services/database/databaseService";
 
 interface SystemConfig {
   CONCURRENT_BATCHES: number;

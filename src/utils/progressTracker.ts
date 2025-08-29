@@ -1,15 +1,5 @@
 import { io } from "../index";
-
-interface JobProgress {
-  jobId: string;
-  jobName?: string;
-  totalRecords: number;
-  processedRecords: number;
-  successCount: number;
-  failureCount: number;
-  percentage: number;
-  status: "pending" | "processing" | "completed" | "failed";
-}
+import { JobProgress } from "../types/jobTypes";
 
 /**
  * A service for tracking and reporting job progress

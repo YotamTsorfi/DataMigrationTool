@@ -1,5 +1,6 @@
 # Copilot Code Generation Instructions for TypeScript
 
+- Use logger.ts from ../../../utils/logger.ts in order to log important events and errors.
 - Use comments just in English to explain complex logic or important sections of code.
 - Use TypeScript for all code examples.
 - Prefer `const` and `let` over `var`.

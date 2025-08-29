@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { DatabaseService } from "../services/databaseService";
+import { DatabaseService } from "../services/database/databaseService";
 
 /**
  * Controller for managing PriorityJobTypes and PriorityChildJob tables

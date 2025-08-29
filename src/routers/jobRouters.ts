@@ -1,7 +1,7 @@
 import express, { Request, Response, Router } from "express";
 import { priorityAuthMiddleware } from "../middleware/priorityAuth";
 import { getJobTypes, getActiveCaseIds } from "../controllers/jobController";
-import { JobManager } from "../jobs/jobManager";
+import { JobManager } from "../jobs/manager/jobManager";
 import ProgressTracker from "../utils/progressTracker";
 import { formatErrorMessage } from "../utils/errorHandler";
 import { JobCancellationService } from "../utils/jobCancellationService";

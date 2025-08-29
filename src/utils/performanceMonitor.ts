@@ -1,26 +1,7 @@
 import { performance } from "perf_hooks";
 // import { writeToLogFile } from "../config/logger";
 import moment from "moment-timezone";
-
-interface PerformanceMetrics {
-  startTime: number;
-  endTime: number;
-  duration: number;
-  requestSize: number;
-  responseSize: number;
-  success: boolean;
-  statusCode?: number;
-  errorType?: string;
-  recordCount: number;
-  averageTimePerRecord?: string;
-  successCount: number;
-  failureCount: number;
-  lastProcessedIndex: number;
-  dbFetchTime?: number;
-  dbUpdateTime?: number;
-  batchBuildTime?: number;
-  requestTime?: number;
-}
+import { PerformanceMetrics } from "../types/jobTypes";
 
 class PerformanceMonitor {
   public metrics: PerformanceMetrics;
@@ -253,10 +234,10 @@ class PerformanceMonitor {
     return {
       totalDuration: this.formatTime(this.metrics.duration),
       dbFetchTime: this.formatTime(
-        this.metrics.dbFetchTime || this.externalDbFetchTime,
+        this.metrics.dbFetchTime || this.externalDbFetchTime
       ),
       dbUpdateTime: this.formatTime(
-        this.metrics.dbUpdateTime || this.externalDbUpdateTime,
+        this.metrics.dbUpdateTime || this.externalDbUpdateTime
       ), // Add DB update time
       batchBuildTime: this.formatTime(this.metrics.batchBuildTime),
       requestTime: this.formatTime(this.metrics.requestTime),
@@ -317,4 +298,25 @@ class PerformanceMonitor {
   }
 }
 
+/**
+ * Measures the performance of a batch request
+ */
+export function measureRequestPerformance(
+  rows: any[],
+  perfMonitor: PerformanceMonitor
+): void {
+  perfMonitor.logRequestMetrics(rows);
+}
+
+/**
+ * Measures the performance of a batch response
+ */
+export function measureResponsePerformance(
+  response: any,
+  perfMonitor: PerformanceMonitor
+): void {
+  perfMonitor.logResponseMetrics(response.data, response.status);
+}
+
+export { PerformanceMonitor };
 export default PerformanceMonitor;

@@ -1,15 +1,7 @@
 import { Request, Response } from "express";
 import { poolPromise } from "../config/db";
-import { JobManager } from "../jobs/jobManager"; // Import JobManager
-
-interface JobRequest {
-  recordCount: number;
-  startRow: number;
-  tableName: string;
-  priorityScreenName: string;
-  jobType: string;
-  priorityIdField: string;
-}
+import { JobManager } from "../jobs/manager/jobManager"; // Import JobManager
+import { JobRequest } from "../types/jobTypes";
 
 export const runJobWithInput = async (req: Request, res: Response) => {
   const {

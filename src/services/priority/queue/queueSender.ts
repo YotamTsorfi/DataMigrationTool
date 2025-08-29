@@ -2,28 +2,15 @@
  * This module provides a specialized service for sending individual parent-child records to Priority API.
  * It works with the queue processor to handle one record at a time with proper error handling and retries.
  */
-import { writeToLogFile } from "../config/logger";
+import { writeToLogFile } from "../../../config/logger";
 import { v4 as uuidv4 } from "uuid";
 import axios from "axios";
-import { configService } from "../config/configService";
-import PerformanceMonitor from "../utils/performanceMonitor";
-import { processParentChildResponse } from "./priorityParentChildResponseProcessor";
-import { ChildJob } from "../jobs/jobParentAndChilds";
-// import { ErrorBufferService } from "../utils/errorBufferService";
+import { configService } from "../../../config/configService";
+import PerformanceMonitor from "../../../utils/performanceMonitor";
+import { processParentChildResponse } from "./responseProcessor";
+import { ChildJob, ParentChildQueueResult } from "../../../types/jobTypes";
 
-/**
- * Result interface for single parent-child record processing
- */
-export interface ParentChildQueueResult {
-  success: boolean;
-  successCount: number;
-  failureCount: number;
-  error?: string;
-  status?: number;
-  errorData?: any;
-  priorityId?: string | null;
-  duration?: number;
-}
+// import { ErrorBufferService } from "../utils/errorBufferService";
 
 /**
  * Logs detailed information about failed API requests including the complete request body.
@@ -93,6 +80,7 @@ export async function sendParentChildQueue(
   // Create a unique batch ID for this single record
   const batchId = uuidv4();
   const config = await configService.getConfig();
+  const logFailedToFile = config.LOG_FAILED_REQUESTS_TO_FILE === "true";
 
   // Initialize performance monitoring
   const perfMonitor = new PerformanceMonitor();
@@ -241,8 +229,9 @@ export async function sendParentChildQueue(
       perfMonitor.endRequest(); // Ensure performance timing ends properly
       perfMonitor.logError(error);
 
-      // Log the failed request body for debugging
-      logFailedRequestBody(record, error, cleanRecordForApi, jobId);
+      if (logFailedToFile) {
+        logFailedRequestBody(record, error, cleanRecordForApi, jobId);
+      }
 
       // Extract error details efficiently without verbose logging
       const statusCode =
@@ -312,15 +301,15 @@ export async function sendParentChildQueue(
       jobType,
       jobId,
       priorityIdField,
-      childTableNames,
       childJobs,
       logErrors,
-      updateBatchTable
+      updateBatchTable,
+      cleanRecordForApi
     );
 
     // Additional error logging for business logic errors
     // These are cases where the HTTP request succeeded but the business logic failed
-    if (!result.success) {
+    if (!result.success && logFailedToFile) {
       logFailedRequestBody(
         record,
         { message: result.message },
@@ -366,20 +355,24 @@ export async function sendParentChildQueue(
     console.error("Fatal error in sendParentChildQueue:", error);
 
     // Log the failed request for unexpected errors
+    let reconstructedPayload;
     try {
       // We need to reconstruct what the request body would have been
-      const cleanRecordForApi = { ...record };
+      const reconstructedPayload = { ...record };
       // Remove internal fields
-      Object.keys(cleanRecordForApi).forEach((key) => {
+      Object.keys(reconstructedPayload).forEach((key) => {
         if (key.startsWith("__") || ["childRecords", "RowId"].includes(key)) {
-          delete cleanRecordForApi[key];
+          delete reconstructedPayload[key];
         }
       });
 
       // Log the error with the best approximation of the request body
-      logFailedRequestBody(record, error, cleanRecordForApi, jobId);
+      if (logFailedToFile) {
+        logFailedRequestBody(record, error, reconstructedPayload, jobId);
+      }
     } catch (loggingError) {
       console.error("Failed to log error request body:", loggingError);
+      reconstructedPayload = {};
     }
 
     // Handle error by creating error records
@@ -400,10 +393,10 @@ export async function sendParentChildQueue(
         jobType,
         jobId,
         priorityIdField,
-        childTableNames,
         childJobs,
         logErrors,
-        updateBatchTable
+        updateBatchTable,
+        reconstructedPayload
       );
     } catch (updateError) {
       console.error("Failed to update error records:", updateError);

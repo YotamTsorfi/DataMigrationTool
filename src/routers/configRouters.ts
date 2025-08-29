@@ -5,7 +5,7 @@
  */
 import express from "express";
 import { configService } from "../config/configService";
-import { DatabaseService } from "../services/databaseService";
+import { DatabaseService } from "../services/database/databaseService";
 
 // Define interface for query results with rowsAffected property
 interface QueryResult {

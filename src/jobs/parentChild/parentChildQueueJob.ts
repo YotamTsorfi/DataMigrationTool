@@ -3,165 +3,22 @@
  * It implements a grid-based approach with horizontal parallelism (multiple queues) and vertical
  * batching (grouped records within each queue) to optimize processing throughput.
  */
-
 import { v4 as uuidv4 } from "uuid";
-import { QueueProcessor, QueueItem } from "../services/queueProcessor";
-import { fetchParentChildChunk } from "../services/parentChildChunkFetcher";
-
-//import { sendParentChildBatch } from "../services/priorityParentChildBatchSender";
-import { sendParentChildQueue } from "../services/priorityParentChildQueueSender";
-
-import { performBulkUpdateWithService } from "../services/dataService";
-import { configService } from "../config/configService";
-
-import PerformanceMonitor from "../utils/performanceMonitor";
-import ProgressTracker from "../utils/progressTracker";
-import { ErrorBufferService } from "../utils/errorBufferService";
-import { JobCancellationService } from "../utils/jobCancellationService";
-import { ChildJob } from "./jobParentAndChilds";
-
-/**
- * Interface for batch processing results
- */
-interface BatchResult {
-  success: boolean;
-  successCount?: number;
-  failureCount?: number;
-  error?: any;
-  rowsCount?: number;
-  duration?: number;
-  totalProcessed?: number;
-}
-
-/**
- * Generates a clean error message by removing numbers and special characters,
- * while preserving Hebrew and English letters and spaces.
- */
-function generateCleanError(errorMessage: string | null): string | null {
-  if (!errorMessage) return null;
-  return errorMessage
-    .replace(/[0-9]/g, "") // Remove all numbers
-    .replace(/[^\p{L}\s]/gu, "") // Keep only letters (including Hebrew/English) and spaces
-    .trim();
-}
-
-/**
- * Updates database with error information for a failed record
- */
-async function forceErrorRecordUpdate(
-  record: any,
-  batchId: string,
-  jobType: string,
-  jobId: string,
-  tableName: string,
-  error: any
-): Promise<void> {
-  try {
-    // Format the error message
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    const cleanErrorMessage = generateCleanError(errorMessage);
-
-    // Add truncation to ensure it fits in the database column
-    const truncatedError = truncateErrorForDatabase(cleanErrorMessage, 500);
-
-    // Update record with error information
-    await performBulkUpdateWithService(tableName, [
-      {
-        setClause:
-          "PriorityStatus = 0, ErrorMessage = ?, ProcessingStatus = 'Error'",
-        params: [truncatedError || "Unknown error"],
-        where: `RowId = ?`,
-        whereParams: [record.RowId],
-      },
-    ]);
-  } catch (updateError) {
-    console.error(
-      `Failed to update error information for record ${record.RowId}:`,
-      updateError
-    );
-  }
-}
-
-/**
- * Retry utility with exponential backoff for handling transient errors like HTTP 502.
- * Retries the provided async function up to maxRetries times, doubling the delay each time.
- */
-const retryWithBackoff = async <T>(
-  fn: () => Promise<T>,
-  maxRetries: number = 3,
-  initialDelay: number = 1000
-): Promise<T> => {
-  let attempt = 0;
-  let delay = initialDelay;
-  let lastError: any = null;
-
-  // Limit the loop by checking the attempt count
-  while (attempt <= maxRetries) {
-    try {
-      return await fn();
-    } catch (error: any) {
-      attempt++;
-      lastError = error;
-      // Only retry on 502 or ERR_BAD_RESPONSE
-      const is502 =
-        error?.response?.status === 502 ||
-        error?.code === "ERR_BAD_RESPONSE" ||
-        (typeof error?.message === "string" && error.message.includes("502"));
-      if (attempt > maxRetries || !is502) {
-        throw error;
-      }
-      console.warn(
-        `Retry attempt ${attempt} after 502 error: ${error.message || error}. Waiting ${delay}ms...`
-      );
-      await new Promise((resolve) => setTimeout(resolve, delay));
-      delay *= 2;
-    }
-  }
-  // If all retries failed, throw the last error
-  throw lastError;
-};
-
-/**
- * Ensures error messages don't exceed database column size limits.
- * Handles Redis timeout errors and other common API issues while preserving essential information.
- *
- * @param errorMessage - The original error message
- * @param maxLength - Maximum allowed length (default 500 characters)
- * @returns Truncated and formatted error message
- */
-function truncateErrorForDatabase(
-  errorMessage: string | null,
-  maxLength: number = 500
-): string | null {
-  if (!errorMessage) return null;
-
-  try {
-    // Check if it's a JSON error and extract just the essential parts
-    if (errorMessage.startsWith("{") && errorMessage.includes('"code"')) {
-      try {
-        const errorObj = JSON.parse(errorMessage);
-        // Extract just the code and a shortened message
-        return `Error ${errorObj.code || "Unknown"}: ${(errorObj.message || "").substring(0, maxLength - 20)}`;
-      } catch (e) {
-        // If JSON parsing fails, continue with normal truncation
-      }
-    }
-
-    // Handle Redis timeout errors specifically - they tend to be very long
-    if (
-      errorMessage.includes("Timeout performing") &&
-      errorMessage.includes("HGET")
-    ) {
-      return "Redis timeout error - operation took too long to complete";
-    }
-
-    // For other errors, just truncate to fit the column
-    return errorMessage.substring(0, maxLength);
-  } catch (e) {
-    // Failsafe - if anything goes wrong in error processing, return a safe message
-    return "Error message processing failed";
-  }
-}
+import { QueueItem } from "../../types/jobTypes";
+import { ChildJob, BatchResult } from "../../types/jobTypes";
+import { configService } from "../../config/configService";
+import ProgressTracker from "../../utils/progressTracker";
+import PerformanceMonitor from "../../utils/performanceMonitor";
+import { JobCancellationService } from "../../utils/jobCancellationService";
+import { ErrorBufferService } from "../../utils/errorBufferService";
+import {
+  generateCleanError,
+  truncateErrorForDatabase,
+} from "../../utils/errorUtils";
+import { fetchParentChildChunk } from "../../services/priority/queue/chunkFetcher";
+import { QueueProcessor } from "../../services/processing/queue/queueProcessor";
+import { sendParentChildQueue } from "../../services/priority/queue/queueSender";
+import { DatabaseService } from "../../services/database/databaseService";
 
 /**
  * Process parent-child records using grid-based processing (horizontal parallel, vertical sequential)
@@ -182,20 +39,6 @@ export async function processParentChildWithQueues(
   customWhereClause?: string,
   caseId?: string
 ): Promise<BatchResult[]> {
-  console.log(
-    "------------- PARENT-CHILD GRID PROCESSING --------------------"
-  );
-  console.log("Parent job details:");
-  console.log(`  Table Name: ${parentTableName}`);
-  console.log(`  Screen Name: ${parentScreenName}`);
-  console.log(`  Parent ID Field: ${parentIdField}`);
-  console.log(`  Linked Field: ${linkedField}`);
-  console.log(`  Job Type: ${jobType}`);
-  console.log(`  Child Jobs: ${childJobs.length}`);
-  console.log(
-    "---------------------------------------------------------------"
-  );
-
   // Get system configuration
   const config = await configService.getConfig();
 
@@ -556,3 +399,79 @@ export async function processParentChildWithQueues(
     ];
   }
 }
+
+/**
+ * Updates database with error information for a failed record
+ */
+async function forceErrorRecordUpdate(
+  record: any,
+  batchId: string,
+  jobType: string,
+  jobId: string,
+  tableName: string,
+  error: any
+): Promise<void> {
+  try {
+    // Format the error message
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const cleanErrorMessage = generateCleanError(errorMessage);
+
+    // Add truncation to ensure it fits in the database column
+    const truncatedError = truncateErrorForDatabase(cleanErrorMessage, 500);
+
+    // Update record with error information
+    await DatabaseService.performBulkUpdateWithService(tableName, [
+      {
+        setClause:
+          "PriorityStatus = 0, ErrorMessage = ?, ProcessingStatus = 'Error'",
+        params: [truncatedError || "Unknown error"],
+        where: `RowId = ?`,
+        whereParams: [record.RowId],
+      },
+    ]);
+  } catch (updateError) {
+    console.error(
+      `Failed to update error information for record ${record.RowId}:`,
+      updateError
+    );
+  }
+}
+
+/**
+ * Retry utility with exponential backoff for handling transient errors like HTTP 502.
+ * Retries the provided async function up to maxRetries times, doubling the delay each time.
+ */
+const retryWithBackoff = async <T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  initialDelay: number = 1000
+): Promise<T> => {
+  let attempt = 0;
+  let delay = initialDelay;
+  let lastError: any = null;
+
+  // Limit the loop by checking the attempt count
+  while (attempt <= maxRetries) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      attempt++;
+      lastError = error;
+      // Only retry on 502 or ERR_BAD_RESPONSE
+      const is502 =
+        error?.response?.status === 502 ||
+        error?.code === "ERR_BAD_RESPONSE" ||
+        (typeof error?.message === "string" && error.message.includes("502"));
+      if (attempt > maxRetries || !is502) {
+        throw error;
+      }
+      console.warn(
+        `Retry attempt ${attempt} after 502 error: ${error.message || error}. Waiting ${delay}ms...`
+      );
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      delay *= 2;
+    }
+  }
+  // If all retries failed, throw the last error
+  throw lastError;
+};
