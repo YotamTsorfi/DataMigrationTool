@@ -19,7 +19,8 @@ export function logMissingSubformResponse(
   subformKey: string,
   responseBody: any,
   childJob: ChildJob,
-  recordId: string | number
+  recordId: string | number,
+  originalRequestPayload?: any
 ): void {
   try {
     // Create a meaningful filename with timestamp for uniqueness
@@ -33,6 +34,8 @@ export function logMissingSubformResponse(
       `Child Job Type: ${childJob.JobTypeName}`,
       `Child Job Table: ${childJob.DBTableName}`,
       `Child Job Screen: ${childJob.ScreenName}`,
+      `Original Request Payload:`,
+      JSON.stringify(originalRequestPayload, null, 2),
       `Response Body:`,
       JSON.stringify(responseBody, null, 2),
     ].join("\n");
@@ -109,7 +112,8 @@ export function extractChildPriorityId(
   responseBody: any,
   childJob: ChildJob,
   childRecord: any,
-  childIndex?: number
+  childIndex?: number,
+  originalRequestPayload?: any
 ): string | null {
   // Get the field name from the child job configuration
   const idFieldName = childJob.priority_id;
@@ -237,7 +241,8 @@ export function extractChildPriorityId(
       subformKey,
       responseBody,
       childJob,
-      childRecord.RowId
+      childRecord.RowId,
+      originalRequestPayload
     );
   }
 

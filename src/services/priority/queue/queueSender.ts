@@ -298,10 +298,10 @@ export async function sendParentChildQueue(
       jobType,
       jobId,
       priorityIdField,
-      childTableNames,
       childJobs,
       logErrors,
-      updateBatchTable
+      updateBatchTable,
+      cleanRecordForApi
     );
 
     // Additional error logging for business logic errors
@@ -352,20 +352,22 @@ export async function sendParentChildQueue(
     console.error("Fatal error in sendParentChildQueue:", error);
 
     // Log the failed request for unexpected errors
+    let reconstructedPayload;
     try {
       // We need to reconstruct what the request body would have been
-      const cleanRecordForApi = { ...record };
+      const reconstructedPayload = { ...record };
       // Remove internal fields
-      Object.keys(cleanRecordForApi).forEach((key) => {
+      Object.keys(reconstructedPayload).forEach((key) => {
         if (key.startsWith("__") || ["childRecords", "RowId"].includes(key)) {
-          delete cleanRecordForApi[key];
+          delete reconstructedPayload[key];
         }
       });
 
       // Log the error with the best approximation of the request body
-      logFailedRequestBody(record, error, cleanRecordForApi, jobId);
+      logFailedRequestBody(record, error, reconstructedPayload, jobId);
     } catch (loggingError) {
       console.error("Failed to log error request body:", loggingError);
+      reconstructedPayload = {};
     }
 
     // Handle error by creating error records
@@ -386,10 +388,10 @@ export async function sendParentChildQueue(
         jobType,
         jobId,
         priorityIdField,
-        childTableNames,
         childJobs,
         logErrors,
-        updateBatchTable
+        updateBatchTable,
+        reconstructedPayload
       );
     } catch (updateError) {
       console.error("Failed to update error records:", updateError);

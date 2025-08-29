@@ -24,15 +24,18 @@ import { getChildRecords } from "./childRecordHelper";
 //-------------------------------------------------------------------------
 /**
  * Processes the API response for parent-child relationships.
- * @param response
- * @param enrichedRecords
- * @param perfMonitor
- * @param parentTable
- * @param batchId
- * @param jobType
- * @param jobId
- * @param priorityIdField
- * @param childTableNames
+ * @param response - The API response object
+ * @param enrichedRecords - The enriched records to update
+ * @param perfMonitor - The performance monitor instance
+ * @param parentTable - The parent table name
+ * @param batchId - The batch ID for the operation
+ * @param jobType - The type of job being processed
+ * @param jobId - The unique job identifier
+ * @param priorityIdField - The field name for the Priority ID
+ * @param childJobs - The child job definitions
+ * @param logErrors - Whether to log detailed errors
+ * @param updateBatchTable - Whether to update the batch tracking table
+ * @param originalRequestPayload - The original request payload
  */
 export async function processParentChildResponse(
   response: any,
@@ -43,10 +46,10 @@ export async function processParentChildResponse(
   jobType: string,
   jobId: string,
   priorityIdField?: string,
-  childTableNames?: string[],
   childJobs?: ChildJob[],
   logErrors: boolean = false,
-  updateBatchTable: boolean = false
+  updateBatchTable: boolean = false,
+  originalRequestPayload?: any
 ): Promise<ProcessResponseResult> {
   try {
     // Start measuring DB update time
@@ -83,7 +86,8 @@ export async function processParentChildResponse(
       response,
       enrichedRecords,
       priorityIdField,
-      childJobs
+      childJobs,
+      originalRequestPayload
     );
 
     // Update performance metrics - THIS IS THE FIX
@@ -390,7 +394,8 @@ function processApiResponse(
   response: any,
   enrichedRecords: any[],
   priorityIdField?: string,
-  childJobs?: ChildJob[]
+  childJobs?: ChildJob[],
+  originalRequestPayload?: any
 ) {
   // Default error result as before
   const defaultErrorResult = {
@@ -573,7 +578,8 @@ function processApiResponse(
                     responseBody,
                     job,
                     childRecord,
-                    childIndex
+                    childIndex,
+                    originalRequestPayload
                   );
 
                   if (priorityId !== null) {
