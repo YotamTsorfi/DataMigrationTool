@@ -4,8 +4,6 @@
  * This pipeline handles the build, deployment, and service management
  * for both server and client components. It includes explicit PM2 service
  * restart after deployment to ensure changes take effect properly.
- * The deployment process ensures clean installation by removing old files
- * before copying new ones, maintaining directory structure integrity.
  */
 
 pipeline {
@@ -49,61 +47,17 @@ pipeline {
             steps {
                 // יצירת תיקיית היעד אם היא לא קיימת
                 bat 'if not exist C:\\production\\carmelton-data-migration mkdir C:\\production\\carmelton-data-migration'
+                bat 'if not exist C:\\production\\carmelton-data-migration\\dist mkdir C:\\production\\carmelton-data-migration\\dist'
+                bat 'if not exist C:\\production\\carmelton-data-migration\\client mkdir C:\\production\\carmelton-data-migration\\client'
+                bat 'if not exist C:\\production\\carmelton-data-migration\\client\\build mkdir C:\\production\\carmelton-data-migration\\client\\build'
                 
-                // Create empty directory FIRST before using it
-                bat '''
-                    if exist empty_dir rd /s /q empty_dir
-                    mkdir empty_dir
-                    echo Created empty directory for cleaning operations
-                '''
-                
-                // ניקוי תיקיות היעד לפני העתקה, תוך שמירה על תיקיות הורים
-                // Handling robocopy exit codes (0-7 are success states)
-                bat '''
-                    echo Cleaning target directories before deployment...
-                    
-                    if exist C:\\production\\carmelton-data-migration\\dist (
-                        echo Cleaning dist directory...
-                        robocopy /MIR /NP /NFL /NDL /NJH /NJS empty_dir C:\\production\\carmelton-data-migration\\dist
-                        if %ERRORLEVEL% GEQ 8 (
-                            echo "Robocopy failed with error code %ERRORLEVEL%"
-                            exit /b 1
-                        ) else (
-                            echo "Robocopy completed successfully with code %ERRORLEVEL%"
-                        )
-                    ) else (
-                        mkdir C:\\production\\carmelton-data-migration\\dist
-                    )
-                    
-                    if exist C:\\production\\carmelton-data-migration\\client\\build (
-                        echo Cleaning client build directory...
-                        robocopy /MIR /NP /NFL /NDL /NJH /NJS empty_dir C:\\production\\carmelton-data-migration\\client\\build
-                        if %ERRORLEVEL% GEQ 8 (
-                            echo "Robocopy failed with error code %ERRORLEVEL%"
-                            exit /b 1
-                        ) else (
-                            echo "Robocopy completed successfully with code %ERRORLEVEL%"
-                        )
-                    ) else (
-                        if not exist C:\\production\\carmelton-data-migration\\client mkdir C:\\production\\carmelton-data-migration\\client
-                        mkdir C:\\production\\carmelton-data-migration\\client\\build
-                    )
-                '''
-                
-                // העתקת קבצי השרת עם robocopy לשמירה על תיקיות זהות
+                // העתקת קבצי השרת
                 bat '''
                     if exist dist (
-                        echo Deploying server files...
-                        robocopy dist C:\\production\\carmelton-data-migration\\dist /MIR /NP /NFL /NDL /NJH /NJS
-                        if %ERRORLEVEL% GEQ 8 (
-                            echo "Robocopy failed with error code %ERRORLEVEL%"
-                            exit /b 1
-                        ) else (
-                            echo "Robocopy completed successfully with code %ERRORLEVEL%"
-                        )
+                        xcopy /Y /E /I dist C:\\production\\carmelton-data-migration\\dist
                     ) else (
                         echo "Warning: dist directory does not exist"
-                        exit /b 1
+                        exit 1
                     )
                 '''
                 
@@ -115,20 +69,13 @@ pipeline {
                 // יצירת קובץ עם רשימת קבצים להחרגה לפני העתקה
                 bat 'echo favicon.ico > exclude_list.txt'
                 
-                // העתקת קבצי הקליינט עם robocopy לשמירה על תיקיות זהות והחרגת favicon.ico
+                // העתקת קבצי הקליינט - החרגת favicon.ico
                 bat '''
                     if exist client\\build (
-                        echo Deploying client files...
-                        robocopy client\\build C:\\production\\carmelton-data-migration\\client\\build /MIR /XF favicon.ico /NP /NFL /NDL /NJH /NJS
-                        if %ERRORLEVEL% GEQ 8 (
-                            echo "Robocopy failed with error code %ERRORLEVEL%"
-                            exit /b 1
-                        ) else (
-                            echo "Robocopy completed successfully with code %ERRORLEVEL%"
-                        )
+                        xcopy /Y /E /I client\\build C:\\production\\carmelton-data-migration\\client\\build /EXCLUDE:exclude_list.txt
                     ) else (
                         echo "Warning: client\\build directory does not exist"
-                        exit /b 1
+                        exit 1
                     )
                 '''
                 
@@ -136,11 +83,8 @@ pipeline {
                 bat 'if exist client\\package-lock.json copy client\\package-lock.json C:\\production\\carmelton-data-migration\\client\\package-lock.json'
                 bat 'if exist client\\.env.production copy client\\.env.production C:\\production\\carmelton-data-migration\\client\\.env.production'
                 
-                // ניקוי קובץ ההחרגות ותיקיית העזר
-                bat '''
-                    if exist exclude_list.txt del exclude_list.txt
-                    if exist empty_dir rd /s /q empty_dir
-                '''
+                // ניקוי קובץ ההחרגות
+                bat 'del exclude_list.txt'
             }
         }
         stage('Install Dependencies in Production') {
@@ -183,11 +127,8 @@ pipeline {
             echo 'Deployment failed, attempted to restart services'
         }
         always {
-            // ניקוי נוסף במקרה שהתהליך נכשל בשלב כלשהו
-            bat '''
-                if exist exclude_list.txt del exclude_list.txt
-                if exist empty_dir rd /s /q empty_dir
-            '''
+            // ניקוי קובץ ההחרגות אם עדיין קיים
+            bat 'if exist exclude_list.txt del exclude_list.txt'
         }
     }
 }
