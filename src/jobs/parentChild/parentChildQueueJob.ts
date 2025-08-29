@@ -39,20 +39,6 @@ export async function processParentChildWithQueues(
   customWhereClause?: string,
   caseId?: string
 ): Promise<BatchResult[]> {
-  console.log(
-    "------------- PARENT-CHILD GRID PROCESSING --------------------"
-  );
-  console.log("Parent job details:");
-  console.log(`  Table Name: ${parentTableName}`);
-  console.log(`  Screen Name: ${parentScreenName}`);
-  console.log(`  Parent ID Field: ${parentIdField}`);
-  console.log(`  Linked Field: ${linkedField}`);
-  console.log(`  Job Type: ${jobType}`);
-  console.log(`  Child Jobs: ${childJobs.length}`);
-  console.log(
-    "---------------------------------------------------------------"
-  );
-
   // Get system configuration
   const config = await configService.getConfig();
 

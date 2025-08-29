@@ -113,7 +113,8 @@ export function extractChildPriorityId(
   childJob: ChildJob,
   childRecord: any,
   childIndex?: number,
-  originalRequestPayload?: any
+  originalRequestPayload?: any,
+  logMissingSubformToFile?: boolean
 ): string | null {
   // Get the field name from the child job configuration
   const idFieldName = childJob.priority_id;
@@ -235,15 +236,17 @@ export function extractChildPriorityId(
       }
     }
   } else {
-    console.log(`Subform key ${subformKey} not found in response`);
+    //console.log(`Subform key ${subformKey} not found in response`);
     // Log the missing subform and full response body to a file
-    logMissingSubformResponse(
-      subformKey,
-      responseBody,
-      childJob,
-      childRecord.RowId,
-      originalRequestPayload
-    );
+    if (logMissingSubformToFile) {
+      logMissingSubformResponse(
+        subformKey,
+        responseBody,
+        childJob,
+        childRecord.RowId,
+        originalRequestPayload
+      );
+    }
   }
 
   // Check for direct field access in the response body

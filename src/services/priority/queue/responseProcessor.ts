@@ -20,7 +20,7 @@ import {
   forceErrorDatabaseUpdates,
 } from "./errorHandler";
 import { getChildRecords } from "./childRecordHelper";
-
+import { configService } from "../../../config/configService";
 //-------------------------------------------------------------------------
 /**
  * Processes the API response for parent-child relationships.
@@ -52,6 +52,10 @@ export async function processParentChildResponse(
   originalRequestPayload?: any
 ): Promise<ProcessResponseResult> {
   try {
+    const config = await configService.getConfig();
+    const logMissingSubformToFile =
+      config.LOG_MISSING_SUBFORM_TO_FILE === "true";
+
     // Start measuring DB update time
     const dbUpdateStart = performance.now();
 
@@ -87,7 +91,8 @@ export async function processParentChildResponse(
       enrichedRecords,
       priorityIdField,
       childJobs,
-      originalRequestPayload
+      originalRequestPayload,
+      logMissingSubformToFile
     );
 
     // Update performance metrics - THIS IS THE FIX
@@ -395,7 +400,8 @@ function processApiResponse(
   enrichedRecords: any[],
   priorityIdField?: string,
   childJobs?: ChildJob[],
-  originalRequestPayload?: any
+  originalRequestPayload?: any,
+  logMissingSubformToFile: boolean = false
 ) {
   // Default error result as before
   const defaultErrorResult = {
@@ -507,12 +513,14 @@ function processApiResponse(
             // );
           } else {
             // Log missing parent field
-            logMissingPriorityField(
-              record.RowId,
-              record.__tableName || "unknown",
-              priorityIdField,
-              record.__jobId
-            );
+            if (logMissingSubformToFile) {
+              logMissingPriorityField(
+                record.RowId,
+                record.__tableName || "unknown",
+                priorityIdField,
+                record.__jobId
+              );
+            }
           }
         } catch (e) {
           console.warn(`Failed to parse response body for record ${index}`, e);
@@ -579,7 +587,8 @@ function processApiResponse(
                     job,
                     childRecord,
                     childIndex,
-                    originalRequestPayload
+                    originalRequestPayload,
+                    logMissingSubformToFile
                   );
 
                   if (priorityId !== null) {
@@ -589,12 +598,14 @@ function processApiResponse(
                     // );
                   } else {
                     // Log missing field
-                    logMissingPriorityField(
-                      childRecord.RowId,
-                      childTableName,
-                      job.priority_id,
-                      record.__jobId
-                    );
+                    if (logMissingSubformToFile) {
+                      logMissingPriorityField(
+                        childRecord.RowId,
+                        childTableName,
+                        job.priority_id,
+                        record.__jobId
+                      );
+                    }
                   }
                 } catch (e) {
                   console.error(
@@ -608,9 +619,9 @@ function processApiResponse(
               childUpdateRows.push(childUpdate);
             });
           } else {
-            console.log(
-              `No valid child records found for job ${jobTypeName} - parent record RowId: ${record.RowId}`
-            );
+            // console.log(
+            //   `No valid child records found for job ${jobTypeName} - parent record RowId: ${record.RowId}`
+            // );
           }
         });
       }

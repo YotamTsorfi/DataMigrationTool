@@ -9,6 +9,7 @@ import { configService } from "../../../config/configService";
 import PerformanceMonitor from "../../../utils/performanceMonitor";
 import { processParentChildResponse } from "./responseProcessor";
 import { ChildJob, ParentChildQueueResult } from "../../../types/jobTypes";
+
 // import { ErrorBufferService } from "../utils/errorBufferService";
 
 /**
@@ -79,6 +80,7 @@ export async function sendParentChildQueue(
   // Create a unique batch ID for this single record
   const batchId = uuidv4();
   const config = await configService.getConfig();
+  const logFailedToFile = config.LOG_FAILED_REQUESTS_TO_FILE === "true";
 
   // Initialize performance monitoring
   const perfMonitor = new PerformanceMonitor();
@@ -227,8 +229,9 @@ export async function sendParentChildQueue(
       perfMonitor.endRequest(); // Ensure performance timing ends properly
       perfMonitor.logError(error);
 
-      // Log the failed request body for debugging
-      logFailedRequestBody(record, error, cleanRecordForApi, jobId);
+      if (logFailedToFile) {
+        logFailedRequestBody(record, error, cleanRecordForApi, jobId);
+      }
 
       // Extract error details efficiently without verbose logging
       const statusCode =
@@ -306,7 +309,7 @@ export async function sendParentChildQueue(
 
     // Additional error logging for business logic errors
     // These are cases where the HTTP request succeeded but the business logic failed
-    if (!result.success) {
+    if (!result.success && logFailedToFile) {
       logFailedRequestBody(
         record,
         { message: result.message },
@@ -364,7 +367,9 @@ export async function sendParentChildQueue(
       });
 
       // Log the error with the best approximation of the request body
-      logFailedRequestBody(record, error, reconstructedPayload, jobId);
+      if (logFailedToFile) {
+        logFailedRequestBody(record, error, reconstructedPayload, jobId);
+      }
     } catch (loggingError) {
       console.error("Failed to log error request body:", loggingError);
       reconstructedPayload = {};

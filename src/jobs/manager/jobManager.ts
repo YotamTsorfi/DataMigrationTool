@@ -314,7 +314,7 @@ class JobManager {
         // Log the child jobs for debugging
         // 26_05_2025 if (childJobCount > 0 && processingType === "batch") {
         if (childJobCount > 0) {
-          console.log(`Job ${jobId} executing parent-child batch processing`);
+          // console.log(`Job ${jobId} executing parent-child batch processing`);
 
           // Mark the job as a parent-child job to prevent separate jobs from being created for child tables
           await DatabaseService.executeQuery(
