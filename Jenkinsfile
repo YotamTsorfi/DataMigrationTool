@@ -4,7 +4,8 @@
  * This pipeline handles the build, deployment, and service management
  * for both server and client components. It includes explicit PM2 service
  * restart after deployment to ensure changes take effect properly.
- * Added clean deployment to ensure old files are removed when directory structure changes.
+ * The deployment process ensures clean installation by removing old files
+ * before copying new ones, maintaining directory structure integrity.
  */
 
 pipeline {
@@ -49,6 +50,13 @@ pipeline {
                 // יצירת תיקיית היעד אם היא לא קיימת
                 bat 'if not exist C:\\production\\carmelton-data-migration mkdir C:\\production\\carmelton-data-migration'
                 
+                // Create empty directory FIRST before using it
+                bat '''
+                    if exist empty_dir rd /s /q empty_dir
+                    mkdir empty_dir
+                    echo Created empty directory for cleaning operations
+                '''
+                
                 // ניקוי תיקיות היעד לפני העתקה, תוך שמירה על תיקיות הורים
                 bat '''
                     echo Cleaning target directories before deployment...
@@ -60,8 +68,6 @@ pipeline {
                         mkdir C:\\production\\carmelton-data-migration\\dist
                     )
                     
-                    if not exist empty_dir mkdir empty_dir
-                    
                     if exist C:\\production\\carmelton-data-migration\\client\\build (
                         echo Cleaning client build directory...
                         robocopy /MIR /NP /NFL /NDL /NJH /NJS empty_dir C:\\production\\carmelton-data-migration\\client\\build
@@ -69,8 +75,6 @@ pipeline {
                         if not exist C:\\production\\carmelton-data-migration\\client mkdir C:\\production\\carmelton-data-migration\\client
                         mkdir C:\\production\\carmelton-data-migration\\client\\build
                     )
-                    
-                    if exist empty_dir rd /s /q empty_dir
                 '''
                 
                 // העתקת קבצי השרת עם robocopy לשמירה על תיקיות זהות
@@ -107,8 +111,11 @@ pipeline {
                 bat 'if exist client\\package-lock.json copy client\\package-lock.json C:\\production\\carmelton-data-migration\\client\\package-lock.json'
                 bat 'if exist client\\.env.production copy client\\.env.production C:\\production\\carmelton-data-migration\\client\\.env.production'
                 
-                // ניקוי קובץ ההחרגות
-                bat 'del exclude_list.txt'
+                // ניקוי קובץ ההחרגות ותיקיית העזר
+                bat '''
+                    if exist exclude_list.txt del exclude_list.txt
+                    if exist empty_dir rd /s /q empty_dir
+                '''
             }
         }
         stage('Install Dependencies in Production') {
@@ -151,7 +158,7 @@ pipeline {
             echo 'Deployment failed, attempted to restart services'
         }
         always {
-            // ניקוי קובץ ההחרגות ותיקיה ריקה אם עדיין קיימים
+            // ניקוי נוסף במקרה שהתהליך נכשל בשלב כלשהו
             bat '''
                 if exist exclude_list.txt del exclude_list.txt
                 if exist empty_dir rd /s /q empty_dir
