@@ -4,6 +4,7 @@
  * This pipeline handles the build, deployment, and service management
  * for both server and client components. It includes explicit PM2 service
  * restart after deployment to ensure changes take effect properly.
+ * Added clean deployment to ensure old files are removed when directory structure changes.
  */
 
 pipeline {
@@ -47,14 +48,36 @@ pipeline {
             steps {
                 // יצירת תיקיית היעד אם היא לא קיימת
                 bat 'if not exist C:\\production\\carmelton-data-migration mkdir C:\\production\\carmelton-data-migration'
-                bat 'if not exist C:\\production\\carmelton-data-migration\\dist mkdir C:\\production\\carmelton-data-migration\\dist'
-                bat 'if not exist C:\\production\\carmelton-data-migration\\client mkdir C:\\production\\carmelton-data-migration\\client'
-                bat 'if not exist C:\\production\\carmelton-data-migration\\client\\build mkdir C:\\production\\carmelton-data-migration\\client\\build'
                 
-                // העתקת קבצי השרת
+                // ניקוי תיקיות היעד לפני העתקה, תוך שמירה על תיקיות הורים
+                bat '''
+                    echo Cleaning target directories before deployment...
+                    
+                    if exist C:\\production\\carmelton-data-migration\\dist (
+                        echo Cleaning dist directory...
+                        robocopy /MIR /NP /NFL /NDL /NJH /NJS empty_dir C:\\production\\carmelton-data-migration\\dist
+                    ) else (
+                        mkdir C:\\production\\carmelton-data-migration\\dist
+                    )
+                    
+                    if not exist empty_dir mkdir empty_dir
+                    
+                    if exist C:\\production\\carmelton-data-migration\\client\\build (
+                        echo Cleaning client build directory...
+                        robocopy /MIR /NP /NFL /NDL /NJH /NJS empty_dir C:\\production\\carmelton-data-migration\\client\\build
+                    ) else (
+                        if not exist C:\\production\\carmelton-data-migration\\client mkdir C:\\production\\carmelton-data-migration\\client
+                        mkdir C:\\production\\carmelton-data-migration\\client\\build
+                    )
+                    
+                    if exist empty_dir rd /s /q empty_dir
+                '''
+                
+                // העתקת קבצי השרת עם robocopy לשמירה על תיקיות זהות
                 bat '''
                     if exist dist (
-                        xcopy /Y /E /I dist C:\\production\\carmelton-data-migration\\dist
+                        echo Deploying server files...
+                        robocopy dist C:\\production\\carmelton-data-migration\\dist /MIR /NP /NFL /NDL /NJH /NJS
                     ) else (
                         echo "Warning: dist directory does not exist"
                         exit 1
@@ -69,10 +92,11 @@ pipeline {
                 // יצירת קובץ עם רשימת קבצים להחרגה לפני העתקה
                 bat 'echo favicon.ico > exclude_list.txt'
                 
-                // העתקת קבצי הקליינט - החרגת favicon.ico
+                // העתקת קבצי הקליינט עם robocopy לשמירה על תיקיות זהות והחרגת favicon.ico
                 bat '''
                     if exist client\\build (
-                        xcopy /Y /E /I client\\build C:\\production\\carmelton-data-migration\\client\\build /EXCLUDE:exclude_list.txt
+                        echo Deploying client files...
+                        robocopy client\\build C:\\production\\carmelton-data-migration\\client\\build /MIR /XF favicon.ico /NP /NFL /NDL /NJH /NJS
                     ) else (
                         echo "Warning: client\\build directory does not exist"
                         exit 1
@@ -127,8 +151,11 @@ pipeline {
             echo 'Deployment failed, attempted to restart services'
         }
         always {
-            // ניקוי קובץ ההחרגות אם עדיין קיים
-            bat 'if exist exclude_list.txt del exclude_list.txt'
+            // ניקוי קובץ ההחרגות ותיקיה ריקה אם עדיין קיימים
+            bat '''
+                if exist exclude_list.txt del exclude_list.txt
+                if exist empty_dir rd /s /q empty_dir
+            '''
         }
     }
 }
