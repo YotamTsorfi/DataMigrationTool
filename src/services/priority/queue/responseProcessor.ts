@@ -13,7 +13,11 @@ import {
 } from "../../../utils/performanceMonitor";
 import { ChildJob, ProcessResponseResult } from "../../../types/jobTypes";
 import { DatabaseService } from "../../database/databaseService";
-import { extractPriorityId, extractChildPriorityId } from "./idExtractor";
+import {
+  extractPriorityId,
+  extractChildPriorityId,
+  logMissingSubformResponse,
+} from "./idExtractor";
 import {
   logMissingPriorityField,
   logResponseError,
@@ -389,11 +393,16 @@ export async function processParentChildResponse(
 }
 //-------------------------------------------------------------------------
 /**
- * עיבוד התגובה מה-API והכנת השורות לעדכון
- * @param response - התגובה מה-API
- * @param enrichedRecords - הרשומות ששלחנו
- * @param priorityIdField - שדה המזהה בפריוריטי
- * @returns מידע מעובד על הצלחות, כישלונות ושורות לעדכון
+ * Processes API responses and prepares database updates for parent and child records.
+ * Handles various response formats, extracts Priority IDs, and detects missing subforms.
+ *
+ * @param response - The API response object
+ * @param enrichedRecords - The enriched records sent to the API
+ * @param priorityIdField - Field name for the Priority ID
+ * @param childJobs - Child job definitions
+ * @param originalRequestPayload - The original request payload sent to the API
+ * @param logMissingSubformToFile - Whether to log missing subforms to file
+ * @returns Processed data including update rows, success/failure counts
  */
 function processApiResponse(
   response: any,
@@ -401,7 +410,7 @@ function processApiResponse(
   priorityIdField?: string,
   childJobs?: ChildJob[],
   originalRequestPayload?: any,
-  logMissingSubformToFile: boolean = false
+  logMissingSubformToFile: boolean = true
 ) {
   // Default error result as before
   const defaultErrorResult = {
@@ -508,9 +517,7 @@ function processApiResponse(
           );
 
           if (parentUpdate.priority_id !== null) {
-            // console.log(
-            //   `✅ Found parent priority_id '${priorityIdField}' with value: ${parentUpdate.priority_id}`
-            // );
+            // console.log(`✅ Found parent priority_id '${priorityIdField}' with value: ${parentUpdate.priority_id}`);
           } else {
             // Log missing parent field
             if (logMissingSubformToFile) {
@@ -520,6 +527,49 @@ function processApiResponse(
                 priorityIdField,
                 record.__jobId
               );
+            }
+          }
+
+          // NEW CODE: Check for missing subforms in the response
+          // This is the fix for the issue where subforms in the request aren't found in the response
+          if (originalRequestPayload && logMissingSubformToFile) {
+            try {
+              // Find all keys ending with _SUBFORM in the original request
+              const subformKeys = Object.keys(originalRequestPayload).filter(
+                (key) => key.endsWith("_SUBFORM")
+              );
+
+              // Check each subform from request
+              subformKeys.forEach((subformKey) => {
+                // If the subform is missing from the response
+                if (!responseBody[subformKey]) {
+                  // Find matching child job if possible
+                  const matchingChildJob = childJobs?.find(
+                    (job) => `${job.ScreenName}_SUBFORM` === subformKey
+                  );
+
+                  // If we found a matching child job, use it, otherwise create a minimal one
+                  const childJob =
+                    matchingChildJob ||
+                    ({
+                      JobTypeName: "Unknown",
+                      DBTableName: "Unknown",
+                      ScreenName: subformKey.replace("_SUBFORM", ""),
+                      priority_id: "unknown",
+                    } as ChildJob);
+
+                  // Log the missing subform
+                  logMissingSubformResponse(
+                    subformKey,
+                    responseBody,
+                    childJob,
+                    record.RowId,
+                    originalRequestPayload
+                  );
+                }
+              });
+            } catch (e) {
+              console.error(`Error checking for missing subforms: ${e}`);
             }
           }
         } catch (e) {
@@ -546,15 +596,11 @@ function processApiResponse(
             Array.isArray(childRecords) &&
             childRecords.length > 0
           ) {
-            // console.log(
-            //   `Found ${childRecords.length} child records for job ${jobTypeName}, parent ${record.RowId}`
-            // );
+            // console.log(`Found ${childRecords.length} child records for job ${jobTypeName}, parent ${record.RowId}`);
 
             childRecords.forEach((childRecord, childIndex) => {
               if (!childRecord.RowId) {
-                // console.error(
-                //   `Child record missing RowId for job ${jobTypeName}`
-                // );
+                // console.error(`Child record missing RowId for job ${jobTypeName}`);
                 return;
               }
 
@@ -593,9 +639,7 @@ function processApiResponse(
 
                   if (priorityId !== null) {
                     childUpdate.priority_id = priorityId;
-                    // console.log(
-                    //   `✅ Successfully extracted priority_id '${job.priority_id}' with value: ${priorityId} for child ${childRecord.RowId}`
-                    // );
+                    // console.log(`✅ Successfully extracted priority_id '${job.priority_id}' with value: ${priorityId} for child ${childRecord.RowId}`);
                   } else {
                     // Log missing field
                     if (logMissingSubformToFile) {
@@ -619,13 +663,10 @@ function processApiResponse(
               childUpdateRows.push(childUpdate);
             });
           } else {
-            // console.log(
-            //   `No valid child records found for job ${jobTypeName} - parent record RowId: ${record.RowId}`
-            // );
+            // console.log(`No valid child records found for job ${jobTypeName} - parent record RowId: ${record.RowId}`);
           }
         });
       }
-      //-------------------------------------------------
     } else {
       // Handle error case
       failureCount++;
