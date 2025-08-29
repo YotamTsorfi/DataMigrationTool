@@ -1,6 +1,6 @@
-import { DatabaseService } from "../services/databaseService";
-import { ChildJob } from "../jobs/jobParentAndChilds";
-import PerformanceMonitor from "../utils/performanceMonitor";
+import { DatabaseService } from "../../database/databaseService";
+import { ChildJob } from "../../../types/jobTypes";
+import PerformanceMonitor from "../../../utils/performanceMonitor";
 
 /**
  * Fetches parent records with their related child records in chunks

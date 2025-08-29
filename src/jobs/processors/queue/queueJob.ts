@@ -1,16 +1,13 @@
 import { v4 as uuidv4 } from "uuid";
-import PerformanceMonitor from "../utils/performanceMonitor";
-import ProgressTracker from "../utils/progressTracker";
-import { ErrorBufferService } from "../utils/errorBufferService";
-import { JobCancellationService } from "../utils/jobCancellationService";
-import { configService } from "../config/configService";
-import { DatabaseService } from "../services/databaseService";
-import { QueueProcessor, QueueItem } from "../services/queueProcessor";
-import {
-  fetchDataChunk,
-  performBulkUpdateWithService,
-  // performBulkErrorInsertWithService,
-} from "../services/dataService";
+import PerformanceMonitor from "../../../utils/performanceMonitor";
+import ProgressTracker from "../../../utils/progressTracker";
+import { ErrorBufferService } from "../../../utils/errorBufferService";
+import { JobCancellationService } from "../../../utils/jobCancellationService";
+import { configService } from "../../../config/configService";
+import { DatabaseService } from "../../../services/database/databaseService";
+import { fetchDataChunk } from "../../../services/database/dataService";
+import { QueueProcessor } from "../../../services/processing/queue/queueProcessor";
+import { QueueItem } from "../../../types/jobTypes";
 
 /**
  * Process records using grid-based processing (horizontal parallel, vertical sequential)
@@ -452,7 +449,7 @@ async function performDatabaseUpdatesAsync(
 
     while (!bulkUpdateSuccessful && bulkRetryCount < MAX_BULK_RETRIES) {
       try {
-        await performBulkUpdateWithService(
+        await DatabaseService.performBulkUpdateWithService(
           tableName,
           resultData.updateRows,
           perfMonitor,

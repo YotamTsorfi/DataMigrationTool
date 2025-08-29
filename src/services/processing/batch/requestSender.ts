@@ -1,10 +1,12 @@
 import axios from "axios";
 import http from "http";
 import https from "https";
-// import { config } from "../config/config"; // env
-import { configService } from "../config/configService"; // DB
-import PerformanceMonitor from "../utils/performanceMonitor";
-import { formatAxiosError, createCleanError } from "../utils/errorHandler";
+import { configService } from "../../../config/configService"; // DB
+import {
+  formatAxiosError,
+  createCleanError,
+} from "../../../utils/errorHandler";
+import { generateCleanError } from "../../../utils/errorUtils";
 
 /**
  * Sends a batch request to the Priority API
@@ -142,18 +144,6 @@ export function processApiResponse(
     response.data &&
     response.data.responses
   );
-
-  /**
-   * Generates a clean error message by removing numbers and special characters,
-   * while preserving Hebrew and English letters and spaces.
-   */
-  function generateCleanError(errorMessage: string | null): string | null {
-    if (!errorMessage) return null;
-    return errorMessage
-      .replace(/[0-9]/g, "") // Remove all numbers
-      .replace(/[^\p{L}\s]/gu, "") // Keep only letters (including Hebrew/English) and spaces
-      .trim();
-  }
   //   console.log("===== PROCESSING API RESPONSE =====");
   //   console.log("Processing", rows.length, "rows against response");
 
@@ -314,24 +304,4 @@ export function processApiResponse(
     lastProcessedIndex,
     sentToPriority,
   };
-}
-
-/**
- * Measures the performance of a batch request
- */
-export function measureRequestPerformance(
-  rows: any[],
-  perfMonitor: PerformanceMonitor
-): void {
-  perfMonitor.logRequestMetrics(rows);
-}
-
-/**
- * Measures the performance of a batch response
- */
-export function measureResponsePerformance(
-  response: any,
-  perfMonitor: PerformanceMonitor
-): void {
-  perfMonitor.logResponseMetrics(response.data, response.status);
 }

@@ -13,6 +13,38 @@ The system follows a client-server architecture:
 - **Database**: Stores configuration settings, job history, and source data
 - **Priority API**: External ERP system that receives processed data
 
+## Folder Structure
+
+### Server Structure
+
+- `config/` - Configuration and environment settings
+- `controllers/` - HTTP request handlers for different resources
+- `database/` - Database setup, stored procedures, and SQL scripts
+- `jobs/` - Core job processing logic
+  - `manager/` - Job orchestration and management
+  - `parentChild/` - Hierarchical data processing
+  - `processors/` - Various processing implementations
+- `middleware/` - Express middleware functions
+- `models/` - Data models and schemas
+- `routers/` - API route definitions
+- `scripts/` - Utility scripts
+- `services/` - Business logic services
+  - `database/` - Database interaction services
+  - `priority/` - Priority API integration services
+  - `processing/` - Data processing services
+- `types/` - TypeScript type definitions
+- `utils/` - Utility functions and helpers
+
+### Client Structure
+
+- `components/` - React UI components
+  - `JobScheduler/` - Job configuration interface
+  - `JobTypesManager/` - Job types management
+- `context/` - React context providers
+- `hooks/` - Custom React hooks
+- `services/` - Client-side services
+- `styles/` - CSS and component styles
+
 ## Deployment Architecture
 
 The application can be deployed in multiple environments:
@@ -26,17 +58,19 @@ The application can be deployed in multiple environments:
 
 ### Job Initiation Flow
 
-1. The user selects job parameters in the client interface (BatchProcessor.tsx in client/src/components/BatchProcessor.tsx)
+1. The user selects job parameters in the client interface (`client/src/components/BatchProcessor.tsx`)
 2. The job parameters are sent to the server via an API endpoint
 3. The server initiates the appropriate processing method based on the job type
 4. Progress updates are sent back to the client via Socket.IO
 5. The client displays real-time job status and completion metrics
 
-Client (BatchProcessor) → API Request → Server (JobManager) → Processing Engine → Priority API ↓ Client (Dashboard) ← Socket.IO Events ← Progress Updates
+Client (BatchProcessor) → API Request → Server (JobManager) → Processing Engine → Priority API
+↓
+Client (Dashboard) ← Socket.IO Events ← Progress Updates
 
 ## Main Processing Methods
 
-### 1. Queue Processing (processWithQueues in src/jobs/queueJob.ts)
+### 1. Queue Processing (processWithQueues in src/jobs/processors/queue/queueJob.ts)
 
 The Queue Processing method uses a grid-based approach with horizontal parallelism and vertical sequencing for efficient data processing.
 
@@ -84,7 +118,7 @@ Process large volumes of independent records with optimal throughput while respe
    - Error buffering optimizes database writes
    - Specialized handling for different error types (network, API, data)
 
-### 2. Parent-Child Grid Processing (processParentChildGridBatches in src/jobs/jobParentAndChilds.ts)
+### 2. Parent-Child Grid Processing (processParentChildGridBatches in src/jobs/parentChild/parentChildsGridProcess.ts)
 
 The Parent-Child Grid Processing method extends the queue processing concept to handle hierarchical data structures where parent records contain references to child records.
 
@@ -197,13 +231,13 @@ The system provides several mechanisms for monitoring job progress:
 
 The React-based client interface provides several key features:
 
-1. **Job Scheduling**: Interface for configuring and initiating jobs
-2. **Real-Time Monitoring**: Live updates on job progress via Socket.IO
-3. **Job History**: Historical record of completed jobs and their outcomes
-4. **Error Analysis**: Tools for investigating failed records
-5. **Configuration Management**: Interface for system settings
-6. **User Authentication**: Secure access controls
-7. **Job Type Management**: Configuration of different job types and parameters
+1. **Job Scheduling**: Interface for configuring and initiating jobs (`components/BatchProcessor.tsx`)
+2. **Real-Time Monitoring**: Live updates on job progress via Socket.IO (`components/JobProgressTracker.tsx`)
+3. **Job History**: Historical record of completed jobs and their outcomes (`components/BatchDashboard.tsx`)
+4. **Error Analysis**: Tools for investigating failed records (`components/ErrorGroups.tsx`)
+5. **Configuration Management**: Interface for system settings (`components/ConfigPanel.tsx`)
+6. **User Authentication**: Secure access controls (`context/AuthContext.tsx`)
+7. **Job Type Management**: Configuration of different job types and parameters (`components/JobTypesManager/JobTypesManager.tsx`)
 
 ## Deployment Considerations
 
@@ -215,4 +249,4 @@ The system is designed for flexible deployment:
 4. **Web Server Integration**: Support for IIS in Windows environments
 5. **Process Management**: PM2 for Node.js process monitoring and management
 
-These comprehensive processing methods enable the system to handle large volumes of data efficiently while maintaining data integrity and providing robust error handling.
+These comprehensive processing methods enable the system to handle large volumes of data efficiently while maintaining data integrity and providing

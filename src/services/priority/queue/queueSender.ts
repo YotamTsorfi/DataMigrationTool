@@ -2,28 +2,14 @@
  * This module provides a specialized service for sending individual parent-child records to Priority API.
  * It works with the queue processor to handle one record at a time with proper error handling and retries.
  */
-import { writeToLogFile } from "../config/logger";
+import { writeToLogFile } from "../../../config/logger";
 import { v4 as uuidv4 } from "uuid";
 import axios from "axios";
-import { configService } from "../config/configService";
-import PerformanceMonitor from "../utils/performanceMonitor";
-import { processParentChildResponse } from "./priorityParentChildResponseProcessor";
-import { ChildJob } from "../jobs/jobParentAndChilds";
+import { configService } from "../../../config/configService";
+import PerformanceMonitor from "../../../utils/performanceMonitor";
+import { processParentChildResponse } from "./responseProcessor";
+import { ChildJob, ParentChildQueueResult } from "../../../types/jobTypes";
 // import { ErrorBufferService } from "../utils/errorBufferService";
-
-/**
- * Result interface for single parent-child record processing
- */
-export interface ParentChildQueueResult {
-  success: boolean;
-  successCount: number;
-  failureCount: number;
-  error?: string;
-  status?: number;
-  errorData?: any;
-  priorityId?: string | null;
-  duration?: number;
-}
 
 /**
  * Logs detailed information about failed API requests including the complete request body.

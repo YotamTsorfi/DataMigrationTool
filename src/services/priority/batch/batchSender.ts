@@ -1,39 +1,21 @@
-import { configService } from "../config/configService"; // DB
+import { configService } from "../../../config/configService"; // DB
 import { v4 as uuidv4 } from "uuid";
 import pLimit from "p-limit";
-import PerformanceMonitor from "../utils/performanceMonitor";
+import { sendBatchRequest } from "../../processing/batch/requestSender";
+import { processParentChildResponse } from "../queue/responseProcessor";
+import { ChildJob, BatchSendResult } from "../../../types/jobTypes";
+import {
+  PerformanceMonitor,
+  measureRequestPerformance,
+} from "../../../utils/performanceMonitor";
 import {
   buildBatchRequestBody,
   createBatchHeaders,
   generateBoundary,
-} from "./requestBuilder";
-import { sendBatchRequest, measureRequestPerformance } from "./requestSender";
-import { processParentChildResponse } from "./priorityParentChildResponseProcessor";
-import { ChildJob } from "../jobs/jobParentAndChilds";
+} from "../../processing/batch/requestBuilder";
 // import { writeToLogFile } from "../config/logger";
-
 // -------------------------------------------------------------------------
-// Define the structure of the result returned by the batch send operation
-export interface BatchSendResult {
-  success: boolean;
-  batchId: string;
-  message?: string;
-  rowsCount: number;
-  successCount: number;
-  failureCount: number;
-  responseCount?: number;
-  error?: any;
-  duration?: number;
-  averageTimePerRecord?: string;
-  performanceMetrics?: {
-    dbFetchTime: string;
-    dbUpdateTime: string;
-    batchBuildTime: string;
-    requestTime: string;
-    totalDuration: string;
-  };
-}
-//-------------------------------------------------------------------------
+
 /**
  * Sends a batch of parent-child records to the Priority API.
  */

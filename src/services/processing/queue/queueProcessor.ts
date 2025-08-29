@@ -2,12 +2,19 @@ import axios from "axios";
 import http from "http";
 import https from "https";
 // import { config } from "../config/config";
-import { configService } from "../config/configService"; //DB
-import PerformanceMonitor from "../utils/performanceMonitor";
-import ProgressTracker from "../utils/progressTracker";
+import { configService } from "../../../config/configService"; //DB
+import PerformanceMonitor from "../../../utils/performanceMonitor";
+import ProgressTracker from "../../../utils/progressTracker";
 import { v4 as uuidv4 } from "uuid";
-import { formatAxiosError } from "../utils/errorHandler";
-import { recordBatchProcessing } from "./dataService";
+import { formatAxiosError } from "../../../utils/errorHandler";
+import { DatabaseService } from "../../database/databaseService";
+import { generateCleanError } from "../../../utils/errorUtils";
+import {
+  QueueItem,
+  QueueProcessorResult,
+  ItemProcessorFunction,
+  QueueItemResponse,
+} from "../../../types/jobTypes";
 
 const httpAgent = new http.Agent({
   keepAlive: true, // Enable connection pooling
@@ -22,52 +29,6 @@ const httpsAgent = new https.Agent({
   maxSockets: 1000,
   timeout: 240000,
 });
-
-// Interface for queue items
-export interface QueueItem {
-  row: any;
-  index: number;
-  queueId: string;
-  jobId: string;
-  batchId: string;
-  jobType: string;
-  tableName: string;
-  priorityScreenName?: string;
-  priorityIdField?: string;
-  childJobs?: any[];
-  childTableNames?: string[];
-}
-
-// Interface for queue processor results
-export interface QueueProcessorResult {
-  success: boolean;
-  totalProcessed: number;
-  successCount: number;
-  failureCount: number;
-  duration: number;
-}
-
-export type ItemProcessorFunction = (item: QueueItem) => Promise<{
-  success: boolean;
-  error?: any;
-  responseStats?: {
-    successCount: number;
-    failureCount: number;
-    priorityId?: string | null;
-    status?: number;
-    errorData?: any;
-  };
-}>;
-
-// Interface for queue response
-interface QueueItemResponse {
-  success: boolean;
-  status: number;
-  error?: string;
-  errorData?: any;
-  data?: any;
-  row: any;
-}
 
 /**
  * Processes a queue of items by sending them to Priority API individually
@@ -112,20 +73,6 @@ export class QueueProcessor {
     this.tableName = tableName;
     this.performanceMonitor = new PerformanceMonitor();
     this.performanceMonitor.startOperation();
-  }
-
-  /**
-   * Generates a clean error message by removing numbers and special characters
-   * while preserving Hebrew and English text
-   */
-  private generateCleanError(errorMessage: string | null): string | null {
-    if (!errorMessage) return null;
-
-    // Remove numbers and special characters while preserving Hebrew and English text
-    return errorMessage
-      .replace(/[0-9]/g, "") // Remove all numbers
-      .replace(/[^\p{L}\s]/gu, "") // Keep only letters (including Hebrew) and spaces
-      .trim();
   }
 
   public setUpdateBatchTable(update: boolean): void {
@@ -178,8 +125,8 @@ export class QueueProcessor {
     this.processing = true;
     this.errorCount503 = 0; // Reset error count for each new processing
     const systemConfig = await configService.getConfig();
-    this.rateLimit = parseInt(systemConfig.QUEUE_RATE_LIMIT || "1000", 10); // בסיס 10 - דצימלי
-    this.minDelay = parseInt(systemConfig.QUEUE_MIN_DELAY || "30", 10); // בסיס 10 - דצימלי
+    this.rateLimit = parseInt(systemConfig.QUEUE_RATE_LIMIT || "1000", 10); // 10 Decimal base
+    this.minDelay = parseInt(systemConfig.QUEUE_MIN_DELAY || "30", 10);
 
     // Store normal concurrency value
     const configConcurrency = parseInt(
@@ -222,7 +169,7 @@ export class QueueProcessor {
 
       // Record batch processing results
       if (this.updateBatchTable) {
-        await recordBatchProcessing(
+        await DatabaseService.recordBatchProcessing(
           this.jobType,
           batchId,
           this.jobId,
@@ -420,7 +367,7 @@ export class QueueProcessor {
             JobName: item.jobType,
             Status: "Failed",
             Error: cleanErrorMessage,
-            CleanError: this.generateCleanError(cleanErrorMessage),
+            CleanError: generateCleanError(cleanErrorMessage),
             JobId: item.jobId,
             priority_id: null,
             is_new: 1,
@@ -471,7 +418,7 @@ export class QueueProcessor {
         JobName: item.jobType,
         Status: "Failed",
         Error: errorMessage,
-        CleanError: this.generateCleanError(errorMessage),
+        CleanError: generateCleanError(errorMessage),
         JobId: item.jobId,
         priority_id: null,
         is_new: 1,

@@ -1,67 +1,26 @@
-import { DatabaseService } from "../services/databaseService";
-import { configService } from "../config/configService"; //DB
 import { v4 as uuidv4 } from "uuid";
-import { processBatches } from "../jobs/job";
-import ProgressTracker from "../utils/progressTracker";
-import { processWithQueues } from "../jobs/queueJob";
-// import { processParentChildBatches } from "../jobs/jobParentAndChilds";
-// import { processParentChildGridBatches } from "../jobs/parentChildsGridProcess";
-import { ErrorBufferService } from "../utils/errorBufferService";
-import { JobCancellationService } from "../utils/jobCancellationService";
-// import { EmailNotificationService } from "../utils/emailNotificationService";
-import { processParentChildWithQueues } from "./parentChildQueueJob";
-
-interface JobRequest {
-  recordCount: number;
-  startRow: number;
-  tableName: string;
-  priorityScreenName: string;
-  jobType: string;
-  processingType?: string;
-  priorityIdField: string;
-  priorityLinkedField?: string;
-  priorityJobTypeId?: number;
-  logErrors?: boolean;
-  updateBatchTable?: boolean;
-  processAllRecords?: boolean;
-  caseId?: string;
-}
-
-interface ChildJob {
-  ChildJobeId: number;
-  JobTypeName: string;
-  DBTableName: string;
-  ScreenName: string;
-  priority_id: string;
-  HasSiblings: boolean;
-}
-
-interface JobResult {
-  successCount?: number;
-  failureCount?: number;
-  success?: boolean;
-}
-
-type JobStatus =
-  | "Queued"
-  | "Running"
-  | "Completed"
-  | "Failed"
-  | "Cancelled"
-  | "Cancelling";
-
-const adjustTimeZone = (date: Date): Date => {
-  const offset = date.getTimezoneOffset() * 60000; // offset in milliseconds
-  return new Date(date.getTime() - offset);
-};
+import { DatabaseService } from "../../services/database/databaseService";
+import { configService } from "../../config/configService";
+import ProgressTracker from "../../utils/progressTracker";
+import { ErrorBufferService } from "../../utils/errorBufferService";
+import { JobCancellationService } from "../../utils/jobCancellationService";
+import {
+  JobStatus,
+  JobRequest,
+  ChildJob,
+  JobResult,
+} from "../../types/jobTypes";
+import { adjustTimeZone } from "../../utils/dateUtils";
+import { processWithQueues } from "../processors/queue/queueJob";
+import { processBatches } from "../processors/batch/batchJobProcessor";
+import { processParentChildWithQueues } from "../parentChild/parentChildQueueJob";
 
 class JobManager {
-  // private emailService: EmailNotificationService;
-
-  // constructor() {
-  //   this.emailService = EmailNotificationService.getInstance();
-  // }
-  //   ----------------------------
+  /**
+   * Creates a new job
+   * @param jobRequest The request object containing job details
+   * @returns The ID of the created job
+   */
   async createJob(jobRequest: JobRequest): Promise<string> {
     const jobId = uuidv4();
 
@@ -97,8 +56,15 @@ class JobManager {
 
     return jobId;
   }
-  //   ----------------------------
 
+  //-------------------------------------------------------------
+  /**
+   * Updates the status of an existing job
+   * @param jobId The ID of the job to update
+   * @param status The new status of the job
+   * @param totalSuccess The total number of successful records (optional)
+   * @param totalFailures The total number of failed records (optional)
+   */
   async updateJobStatus(
     jobId: string,
     status: JobStatus,
@@ -137,6 +103,7 @@ class JobManager {
     await DatabaseService.executeQuery(query, params);
   }
 
+  //-------------------------------------------------------------
   /**
    * Gets the structure of a table to determine which columns it contains
    * @param tableName - The name of the table to check
@@ -173,7 +140,8 @@ class JobManager {
       };
     }
   }
-  //   ----------------------------
+
+  //-------------------------------------------------------------
   /**
    * Starts the job processing by updating the job status and executing the appropriate processing method.
    * @param jobId - The unique identifier for the job.
@@ -555,7 +523,16 @@ class JobManager {
     }
   }
 
-  // Helper function to perform standard processing (extracted for clarity)
+  //-------------------------------------------------------------
+  /**
+   *
+   * @param jobId
+   * @param jobRequest
+   * @param processingType
+   * @param logErrors
+   * @param updateBatchTable
+   * @returns
+   */
   private async executeStandardProcessing(
     jobId: string,
     jobRequest: JobRequest,
@@ -629,7 +606,12 @@ class JobManager {
     return results;
   }
 
-  //   ----------------------------
+  //-------------------------------------------------------------
+  /**
+   * Starts multiple jobs concurrently
+   * @param jobRequests An array of job request objects
+   * @returns An array of results for each job
+   */
   async startMultipleJobs(jobRequests: JobRequest[]): Promise<any[]> {
     const results = [];
     for (const request of jobRequests) {
@@ -639,8 +621,12 @@ class JobManager {
     }
     return results;
   }
-  //   ----------------------------
-  // Get default processing type from system configuration
+
+  //-------------------------------------------------------------
+  /**
+   * Retrieves the default processing type from system configuration
+   * @returns The default processing type as a string
+   */
   private async getDefaultProcessingType(): Promise<string> {
     try {
       const result = await DatabaseService.executeQuery(

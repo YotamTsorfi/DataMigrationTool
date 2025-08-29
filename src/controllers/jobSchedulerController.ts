@@ -5,34 +5,12 @@
  */
 import { Request, Response } from "express";
 import { v4 as uuidv4 } from "uuid";
-import { DatabaseService } from "../services/databaseService";
-import { JobManager } from "../jobs/jobManager";
+import { DatabaseService } from "../services/database/databaseService";
+import { JobManager } from "../jobs/manager/jobManager";
 import { JobCancellationService } from "../utils/jobCancellationService";
 import { configService } from "../config/configService";
-
-// Define types for database query results
-interface JobType {
-  JobTypeId: number;
-  JobTypeName: string;
-  DBTableName: string;
-  ScreenName: string;
-  priority_id: string | null;
-  linkedField: string | null;
-  RunOrder: number;
-}
-
-interface CountResult {
-  totalCount: number;
-}
-
-interface SchedulerState {
-  SchedulerJobId: string;
-  CurrentJobId: number | null;
-  CurrentJobIndex: number | null;
-  Status: "running" | "paused" | "completed" | "failed";
-  LastUpdated: Date;
-  CaseId?: string;
-}
+import { JobType } from "../types/jobTypes";
+import { CountResult, SchedulerState } from "../types/jobTypes";
 
 // Job queue and state management
 let isSchedulerRunning = false;

@@ -1,30 +1,16 @@
-import { DatabaseService } from "../services/databaseService";
-import { streamParentChildData } from "../services/parentChildDataFetcher";
-import { sendParentChildBatch } from "../services/priorityParentChildBatchSender";
-import ProgressTracker from "../utils/progressTracker";
-import PerformanceMonitor from "../utils/performanceMonitor";
-import { performBulkUpdateWithService } from "../services/dataService";
-import { ErrorBufferService } from "../utils/errorBufferService";
-import { configService } from "../config/configService";
+import { DatabaseService } from "../../services/database/databaseService";
+import { streamParentChildData } from "../../services/priority/batch/dataPreparer";
+import { sendParentChildBatch } from "../../services/priority/batch/batchSender";
+import ProgressTracker from "../../utils/progressTracker";
+import PerformanceMonitor from "../../utils/performanceMonitor";
+import { ErrorBufferService } from "../../utils/errorBufferService";
+import { configService } from "../../config/configService";
 import pLimit from "p-limit";
-import { JobCancellationService } from "../utils/jobCancellationService";
+import { JobCancellationService } from "../../utils/jobCancellationService";
+import { ChildJob, BatchResult } from "../../types/jobTypes";
+import { formatTime } from "../../utils/dateUtils";
 // import { writeToLogFile } from "../config/logger";
 
-export interface ChildJob {
-  ChildJobeId: number;
-  JobTypeName: string;
-  DBTableName: string;
-  ScreenName: string;
-  priority_id: string;
-  HasSiblings: boolean;
-}
-
-interface BatchResult {
-  success: boolean;
-  successCount?: number;
-  failureCount?: number;
-  error?: any;
-}
 //---------------------------------------------------------------------------
 /**
  * Process parent records with their related child records in batches
@@ -433,11 +419,7 @@ async function processParentChildBatches(
 }
 
 //---------------------------------------------------------------------------
-function formatTime(minutes: number): string {
-  const hrs = Math.floor(minutes / 60);
-  const mins = Math.floor(minutes % 60);
-  return `${hrs}h ${mins}m`;
-}
+
 //---------------------------------------------------------------------------
 async function forceErrorRecordUpdates(
   records: any[],
@@ -478,7 +460,7 @@ async function forceErrorRecordUpdates(
 
     if (tableName && updateRows.length > 0) {
       // Use the dataService functions instead of direct DatabaseService calls
-      await performBulkUpdateWithService(
+      await DatabaseService.performBulkUpdateWithService(
         tableName,
         updateRows,
         undefined, // No performance monitor
@@ -540,7 +522,10 @@ async function forceErrorRecordUpdates(
         childUpdatesByTable
       ) as [string, any[]][]) {
         if (updates.length > 0) {
-          await performBulkUpdateWithService(tableName, updates);
+          await DatabaseService.performBulkUpdateWithService(
+            tableName,
+            updates
+          );
           console.log(
             `Updated ${updates.length} child records in ${tableName}`
           );

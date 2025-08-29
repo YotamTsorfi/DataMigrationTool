@@ -1,17 +1,8 @@
-import { DatabaseService } from "../services/databaseService";
-import { ChildJob } from "../jobs/jobParentAndChilds";
+import { DatabaseService } from "../../database/databaseService";
+import { ChildJob, ParentRecord, ChildRecord } from "../../../types/jobTypes";
 
 //import { Readable, Transform } from 'stream'; // Might be needed in order to use streams in Node.js
-interface ParentRecord {
-  RowId: number;
-  Data: string;
-  [key: string]: any;
-}
-interface ChildRecord {
-  RowId: number;
-  Data: string;
-  [key: string]: any;
-}
+
 //---------------------------------------------------------------------------
 /**
  * Streams parent records from the specified table, enriching each with its associated child records
@@ -229,7 +220,7 @@ async function fetchAllChildData(
 }
 //---------------------------------------------------------------------------
 /**
- * שליפת רשומות אב העומדות בתנאים הנדרשים
+ * Fetches eligible parent records from the specified table with pagination.
  */
 async function fetchEligibleParentRecords(
   tableName: string,
@@ -348,7 +339,7 @@ async function fetchChildRecordsWithTempTable(
 }
 //---------------------------------------------------------------------------
 /**
- * פענוח נתוני JSON בצורה בטוחה
+ * Parses JSON data from a string.
  */
 function parseJsonData(jsonString: string): any {
   try {

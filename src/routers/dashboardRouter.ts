@@ -1,6 +1,6 @@
 import express, { Request, Response, Router } from "express";
 import { priorityAuthMiddleware } from "../middleware/priorityAuth";
-import { DatabaseService } from "../services/databaseService";
+import { DatabaseService } from "../services/database/databaseService";
 import moment from "moment-timezone";
 
 const router: Router = express.Router();

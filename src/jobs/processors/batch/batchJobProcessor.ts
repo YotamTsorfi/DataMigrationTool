@@ -1,55 +1,31 @@
 // job.ts - Main orchestration file
 
-import { config } from "../config/config";
-import { configService } from "../config/configService";
-import ProgressTracker from "../utils/progressTracker";
-import PerformanceMonitor from "../utils/performanceMonitor";
+import { config } from "../../../config/config";
+import { configService } from "../../../config/configService";
+import ProgressTracker from "../../../utils/progressTracker";
 import pLimit from "p-limit";
 import { v4 as uuidv4 } from "uuid";
-import {
-  fetchDataChunk,
-  performBulkUpdateWithService,
-  recordBatchProcessing,
-} from "../services/dataService";
+import { ErrorBufferService } from "../../../utils/errorBufferService";
+import { JobCancellationService } from "../../../utils/jobCancellationService";
+import { BatchCreateRowsResult } from "../../../types/jobTypes";
+import { adjustTimeZone } from "../../../utils/dateUtils";
 import {
   buildBatchRequestBody,
   createBatchHeaders,
   generateBoundary,
-} from "../services/requestBuilder";
+} from "../../../services/processing/batch/requestBuilder";
 import {
   sendBatchRequest,
   processApiResponse,
-  measureRequestPerformance,
+} from "../../../services/processing/batch/requestSender";
+import {
+  PerformanceMonitor,
   measureResponsePerformance,
-} from "../services/requestSender";
-import { ErrorBufferService } from "../utils/errorBufferService";
-import { JobCancellationService } from "../utils/jobCancellationService";
-
-interface BatchCreateRowsResult {
-  success: boolean;
-  message?: string;
-  rowsCount?: number;
-  responseStats?: any;
-  requestSize?: number;
-  responseSize?: number;
-  duration?: number;
-  averageTimePerRecord?: string;
-  error?: string;
-  details?: string;
-  performanceMetrics?: {
-    dbFetchTime?: string;
-    dbUpdateTime?: string;
-    batchBuildTime?: string;
-    requestTime?: string;
-    totalDuration?: string;
-  };
-  [key: string]: any; // Add index signature to allow arbitrary string keys
-}
-
-const adjustTimeZone = (date: Date): Date => {
-  const offset = date.getTimezoneOffset() * 60000; // offset in milliseconds
-  return new Date(date.getTime() - offset);
-};
+  measureRequestPerformance,
+} from "../../../utils/performanceMonitor";
+//import { fetchDataChunk } from "../../../services/dataService";
+import { fetchDataChunk } from "../../../services/database/dataService";
+import { DatabaseService } from "../../../services/database/databaseService";
 
 //--------------------------------------------------------------------------------
 /**
@@ -152,7 +128,7 @@ async function processBatch(
     // Perform bulk operations with the performance monitor
     if (updateRows.length > 0) {
       try {
-        const result = await performBulkUpdateWithService(
+        const result = await DatabaseService.performBulkUpdateWithService(
           tableName,
           updateRows,
           perfMonitor,
@@ -231,7 +207,7 @@ async function processBatch(
 
     // Record batch processing results with the appropriate status
     if (updateBatchTable) {
-      await recordBatchProcessing(
+      await DatabaseService.recordBatchProcessing(
         jobType,
         batchId,
         jobId,

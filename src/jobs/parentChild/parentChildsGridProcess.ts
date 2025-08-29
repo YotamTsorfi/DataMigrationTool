@@ -1,40 +1,18 @@
 import { v4 as uuidv4 } from "uuid";
-import { fetchParentChildChunk } from "../services/parentChildChunkFetcher";
-import { sendParentChildBatch } from "../services/priorityParentChildBatchSender";
-import { QueueProcessor, QueueItem } from "../services/queueProcessor";
-import { performBulkUpdateWithService } from "../services/dataService";
-import { configService } from "../config/configService";
-import { ChildJob } from "./jobParentAndChilds";
-
-import PerformanceMonitor from "../utils/performanceMonitor";
-import ProgressTracker from "../utils/progressTracker";
-import { ErrorBufferService } from "../utils/errorBufferService";
-import { JobCancellationService } from "../utils/jobCancellationService";
+import { ChildJob } from "../../types/jobTypes";
+import { fetchParentChildChunk } from "../../services/priority/queue/chunkFetcher";
+import { sendParentChildBatch } from "../../services/priority/batch/batchSender";
+import { QueueProcessor } from "../../services/processing/queue/queueProcessor";
+import { QueueItem, BatchResult } from "../../types/jobTypes";
+import { DatabaseService } from "../../services/database/databaseService";
+import { configService } from "../../config/configService";
+import PerformanceMonitor from "../../utils/performanceMonitor";
+import ProgressTracker from "../../utils/progressTracker";
+import { ErrorBufferService } from "../../utils/errorBufferService";
+import { JobCancellationService } from "../../utils/jobCancellationService";
+import { generateCleanError } from "../../utils/errorUtils";
 // import pLimit from "p-limit";
 
-/**
- * Interface for batch processing results
- */
-interface BatchResult {
-  success: boolean;
-  successCount?: number;
-  failureCount?: number;
-  error?: any;
-  rowsCount?: number;
-  duration?: number;
-  totalProcessed?: number;
-}
-/**
- * Generates a clean error message by removing numbers and special characters,
- * while preserving Hebrew and English letters and spaces.
- */
-function generateCleanError(errorMessage: string | null): string | null {
-  if (!errorMessage) return null;
-  return errorMessage
-    .replace(/[0-9]/g, "") // Remove all numbers
-    .replace(/[^\p{L}\s]/gu, "") // Keep only letters (including Hebrew/English) and spaces
-    .trim();
-}
 /**
  * Process parent-child records using grid-based processing
  * Horizontal parallelism (multiple queues) with vertical processing (sequential within queue)
@@ -436,7 +414,7 @@ async function forceErrorRecordUpdate(
     };
 
     // Update database with error status
-    await performBulkUpdateWithService(tableName, [updateRow]);
+    await DatabaseService.performBulkUpdateWithService(tableName, [updateRow]);
 
     // Add error to buffer
     ErrorBufferService.getInstance().addErrors([errorRow]);
@@ -480,7 +458,10 @@ async function forceErrorRecordUpdate(
       // Update each child table
       for (const [tableName, updates] of Object.entries(childUpdatesByTable)) {
         if (updates.length > 0) {
-          await performBulkUpdateWithService(tableName, updates);
+          await DatabaseService.performBulkUpdateWithService(
+            tableName,
+            updates
+          );
         }
       }
     }

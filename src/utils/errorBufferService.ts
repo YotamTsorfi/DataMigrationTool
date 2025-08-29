@@ -1,4 +1,4 @@
-import { performBulkErrorInsertWithService } from "../services/dataService";
+import { DatabaseService } from "../services/database/databaseService";
 import PerformanceMonitor from "./performanceMonitor";
 
 export class ErrorBufferService {
@@ -103,26 +103,26 @@ export class ErrorBufferService {
 
     try {
       this.perfMonitor.startOperation();
-      await performBulkErrorInsertWithService(
+      await DatabaseService.performBulkErrorInsertWithService(
         errorsToProcess,
         this.perfMonitor,
-        5000, // Increased batch size from 500 to 1000
+        5000 // Increased batch size from 500 to 1000
       );
       this.perfMonitor.endOperation();
 
       // Only log details for larger batches, use debug for small ones
       if (errorsToProcess.length > 50) {
         console.log(
-          `Flushed ${errorsToProcess.length} buffered errors to database`,
+          `Flushed ${errorsToProcess.length} buffered errors to database`
         );
       } else {
         console.debug(
-          `Flushed ${errorsToProcess.length} buffered errors to database`,
+          `Flushed ${errorsToProcess.length} buffered errors to database`
         );
       }
     } catch (error) {
       console.error(
-        `Error flushing buffered errors: ${error instanceof Error ? error.message : error}`,
+        `Error flushing buffered errors: ${error instanceof Error ? error.message : error}`
       );
 
       // If flush fails, try to reinsert the errors back into the buffer
@@ -165,7 +165,7 @@ export class ErrorBufferService {
       try {
         await tempProcessor.flush();
         console.log(
-          `Flushed ${batchToProcess.length} errors, ${this.errorBuffer.length} remaining`,
+          `Flushed ${batchToProcess.length} errors, ${this.errorBuffer.length} remaining`
         );
 
         // Small delay to let database recover
