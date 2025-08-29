@@ -58,12 +58,19 @@ pipeline {
                 '''
                 
                 // ניקוי תיקיות היעד לפני העתקה, תוך שמירה על תיקיות הורים
+                // Handling robocopy exit codes (0-7 are success states)
                 bat '''
                     echo Cleaning target directories before deployment...
                     
                     if exist C:\\production\\carmelton-data-migration\\dist (
                         echo Cleaning dist directory...
                         robocopy /MIR /NP /NFL /NDL /NJH /NJS empty_dir C:\\production\\carmelton-data-migration\\dist
+                        if %ERRORLEVEL% GEQ 8 (
+                            echo "Robocopy failed with error code %ERRORLEVEL%"
+                            exit /b 1
+                        ) else (
+                            echo "Robocopy completed successfully with code %ERRORLEVEL%"
+                        )
                     ) else (
                         mkdir C:\\production\\carmelton-data-migration\\dist
                     )
@@ -71,6 +78,12 @@ pipeline {
                     if exist C:\\production\\carmelton-data-migration\\client\\build (
                         echo Cleaning client build directory...
                         robocopy /MIR /NP /NFL /NDL /NJH /NJS empty_dir C:\\production\\carmelton-data-migration\\client\\build
+                        if %ERRORLEVEL% GEQ 8 (
+                            echo "Robocopy failed with error code %ERRORLEVEL%"
+                            exit /b 1
+                        ) else (
+                            echo "Robocopy completed successfully with code %ERRORLEVEL%"
+                        )
                     ) else (
                         if not exist C:\\production\\carmelton-data-migration\\client mkdir C:\\production\\carmelton-data-migration\\client
                         mkdir C:\\production\\carmelton-data-migration\\client\\build
@@ -82,9 +95,15 @@ pipeline {
                     if exist dist (
                         echo Deploying server files...
                         robocopy dist C:\\production\\carmelton-data-migration\\dist /MIR /NP /NFL /NDL /NJH /NJS
+                        if %ERRORLEVEL% GEQ 8 (
+                            echo "Robocopy failed with error code %ERRORLEVEL%"
+                            exit /b 1
+                        ) else (
+                            echo "Robocopy completed successfully with code %ERRORLEVEL%"
+                        )
                     ) else (
                         echo "Warning: dist directory does not exist"
-                        exit 1
+                        exit /b 1
                     )
                 '''
                 
@@ -101,9 +120,15 @@ pipeline {
                     if exist client\\build (
                         echo Deploying client files...
                         robocopy client\\build C:\\production\\carmelton-data-migration\\client\\build /MIR /XF favicon.ico /NP /NFL /NDL /NJH /NJS
+                        if %ERRORLEVEL% GEQ 8 (
+                            echo "Robocopy failed with error code %ERRORLEVEL%"
+                            exit /b 1
+                        ) else (
+                            echo "Robocopy completed successfully with code %ERRORLEVEL%"
+                        )
                     ) else (
                         echo "Warning: client\\build directory does not exist"
-                        exit 1
+                        exit /b 1
                     )
                 '''
                 
