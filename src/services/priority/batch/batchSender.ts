@@ -127,7 +127,6 @@ export async function sendParentChildBatch(
       jobType,
       jobId,
       priorityIdField,
-      childTableNames,
       childJobs,
       logErrors,
       updateBatchTable
