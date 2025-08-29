@@ -1,3 +1,11 @@
+/**
+ * Jenkins deployment pipeline for Carmelton Data Migration Tool
+ * 
+ * This pipeline handles the build, deployment, and service management
+ * for both server and client components. It includes explicit PM2 service
+ * restart after deployment to ensure changes take effect properly.
+ */
+
 pipeline {
     agent any
     stages {
@@ -25,7 +33,6 @@ pipeline {
         stage('Stop Production Service') {
             steps {
                 // עצירת שירות PM2 עם טיפול בשגיאות
-                // החשוב: השימוש ב-returnStatus: true כדי למנוע מהשלב להיכשל כאשר pm2 מחזיר קוד יציאה שאינו 0
                 bat(script: 'cd C:\\production\\carmelton-data-migration && npx pm2 stop all || echo "No processes running"', returnStatus: true)
             }
         }
@@ -56,6 +63,7 @@ pipeline {
                 
                 bat 'if exist package.json copy package.json C:\\production\\carmelton-data-migration\\package.json'
                 bat 'if exist package-lock.json copy package-lock.json C:\\production\\carmelton-data-migration\\package-lock.json'
+                bat 'if exist ecosystem.config.js copy ecosystem.config.js C:\\production\\carmelton-data-migration\\ecosystem.config.js'
                 bat 'if exist C:\\carmelton_typescript\\.env.production copy C:\\carmelton_typescript\\.env.production C:\\production\\carmelton-data-migration\\.env.production'
                 
                 // יצירת קובץ עם רשימת קבצים להחרגה לפני העתקה
@@ -90,14 +98,28 @@ pipeline {
         }
         stage('Start Production Service') {
             steps {
-                // הפעלה מחדש של השירות
+                // הפעלה של השירות
                 bat(script: 'cd C:\\production\\carmelton-data-migration && npx pm2 start ecosystem.config.js || echo "Failed to start services"', returnStatus: true)
+            }
+        }
+        stage('Restart PM2 Service') {
+            steps {
+                // וידוא שהשירות מופעל מחדש לאחר הפריסה
+                bat '''
+                    cd C:\\production\\carmelton-data-migration
+                    npx pm2 restart all || echo "Failed to restart services"
+                '''
             }
         }
     }
     post {
         success {
             echo 'Deployment completed successfully'
+            // וידוא נוסף שהשירות מופעל כראוי בסיום מוצלח
+            bat '''
+                cd C:\\production\\carmelton-data-migration
+                npx pm2 list
+            '''
         }
         failure {
             // במקרה של כישלון, ננסה להפעיל את השירות בכל זאת
