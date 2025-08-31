@@ -61,13 +61,6 @@ export async function processParentChildWithQueues(
     config.VERTICAL_BATCH_SIZE || "1000",
     10
   );
-
-  // Track progress updates from all queues
-  const progressUpdates = new Map<
-    string,
-    { success: number; failure: number }
-  >();
-
   // Updated chunk size to match processWithQueues
   const CHUNK_SIZE = 50000;
 
@@ -81,6 +74,7 @@ export async function processParentChildWithQueues(
   const results: BatchResult[] = [];
   let totalSuccessCount = 0;
   let totalFailureCount = 0;
+  let totalProcessedRecords = 0;
 
   const childTableNames = childJobs.map((job) => job.DBTableName);
 
@@ -212,6 +206,12 @@ export async function processParentChildWithQueues(
           );
         }
 
+        // Track progress updates from all queues
+        const progressUpdates = new Map<
+          string,
+          { success: number; failure: number }
+        >();
+
         // Process each queue in parallel - each queue processes its vertical batch in order
         const queuePromises = horizontalQueues
           .filter((q) => q.hasItems()) // Just process queues with items
@@ -244,7 +244,7 @@ export async function processParentChildWithQueues(
               // Update overall progress tracker
               ProgressTracker.updateProgress(
                 jobId,
-                processedCount + currentSuccess + currentFailure,
+                totalProcessedRecords + currentSuccess + currentFailure,
                 totalSuccessCount + currentSuccess,
                 totalFailureCount + currentFailure
               );
@@ -330,10 +330,12 @@ export async function processParentChildWithQueues(
           totalFailureCount += result.failureCount;
         }
 
+        progressUpdates.clear();
+
         // Update progress tracker with the total processed count
         ProgressTracker.updateProgress(
           jobId,
-          processedCount,
+          totalProcessedRecords + totalSuccessCount + totalFailureCount,
           totalSuccessCount,
           totalFailureCount
         );
@@ -344,6 +346,7 @@ export async function processParentChildWithQueues(
         lastRowId = Math.max(...rows.map((row) => row.RowId));
       }
       processedCount += rows.length;
+      totalProcessedRecords = processedCount;
 
       // Ensure we're flushing errors regularly
       if (totalFailureCount > 0 && totalFailureCount % 500 === 0) {
