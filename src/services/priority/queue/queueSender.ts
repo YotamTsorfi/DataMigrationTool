@@ -170,6 +170,8 @@ export async function sendParentChildQueue(
 
     // Construct the full URL for the request
     const url = `${baseUrl}${company}/${priorityScreenName}`;
+    // Trim any whitespace that might be in the company name
+    company = company.trim();
 
     // Create headers with authentication
 
