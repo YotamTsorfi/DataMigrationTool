@@ -114,7 +114,8 @@ export function extractChildPriorityId(
   childRecord: any,
   childIndex?: number,
   originalRequestPayload?: any,
-  logMissingSubformToFile?: boolean
+  logMissingSubformToFile?: boolean,
+  loggedMissingSubforms?: Set<string>
 ): string | null {
   // Get the field name from the child job configuration
   const idFieldName = childJob.priority_id;
@@ -238,7 +239,11 @@ export function extractChildPriorityId(
   } else {
     //console.log(`Subform key ${subformKey} not found in response`);
     // Log the missing subform and full response body to a file
-    if (logMissingSubformToFile) {
+    // Only log if this subform hasn't been logged already
+    if (
+      logMissingSubformToFile &&
+      (!loggedMissingSubforms || !loggedMissingSubforms.has(subformKey))
+    ) {
       logMissingSubformResponse(
         subformKey,
         responseBody,
@@ -246,6 +251,11 @@ export function extractChildPriorityId(
         childRecord.RowId,
         originalRequestPayload
       );
+
+      // Add to tracking set if it exists
+      if (loggedMissingSubforms) {
+        loggedMissingSubforms.add(subformKey);
+      }
     }
   }
 

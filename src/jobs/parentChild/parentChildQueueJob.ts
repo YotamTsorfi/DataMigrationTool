@@ -15,8 +15,8 @@ import {
   generateCleanError,
   truncateErrorForDatabase,
 } from "../../utils/errorUtils";
-import { fetchParentChildChunk } from "../../services/priority/queue/chunkFetcher";
 import { QueueProcessor } from "../../services/processing/queue/queueProcessor";
+import { fetchParentChildChunk } from "../../services/priority/queue/chunkFetcher";
 import { sendParentChildQueue } from "../../services/priority/queue/queueSender";
 import { DatabaseService } from "../../services/database/databaseService";
 

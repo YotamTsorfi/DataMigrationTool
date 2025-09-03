@@ -485,6 +485,9 @@ function processApiResponse(
     const isSuccess = apiResponse.status >= 200 && apiResponse.status < 300;
     const statusCode = apiResponse.status; // Extract HTTP status code
 
+    // Create a Set to track which subforms have already been logged
+    const loggedMissingSubforms = new Set<string>();
+
     if (isSuccess) {
       successCount++;
 
@@ -566,6 +569,9 @@ function processApiResponse(
                     record.RowId,
                     originalRequestPayload
                   );
+
+                  // Track that we've logged this subform
+                  loggedMissingSubforms.add(subformKey);
                 }
               });
             } catch (e) {
@@ -634,7 +640,8 @@ function processApiResponse(
                     childRecord,
                     childIndex,
                     originalRequestPayload,
-                    logMissingSubformToFile
+                    logMissingSubformToFile,
+                    loggedMissingSubforms
                   );
 
                   if (priorityId !== null) {
