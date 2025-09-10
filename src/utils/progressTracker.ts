@@ -28,6 +28,8 @@ class ProgressTracker {
 
   /**
    * Update job progress
+   *  Note: processedRecords should always be the total number of records processed so far,
+   *  including both successful and failed records. This counter should never decrease during processing.
    */
   static updateProgress(
     jobId: string,
@@ -41,6 +43,22 @@ class ProgressTracker {
         `Attempted to update progress for non-existent job: ${jobId}`
       );
       return;
+    }
+
+    // Check for regression in processedRecords
+    if (processedRecords < progress.processedRecords) {
+      console.warn(
+        `Progress regression detected for job ${jobId}: processedRecords decreased from ${progress.processedRecords} to ${processedRecords}`
+      );
+      // Ensure processedRecords never goes backwards
+      processedRecords = Math.max(processedRecords, progress.processedRecords);
+    }
+
+    // Ensure consistency between processedRecords and success+failure counts
+    if (processedRecords !== successCount + failureCount) {
+      console.warn(
+        `Progress inconsistency detected for job ${jobId}: processedRecords (${processedRecords}) != successCount (${successCount}) + failureCount (${failureCount})`
+      );
     }
 
     progress.processedRecords = processedRecords;
