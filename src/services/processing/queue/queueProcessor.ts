@@ -81,6 +81,38 @@ export class QueueProcessor {
   private itemProcessor: ItemProcessorFunction | null = null;
 
   /**
+   * Sets the rate limit for this queue
+   * @param limit Maximum number of requests per minute
+   */
+  public setRateLimit(limit: number): void {
+    this.rateLimit = limit;
+    console.log(
+      `Queue ${this.queueId}: Rate limit set to ${limit} requests/minute`
+    );
+  }
+
+  /**
+   * Sets the minimum delay between requests
+   * @param delay Minimum delay in milliseconds
+   */
+  public setMinDelay(delay: number): void {
+    this.minDelay = delay;
+    console.log(`Queue ${this.queueId}: Minimum delay set to ${delay}ms`);
+  }
+
+  /**
+   * Sets the concurrency limit for this queue
+   * @param limit Maximum number of concurrent items
+   */
+  public setConcurrency(limit: number): void {
+    this.concurrencyLimit = limit;
+    this.normalConcurrency = limit;
+    console.log(
+      `Queue ${this.queueId}: Concurrency limit set to ${limit} items`
+    );
+  }
+
+  /**
    * Set custom item processor function
    */
   public setItemProcessor(processor: ItemProcessorFunction): void {
@@ -95,12 +127,6 @@ export class QueueProcessor {
   }
   public addItem(item: QueueItem): void {
     this.queue.push(item);
-  }
-
-  // Set custom concurrency for this queue
-
-  public setConcurrency(limit: number): void {
-    this.concurrencyLimit = limit;
   }
 
   // Get the number of items in the queue

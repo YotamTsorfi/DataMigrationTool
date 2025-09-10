@@ -289,9 +289,9 @@ async function processBatches(
   // Configure error buffer service
   const errorBuffer = ErrorBufferService.getInstance();
   errorBuffer.configure({
-    flushSize: 1000,
-    minFlushSize: 200,
-    flushInterval: 30000,
+    flushSize: 2000,
+    minFlushSize: 500,
+    flushInterval: 120000,
   });
 
   // Initialize progress tracking for this job
@@ -304,7 +304,7 @@ async function processBatches(
   const results = [];
 
   // Process in chunks
-  const CHUNK_SIZE = 3000;
+  const CHUNK_SIZE = 100000;
   let processedCount = 0;
   let lastRowId = startRow - 1;
 

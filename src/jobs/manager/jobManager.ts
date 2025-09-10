@@ -73,7 +73,8 @@ class JobManager {
     errorMessage?: string
   ): Promise<void> {
     // Check if the jobId is valid
-    const isCompleted = status === "Completed" || status === "Failed";
+    const isCompleted =
+      status === "Completed" || status === "Failed" || status === "Cancelled";
 
     let query = `
     UPDATE PriorityJobsHistory 

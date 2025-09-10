@@ -51,9 +51,9 @@ export async function processParentChildGridBatches(
   // Configure error buffer service for efficient error handling
   const errorBuffer = ErrorBufferService.getInstance();
   errorBuffer.configure({
-    flushSize: 1000,
-    minFlushSize: 200,
-    flushInterval: 30000,
+    flushSize: 2000,
+    minFlushSize: 500,
+    flushInterval: 120000,
   });
   errorBuffer.setLoggingEnabled(logErrors);
 
@@ -63,7 +63,7 @@ export async function processParentChildGridBatches(
     10
   );
   const VERTICAL_BATCH_SIZE = parseInt(config.VERTICAL_BATCH_SIZE || "100", 10);
-  const CHUNK_SIZE = 2000; // Number of rows to fetch in each database call
+  const CHUNK_SIZE = 100000; // Number of rows to fetch in each database call
 
   // Initialize progress tracking
   ProgressTracker.initJob(jobId, totalRecords, jobType);
