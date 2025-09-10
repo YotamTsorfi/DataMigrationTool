@@ -84,7 +84,12 @@ class ConfigurationService {
     return ConfigurationService.instance;
   }
 
-  public async getConfig(): Promise<SystemConfig> {
+  /**
+   * Gets configuration with option to force refresh from database
+   * @param forceRefresh Force a refresh of configuration from database
+   * @returns The current system configuration
+   */
+  public async getConfig(forceRefresh: boolean = false): Promise<SystemConfig> {
     // If not initialized yet, wait for initialization or use default values
     if (!this.isInitialized) {
       console.log("Configuration not yet initialized, using defaults");
@@ -92,15 +97,22 @@ class ConfigurationService {
     }
 
     const now = new Date();
-    // Still keep the cache expiry check as a fallback
-    if (now.getTime() - this.lastLoaded.getTime() > this.cacheExpiryMs) {
-      await this.loadConfigFromDb();
+    // Check if we need to refresh based on cache expiry or force flag
+    if (
+      forceRefresh ||
+      now.getTime() - this.lastLoaded.getTime() > this.cacheExpiryMs
+    ) {
+      await this.loadConfigFromDb(forceRefresh);
       this.lastLoaded = now;
     }
     return this.config;
   }
 
-  public async loadConfigFromDb(): Promise<void> {
+  /**
+   * Loads configuration from database, bypassing cache if needed
+   * @param forceRefresh Force refresh from database regardless of cache state
+   */
+  public async loadConfigFromDb(forceRefresh: boolean = false): Promise<void> {
     try {
       // Verify DatabaseService exists and has executeQuery method
       if (
@@ -111,8 +123,8 @@ class ConfigurationService {
       }
 
       const result = (await DatabaseService.executeQuery(`
-        SELECT ConfigKey, ConfigValue FROM PrioritySystemConfig
-      `)) as { ConfigKey: string; ConfigValue: string }[];
+      SELECT ConfigKey, ConfigValue FROM PrioritySystemConfig
+    `)) as { ConfigKey: string; ConfigValue: string }[];
 
       if (result && result.length > 0) {
         const newConfig: SystemConfig = { ...this.config };
@@ -127,9 +139,6 @@ class ConfigurationService {
           if (row.ConfigKey.startsWith("WHERE_CLAUSE_")) {
             const jobType = row.ConfigKey.substring("WHERE_CLAUSE_".length);
             newConfig.WHERE_CLAUSES[jobType] = row.ConfigValue;
-            // console.log(
-            //   `Loaded WHERE clause for job type ${jobType}: ${row.ConfigValue}`
-            // );
           } else {
             let value: any = row.ConfigValue;
 
@@ -146,17 +155,16 @@ class ConfigurationService {
           }
         });
 
-        // Log the loaded WHERE clauses for debugging
-        // console.log(
-        //   "Loaded WHERE_CLAUSES:",
-        //   JSON.stringify(newConfig.WHERE_CLAUSES, null, 2)
-        // );
-
         this.config = newConfig;
+
+        // If forcing refresh, update the last loaded timestamp
+        if (forceRefresh) {
+          this.lastLoaded = new Date();
+        }
       }
     } catch (error) {
       console.error("Error loading configuration from database:", error);
-      throw error; // Re-throw so the caller knows something went wrong
+      throw error;
     }
   }
 

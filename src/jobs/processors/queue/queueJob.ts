@@ -36,9 +36,9 @@ export async function processWithQueues(
   // Initialize ErrorBufferService at the beginning of the function
   const errorBuffer = ErrorBufferService.getInstance();
   errorBuffer.configure({
-    flushSize: 1000, // Configure a larger flush size
-    minFlushSize: 200, // Minimum size before flushing
-    flushInterval: 30000, // 30 seconds
+    flushSize: 2000, // Configure a larger flush size
+    minFlushSize: 500, // Minimum size before flushing
+    flushInterval: 120000, // 2 minutes
   });
 
   // Set horizontal batch size from configuration or use default

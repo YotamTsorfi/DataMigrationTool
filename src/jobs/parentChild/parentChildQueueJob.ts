@@ -45,24 +45,91 @@ export async function processParentChildWithQueues(
   // Initialize error buffer service
   const errorBuffer = ErrorBufferService.getInstance();
   errorBuffer.configure({
-    flushSize: 1000,
-    minFlushSize: 200,
-    flushInterval: 60000,
+    flushSize: 2000,
+    minFlushSize: 500,
+    flushInterval: 120000,
   });
   errorBuffer.setLoggingEnabled(logErrors);
 
-  // Set horizontal and vertical batch sizes from configuration or use defaults
-  const HORIZONTAL_BATCH_SIZE = parseInt(
-    config.HORIZONTAL_BATCH_SIZE || "40", // Changed to match processWithQueues default
+  // Initialize configuration tracking variables
+  let lastConfigCheck = Date.now();
+  const CONFIG_CHECK_INTERVAL = 60000; // Check for config updates every minute
+
+  // Initial configuration
+  let HORIZONTAL_BATCH_SIZE = parseInt(
+    config.HORIZONTAL_BATCH_SIZE || "40",
     10
   );
-  // Add VERTICAL_BATCH_SIZE same as in processWithQueues
-  const VERTICAL_BATCH_SIZE = parseInt(
-    config.VERTICAL_BATCH_SIZE || "1000",
+  let VERTICAL_BATCH_SIZE = parseInt(config.VERTICAL_BATCH_SIZE || "1000", 10);
+  let QUEUE_RATE_LIMIT = parseInt(config.QUEUE_RATE_LIMIT || "1000", 10);
+  let QUEUE_MIN_DELAY = parseInt(config.QUEUE_MIN_DELAY || "30", 10);
+  let QUEUE_CONCURRENT_ITEMS = parseInt(
+    config.QUEUE_CONCURRENT_ITEMS || "500",
     10
   );
+
+  // Log initial configuration
+  console.log(
+    `[Job ${jobId}] Initial configuration: HORIZONTAL_BATCH_SIZE=${HORIZONTAL_BATCH_SIZE}, VERTICAL_BATCH_SIZE=${VERTICAL_BATCH_SIZE}, QUEUE_RATE_LIMIT=${QUEUE_RATE_LIMIT}, QUEUE_MIN_DELAY=${QUEUE_MIN_DELAY}, QUEUE_CONCURRENT_ITEMS=${QUEUE_CONCURRENT_ITEMS}`
+  );
+
+  // Function to refresh configuration
+  const refreshConfiguration = async (): Promise<boolean> => {
+    try {
+      const previousConfig = {
+        HORIZONTAL_BATCH_SIZE,
+        VERTICAL_BATCH_SIZE,
+        QUEUE_RATE_LIMIT,
+        QUEUE_MIN_DELAY,
+        QUEUE_CONCURRENT_ITEMS,
+      };
+
+      // Force fresh configuration from database
+      const freshConfig = await configService.getConfig(true);
+
+      // Update configuration values
+      HORIZONTAL_BATCH_SIZE = parseInt(
+        freshConfig.HORIZONTAL_BATCH_SIZE || "40",
+        10
+      );
+      VERTICAL_BATCH_SIZE = parseInt(
+        freshConfig.VERTICAL_BATCH_SIZE || "1000",
+        10
+      );
+      QUEUE_RATE_LIMIT = parseInt(freshConfig.QUEUE_RATE_LIMIT || "1000", 10);
+      QUEUE_MIN_DELAY = parseInt(freshConfig.QUEUE_MIN_DELAY || "30", 10);
+      QUEUE_CONCURRENT_ITEMS = parseInt(
+        freshConfig.QUEUE_CONCURRENT_ITEMS || "500",
+        10
+      );
+
+      // Check if any config values changed
+      const configChanged =
+        previousConfig.HORIZONTAL_BATCH_SIZE !== HORIZONTAL_BATCH_SIZE ||
+        previousConfig.VERTICAL_BATCH_SIZE !== VERTICAL_BATCH_SIZE ||
+        previousConfig.QUEUE_RATE_LIMIT !== QUEUE_RATE_LIMIT ||
+        previousConfig.QUEUE_MIN_DELAY !== QUEUE_MIN_DELAY ||
+        previousConfig.QUEUE_CONCURRENT_ITEMS !== QUEUE_CONCURRENT_ITEMS;
+
+      if (configChanged) {
+        // Log configuration changes
+        console.log(`[Job ${jobId}] Configuration updated: 
+          HORIZONTAL_BATCH_SIZE=${HORIZONTAL_BATCH_SIZE} (was ${previousConfig.HORIZONTAL_BATCH_SIZE}), 
+          VERTICAL_BATCH_SIZE=${VERTICAL_BATCH_SIZE} (was ${previousConfig.VERTICAL_BATCH_SIZE}), 
+          QUEUE_RATE_LIMIT=${QUEUE_RATE_LIMIT} (was ${previousConfig.QUEUE_RATE_LIMIT}), 
+          QUEUE_MIN_DELAY=${QUEUE_MIN_DELAY} (was ${previousConfig.QUEUE_MIN_DELAY}), 
+          QUEUE_CONCURRENT_ITEMS=${QUEUE_CONCURRENT_ITEMS} (was ${previousConfig.QUEUE_CONCURRENT_ITEMS})`);
+      }
+
+      return configChanged;
+    } catch (error) {
+      console.error(`[Job ${jobId}] Failed to refresh configuration:`, error);
+      return false;
+    }
+  };
+
   // Updated chunk size to match processWithQueues
-  const CHUNK_SIZE = 50000;
+  const CHUNK_SIZE = 100000;
 
   // Initialize progress tracking
   ProgressTracker.initJob(jobId, totalRecords, jobType);
@@ -80,6 +147,13 @@ export async function processParentChildWithQueues(
 
   try {
     while (processedCount < totalRecords) {
+      // Check for configuration updates
+      const now = Date.now();
+      if (now - lastConfigCheck > CONFIG_CHECK_INTERVAL) {
+        await refreshConfiguration();
+        lastConfigCheck = now;
+      }
+
       // Check for cancellation before processing each chunk
       if (JobCancellationService.isCancellationRequested(jobId)) {
         console.log(`Job ${jobId} cancelled - stopping queue processing`);
@@ -129,8 +203,6 @@ export async function processParentChildWithQueues(
           i + HORIZONTAL_BATCH_SIZE * VERTICAL_BATCH_SIZE
         );
 
-        // Enhanced load-balancing implementation
-
         // Create queue processors for horizontal batches
         const horizontalQueues: QueueProcessor[] = [];
         for (let h = 0; h < HORIZONTAL_BATCH_SIZE; h++) {
@@ -140,8 +212,14 @@ export async function processParentChildWithQueues(
             jobType,
             parentTableName
           );
+
+          // Apply current dynamic settings to queue
           queue.setRateLimitEnabled(true);
           queue.setUpdateBatchTable(updateBatchTable);
+          queue.setConcurrency(QUEUE_CONCURRENT_ITEMS);
+          queue.setRateLimit(QUEUE_RATE_LIMIT);
+          queue.setMinDelay(QUEUE_MIN_DELAY);
+
           horizontalQueues.push(queue);
         }
 
