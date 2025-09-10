@@ -194,7 +194,6 @@ export async function processParentChildWithQueues(
   const results: BatchResult[] = [];
   let totalSuccessCount = 0;
   let totalFailureCount = 0;
-  let totalProcessedRecords = 0;
 
   const childTableNames = childJobs.map((job) => job.DBTableName);
 
@@ -371,12 +370,9 @@ export async function processParentChildWithQueues(
                 currentFailure += update.failure;
               });
 
-              // Use the sum of current processed records plus previously processed ones
-              // This ensures processedRecords is cumulative and never resets
-              const currentProcessed = currentSuccess + currentFailure;
               ProgressTracker.updateProgress(
                 jobId,
-                totalProcessedRecords + currentProcessed,
+                processedCount,
                 totalSuccessCount + currentSuccess,
                 totalFailureCount + currentFailure
               );
@@ -467,7 +463,7 @@ export async function processParentChildWithQueues(
         // Update progress tracker with the total processed count
         ProgressTracker.updateProgress(
           jobId,
-          totalProcessedRecords + totalSuccessCount + totalFailureCount,
+          processedCount,
           totalSuccessCount,
           totalFailureCount
         );
@@ -477,8 +473,15 @@ export async function processParentChildWithQueues(
       if (rows.length > 0) {
         lastRowId = Math.max(...rows.map((row) => row.RowId));
       }
+
       processedCount += rows.length;
-      totalProcessedRecords = processedCount;
+
+      ProgressTracker.updateProgress(
+        jobId,
+        processedCount, // ערך ישיר ללא כפילות
+        totalSuccessCount,
+        totalFailureCount
+      );
 
       // Ensure we're flushing errors regularly
       if (totalFailureCount > 0 && totalFailureCount % 500 === 0) {
