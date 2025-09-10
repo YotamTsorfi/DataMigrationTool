@@ -47,19 +47,19 @@ class ProgressTracker {
 
     // Check for regression in processedRecords
     if (processedRecords < progress.processedRecords) {
-      console.warn(
-        `Progress regression detected for job ${jobId}: processedRecords decreased from ${progress.processedRecords} to ${processedRecords}`
-      );
+      // console.warn(
+      //   `Progress regression detected for job ${jobId}: processedRecords decreased from ${progress.processedRecords} to ${processedRecords}`
+      // );
       // Ensure processedRecords never goes backwards
       processedRecords = Math.max(processedRecords, progress.processedRecords);
     }
 
     // Ensure consistency between processedRecords and success+failure counts
-    if (processedRecords !== successCount + failureCount) {
-      console.warn(
-        `Progress inconsistency detected for job ${jobId}: processedRecords (${processedRecords}) != successCount (${successCount}) + failureCount (${failureCount})`
-      );
-    }
+    // if (processedRecords !== successCount + failureCount) {
+    //   console.warn(
+    //     `Progress inconsistency detected for job ${jobId}: processedRecords (${processedRecords}) != successCount (${successCount}) + failureCount (${failureCount})`
+    //   );
+    // }
 
     progress.processedRecords = processedRecords;
     progress.successCount = successCount;
