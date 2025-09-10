@@ -6,7 +6,7 @@
 import { v4 as uuidv4 } from "uuid";
 import { QueueItem } from "../../types/jobTypes";
 import { ChildJob, BatchResult } from "../../types/jobTypes";
-import { configService } from "../../config/configService";
+import { configService, ConfigChangeEvent } from "../../config/configService";
 import ProgressTracker from "../../utils/progressTracker";
 import PerformanceMonitor from "../../utils/performanceMonitor";
 import { JobCancellationService } from "../../utils/jobCancellationService";
@@ -55,10 +55,6 @@ export async function processParentChildWithQueues(
   });
   errorBuffer.setLoggingEnabled(logErrors);
 
-  // Initialize configuration tracking variables
-  let lastConfigCheck = Date.now();
-  const CONFIG_CHECK_INTERVAL = 10000; // Check for config updates every 10 seconds
-
   // Initial configuration
   let HORIZONTAL_BATCH_SIZE = parseInt(
     config.HORIZONTAL_BATCH_SIZE || "40",
@@ -80,82 +76,68 @@ export async function processParentChildWithQueues(
   // Log database configuration values directly
   await verifyDatabaseConfiguration(jobId);
 
-  // Function to refresh configuration
-  const refreshConfiguration = async (): Promise<boolean> => {
-    try {
-      const previousConfig = {
-        HORIZONTAL_BATCH_SIZE,
-        VERTICAL_BATCH_SIZE,
-        QUEUE_RATE_LIMIT,
-        QUEUE_MIN_DELAY,
-        QUEUE_CONCURRENT_ITEMS,
-      };
+  // Setup configuration change listener
+  const handleConfigChanges = (changes: ConfigChangeEvent[]): void => {
+    const relevantChanges = changes.filter((change) =>
+      [
+        "HORIZONTAL_BATCH_SIZE",
+        "VERTICAL_BATCH_SIZE",
+        "QUEUE_RATE_LIMIT",
+        "QUEUE_MIN_DELAY",
+        "QUEUE_CONCURRENT_ITEMS",
+      ].includes(change.key)
+    );
 
-      // Log that we're checking for configuration updates
-      const checkingMessage = `[Job ${jobId}] Checking for configuration updates...`;
-      writeToLogFile(CONFIG_LOG_FILE, checkingMessage);
+    if (relevantChanges.length === 0) return;
 
-      // Force fresh configuration from database
-      const freshConfig = await configService.getConfig(true);
+    // Store previous values for logging
+    const previousConfig = {
+      HORIZONTAL_BATCH_SIZE,
+      VERTICAL_BATCH_SIZE,
+      QUEUE_RATE_LIMIT,
+      QUEUE_MIN_DELAY,
+      QUEUE_CONCURRENT_ITEMS,
+    };
 
-      // Log current and new configuration values for debugging
-      const freshConfigMessage = `[Job ${jobId}] Fresh config values from database: HORIZONTAL_BATCH_SIZE=${freshConfig.HORIZONTAL_BATCH_SIZE || "40"}, VERTICAL_BATCH_SIZE=${freshConfig.VERTICAL_BATCH_SIZE || "1000"}, QUEUE_RATE_LIMIT=${freshConfig.QUEUE_RATE_LIMIT || "1000"}, QUEUE_MIN_DELAY=${freshConfig.QUEUE_MIN_DELAY || "30"}, QUEUE_CONCURRENT_ITEMS=${freshConfig.QUEUE_CONCURRENT_ITEMS || "500"}`;
-      writeToLogFile(CONFIG_LOG_FILE, freshConfigMessage);
-
-      // Update configuration values
-      HORIZONTAL_BATCH_SIZE = parseInt(
-        freshConfig.HORIZONTAL_BATCH_SIZE || "40",
-        10
-      );
-      VERTICAL_BATCH_SIZE = parseInt(
-        freshConfig.VERTICAL_BATCH_SIZE || "1000",
-        10
-      );
-      QUEUE_RATE_LIMIT = parseInt(freshConfig.QUEUE_RATE_LIMIT || "1000", 10);
-      QUEUE_MIN_DELAY = parseInt(freshConfig.QUEUE_MIN_DELAY || "30", 10);
-      QUEUE_CONCURRENT_ITEMS = parseInt(
-        freshConfig.QUEUE_CONCURRENT_ITEMS || "500",
-        10
-      );
-
-      // Check if any config values changed
-      const configChanged =
-        previousConfig.HORIZONTAL_BATCH_SIZE !== HORIZONTAL_BATCH_SIZE ||
-        previousConfig.VERTICAL_BATCH_SIZE !== VERTICAL_BATCH_SIZE ||
-        previousConfig.QUEUE_RATE_LIMIT !== QUEUE_RATE_LIMIT ||
-        previousConfig.QUEUE_MIN_DELAY !== QUEUE_MIN_DELAY ||
-        previousConfig.QUEUE_CONCURRENT_ITEMS !== QUEUE_CONCURRENT_ITEMS;
-
-      // Always log current configuration values for troubleshooting
-      const currentConfigMessage = `[Job ${jobId}] Current active configuration: HORIZONTAL_BATCH_SIZE=${HORIZONTAL_BATCH_SIZE}, VERTICAL_BATCH_SIZE=${VERTICAL_BATCH_SIZE}, QUEUE_RATE_LIMIT=${QUEUE_RATE_LIMIT}, QUEUE_MIN_DELAY=${QUEUE_MIN_DELAY}, QUEUE_CONCURRENT_ITEMS=${QUEUE_CONCURRENT_ITEMS}`;
-      writeToLogFile(CONFIG_LOG_FILE, currentConfigMessage);
-
-      if (configChanged) {
-        // Log configuration changes
-        const configChangedMessage = `[Job ${jobId}] CONFIGURATION CHANGED: 
-          HORIZONTAL_BATCH_SIZE=${HORIZONTAL_BATCH_SIZE} (was ${previousConfig.HORIZONTAL_BATCH_SIZE}), 
-          VERTICAL_BATCH_SIZE=${VERTICAL_BATCH_SIZE} (was ${previousConfig.VERTICAL_BATCH_SIZE}), 
-          QUEUE_RATE_LIMIT=${QUEUE_RATE_LIMIT} (was ${previousConfig.QUEUE_RATE_LIMIT}), 
-          QUEUE_MIN_DELAY=${QUEUE_MIN_DELAY} (was ${previousConfig.QUEUE_MIN_DELAY}), 
-          QUEUE_CONCURRENT_ITEMS=${QUEUE_CONCURRENT_ITEMS} (was ${previousConfig.QUEUE_CONCURRENT_ITEMS})`;
-
-        console.log(configChangedMessage);
-        writeToLogFile(CONFIG_LOG_FILE, configChangedMessage);
-      } else {
-        writeToLogFile(
-          CONFIG_LOG_FILE,
-          `[Job ${jobId}] No configuration changes detected.`
-        );
+    // Update local configuration values
+    relevantChanges.forEach((change) => {
+      switch (change.key) {
+        case "HORIZONTAL_BATCH_SIZE":
+          HORIZONTAL_BATCH_SIZE = Number(change.newValue);
+          break;
+        case "VERTICAL_BATCH_SIZE":
+          VERTICAL_BATCH_SIZE = Number(change.newValue);
+          break;
+        case "QUEUE_RATE_LIMIT":
+          QUEUE_RATE_LIMIT = Number(change.newValue);
+          break;
+        case "QUEUE_MIN_DELAY":
+          QUEUE_MIN_DELAY = Number(change.newValue);
+          break;
+        case "QUEUE_CONCURRENT_ITEMS":
+          QUEUE_CONCURRENT_ITEMS = Number(change.newValue);
+          break;
       }
+    });
 
-      return configChanged;
-    } catch (error) {
-      const errorMessage = `[Job ${jobId}] Failed to refresh configuration: ${error instanceof Error ? error.message : String(error)}`;
-      console.error(errorMessage);
-      writeToLogFile(CONFIG_LOG_FILE, errorMessage);
-      return false;
-    }
+    // Log configuration changes
+    const configChangedMessage = `[Job ${jobId}] CONFIGURATION CHANGED: 
+      HORIZONTAL_BATCH_SIZE=${HORIZONTAL_BATCH_SIZE} (was ${previousConfig.HORIZONTAL_BATCH_SIZE}), 
+      VERTICAL_BATCH_SIZE=${VERTICAL_BATCH_SIZE} (was ${previousConfig.VERTICAL_BATCH_SIZE}), 
+      QUEUE_RATE_LIMIT=${QUEUE_RATE_LIMIT} (was ${previousConfig.QUEUE_RATE_LIMIT}), 
+      QUEUE_MIN_DELAY=${QUEUE_MIN_DELAY} (was ${previousConfig.QUEUE_MIN_DELAY}), 
+      QUEUE_CONCURRENT_ITEMS=${QUEUE_CONCURRENT_ITEMS} (was ${previousConfig.QUEUE_CONCURRENT_ITEMS})`;
+
+    console.log(configChangedMessage);
+    writeToLogFile(CONFIG_LOG_FILE, configChangedMessage);
+
+    // Log current active configuration for reference
+    const currentConfigMessage = `[Job ${jobId}] Current active configuration: HORIZONTAL_BATCH_SIZE=${HORIZONTAL_BATCH_SIZE}, VERTICAL_BATCH_SIZE=${VERTICAL_BATCH_SIZE}, QUEUE_RATE_LIMIT=${QUEUE_RATE_LIMIT}, QUEUE_MIN_DELAY=${QUEUE_MIN_DELAY}, QUEUE_CONCURRENT_ITEMS=${QUEUE_CONCURRENT_ITEMS}`;
+    writeToLogFile(CONFIG_LOG_FILE, currentConfigMessage);
   };
+
+  // Subscribe to configuration changes
+  configService.onConfigChangeBatch(handleConfigChanges);
 
   /**
    * Utility function to verify the current configuration values in the database
@@ -218,20 +200,6 @@ export async function processParentChildWithQueues(
 
   try {
     while (processedCount < totalRecords) {
-      // Check for configuration updates
-      const now = Date.now();
-      if (now - lastConfigCheck > CONFIG_CHECK_INTERVAL) {
-        const configChanged = await refreshConfiguration();
-        lastConfigCheck = now;
-
-        // If configuration changed, log the impact on processing
-        if (configChanged) {
-          const processingMessage = `[Job ${jobId}] Processing will continue with updated configuration values`;
-          console.log(processingMessage);
-          writeToLogFile(CONFIG_LOG_FILE, processingMessage);
-        }
-      }
-
       // Check for cancellation before processing each chunk
       if (JobCancellationService.isCancellationRequested(jobId)) {
         const cancelMessage = `Job ${jobId} cancelled - stopping queue processing`;
@@ -534,6 +502,9 @@ export async function processParentChildWithQueues(
     console.log(completionMessage);
     writeToLogFile(CONFIG_LOG_FILE, `[Job ${jobId}] ${completionMessage}`);
 
+    // Unsubscribe from configuration changes before completing
+    configService.offConfigChangeBatch(handleConfigChanges);
+
     // Return only the summary of results for each queue
     return results.map((result) => ({
       success: result.success,
@@ -546,6 +517,9 @@ export async function processParentChildWithQueues(
     const errorMessage = `Fatal error in processParentChildWithQueues: ${error instanceof Error ? error.message : String(error)}`;
     console.error(errorMessage);
     writeToLogFile(CONFIG_LOG_FILE, `[Job ${jobId}] ${errorMessage}`);
+
+    // Unsubscribe from configuration changes even on error
+    configService.offConfigChangeBatch(handleConfigChanges);
 
     await errorBuffer.flushAll();
 
