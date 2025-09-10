@@ -1,5 +1,13 @@
 import { DatabaseService } from "../services/database/databaseService";
+import { EventEmitter } from "events";
+import { writeToLogFile } from "./logger";
 
+export interface ConfigChangeEvent {
+  key: string;
+  oldValue: any;
+  newValue: any;
+  timestamp: Date;
+}
 interface SystemConfig {
   CONCURRENT_BATCHES: number;
   BATCH_SIZE: number;
@@ -52,8 +60,13 @@ class ConfigurationService {
   private cacheExpiryMs: number = 60000; // 1 minute cache
   private pollingInterval: NodeJS.Timeout | null = null;
   private isInitialized: boolean = false;
+  private configChangeEmitter = new EventEmitter();
+  private readonly CONFIG_LOG_FILE = "config_changes.log";
 
   private constructor() {
+    // Set higher max listeners to avoid warnings
+    this.configChangeEmitter.setMaxListeners(50);
+
     // Initialize config on startup, but with error handling
     this.initializeConfig();
   }
@@ -65,13 +78,18 @@ class ConfigurationService {
 
       await this.loadConfigFromDb();
       console.log("Initial configuration loaded");
+      writeToLogFile(this.CONFIG_LOG_FILE, "Initial configuration loaded");
       this.lastLoaded = new Date();
       this.isInitialized = true;
 
-      // Set up polling for config changes
+      // Set up polling for config changes (uncomment if needed)
       // this.startPolling();
     } catch (error) {
       console.error("Failed to initialize configuration, will retry:", error);
+      writeToLogFile(
+        this.CONFIG_LOG_FILE,
+        `Failed to initialize configuration, will retry: ${error instanceof Error ? error.message : String(error)}`
+      );
       // Retry after a delay
       setTimeout(() => this.initializeConfig(), 5000);
     }
@@ -127,7 +145,9 @@ class ConfigurationService {
     `)) as { ConfigKey: string; ConfigValue: string }[];
 
       if (result && result.length > 0) {
+        const oldConfig = { ...this.config }; // Store old config for comparison
         const newConfig: SystemConfig = { ...this.config };
+        const changedValues: ConfigChangeEvent[] = []; // Track changes
 
         // Initialize WHERE_CLAUSES if it doesn't exist
         if (!newConfig.WHERE_CLAUSES) {
@@ -138,7 +158,18 @@ class ConfigurationService {
           // Check if this is a WHERE clause configuration
           if (row.ConfigKey.startsWith("WHERE_CLAUSE_")) {
             const jobType = row.ConfigKey.substring("WHERE_CLAUSE_".length);
+            const oldValue = oldConfig.WHERE_CLAUSES?.[jobType];
             newConfig.WHERE_CLAUSES[jobType] = row.ConfigValue;
+
+            // Track changes in WHERE clauses
+            if (oldValue !== row.ConfigValue) {
+              changedValues.push({
+                key: row.ConfigKey,
+                oldValue,
+                newValue: row.ConfigValue,
+                timestamp: new Date(),
+              });
+            }
           } else {
             let value: any = row.ConfigValue;
 
@@ -151,31 +182,80 @@ class ConfigurationService {
               value = value.toLowerCase() === "true";
             }
 
+            // Track changes in regular config values
+            if (oldConfig[row.ConfigKey] !== value) {
+              changedValues.push({
+                key: row.ConfigKey,
+                oldValue: oldConfig[row.ConfigKey],
+                newValue: value,
+                timestamp: new Date(),
+              });
+            }
+
             newConfig[row.ConfigKey] = value;
           }
         });
 
+        // Update config after comparing changes
         this.config = newConfig;
 
         // If forcing refresh, update the last loaded timestamp
         if (forceRefresh) {
           this.lastLoaded = new Date();
         }
+
+        // Emit events for changes
+        if (changedValues.length > 0) {
+          writeToLogFile(
+            this.CONFIG_LOG_FILE,
+            `Configuration changes detected: ${changedValues.length} values changed`
+          );
+
+          // Log all changes and emit individual events
+          changedValues.forEach((change) => {
+            writeToLogFile(
+              this.CONFIG_LOG_FILE,
+              `Config changed: ${change.key} from ${change.oldValue} to ${change.newValue}`
+            );
+            this.configChangeEmitter.emit("configChanged", change);
+          });
+
+          // Also emit a batch event with all changes
+          this.configChangeEmitter.emit("configChangeBatch", changedValues);
+        }
       }
     } catch (error) {
       console.error("Error loading configuration from database:", error);
+      writeToLogFile(
+        this.CONFIG_LOG_FILE,
+        `Error loading configuration from database: ${error instanceof Error ? error.message : String(error)}`
+      );
       throw error;
     }
   }
 
+  /**
+   * Updates a configuration value in the database and in memory
+   * @param key Configuration key to update
+   * @param value New value to set
+   * @returns Success status
+   */
   public async updateConfig(key: string, value: any): Promise<boolean> {
     try {
+      const oldValue = this.config[key];
+
+      // Log the update attempt
+      writeToLogFile(
+        this.CONFIG_LOG_FILE,
+        `Updating configuration: ${key} from ${oldValue} to ${value}`
+      );
+
       await DatabaseService.executeQuery(
         `
-      UPDATE PrioritySystemConfig 
-      SET ConfigValue = @ConfigValue, LastUpdated = @LastUpdated
-      WHERE ConfigKey = @ConfigKey
-    `,
+        UPDATE PrioritySystemConfig 
+        SET ConfigValue = @ConfigValue, LastUpdated = @LastUpdated
+        WHERE ConfigKey = @ConfigKey
+        `,
         {
           ConfigKey: key,
           ConfigValue: String(value),
@@ -183,14 +263,54 @@ class ConfigurationService {
         }
       );
 
-      // Update the in-memory config as well
-      await this.loadConfigFromDb();
+      // Update the in-memory config and emit change event
+      await this.loadConfigFromDb(true);
 
       return true;
     } catch (error) {
       console.error(`Failed to update config ${key}:`, error);
+      writeToLogFile(
+        this.CONFIG_LOG_FILE,
+        `Failed to update config ${key}: ${error instanceof Error ? error.message : String(error)}`
+      );
       return false;
     }
+  }
+
+  /**
+   * Subscribe to configuration changes
+   * @param listener Function to call when configuration changes
+   */
+  public onConfigChange(listener: (change: ConfigChangeEvent) => void): void {
+    this.configChangeEmitter.on("configChanged", listener);
+  }
+
+  /**
+   * Subscribe to batch configuration changes
+   * @param listener Function to call when multiple configuration values change
+   */
+  public onConfigChangeBatch(
+    listener: (changes: ConfigChangeEvent[]) => void
+  ): void {
+    this.configChangeEmitter.on("configChangeBatch", listener);
+  }
+
+  /**
+   * Unsubscribe from configuration changes
+   * @param listener Function to remove from listeners
+   */
+  public offConfigChange(listener: (change: ConfigChangeEvent) => void): void {
+    this.configChangeEmitter.off("configChanged", listener);
+  }
+
+  /**
+   * Unsubscribe from batch configuration changes
+   * @param listener Function to remove from listeners
+   */
+  public offConfigChangeBatch(
+    listener: (changes: ConfigChangeEvent[]) => void
+  ): void {
+    this.configChangeEmitter.off("configChangeBatch", listener);
   }
 
   // Add cleanup method for proper application shutdown
@@ -199,6 +319,7 @@ class ConfigurationService {
       clearInterval(this.pollingInterval);
       this.pollingInterval = null;
       console.log("Configuration polling stopped");
+      writeToLogFile(this.CONFIG_LOG_FILE, "Configuration polling stopped");
     }
   }
   //------------------------------------------
