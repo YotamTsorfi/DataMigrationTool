@@ -35,6 +35,7 @@ interface JobType {
   ScreenName: string;
   priority_id: string;
   linkedField: string;
+  HebrewName?: string;
 }
 interface ConfigItem {
   ConfigKey: string;
@@ -398,11 +399,16 @@ const BatchProcessor: React.FC = () => {
             <InputContainer style={{ flex: 0.4 }}>
               <InputLabel>
                 Job Type:
-                <select value={selectedJobType} onChange={handleJobTypeChange}>
+                <select
+                  value={selectedJobType}
+                  onChange={handleJobTypeChange}
+                  style={{ direction: "rtl" }} // Ensure base direction is left-to-right
+                >
                   <option value="">Select Job Type</option>
-                  {jobTypes.map((job: any) => (
+                  {jobTypes.map((job: JobType) => (
                     <option key={job.JobTypeId} value={job.JobTypeName}>
-                      {job.JobTypeName}
+                      {job.JobTypeName}{" "}
+                      {job.HebrewName ? `- ${job.HebrewName}` : ""}
                     </option>
                   ))}
                 </select>

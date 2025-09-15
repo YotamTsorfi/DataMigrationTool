@@ -125,6 +125,7 @@ export class QueueProcessor {
     //   `Queue ${this.queueId}: Rate limiting ${enabled ? "enabled" : "disabled"}`
     // );
   }
+
   public addItem(item: QueueItem): void {
     this.queue.push(item);
   }
@@ -133,14 +134,17 @@ export class QueueProcessor {
   public hasItems(): boolean {
     return this.queue.length > 0;
   }
+
   // Add items to the queue
   public addItems(items: QueueItem[]): void {
     this.queue.push(...items);
   }
+
   // Get Queue ID
   public getQueueId(): string {
     return this.queueId;
   }
+
   // Start processing the queue
   public async process(): Promise<QueueProcessorResult> {
     if (this.processing) {
@@ -236,18 +240,21 @@ export class QueueProcessor {
       this.processing = false;
     }
   }
+
   //-------------------------
   private progressListener:
     | ((successCount: number, failureCount: number) => void)
     | null = null;
   //-------------------------
+
   // Set a listener for progress updates
   public setProgressListener(
     listener: (successCount: number, failureCount: number) => void
   ): void {
     this.progressListener = listener;
   }
-  //------------------------------------------------------
+
+  //-------------------------
   // Process a single item in the queue
   private async processItem(item: QueueItem): Promise<void> {
     try {
@@ -460,6 +467,7 @@ export class QueueProcessor {
       });
     }
   }
+
   //------------------------------------------------------
   // Format error message to be more user friendly
   private formatErrorMessage(
@@ -597,6 +605,7 @@ export class QueueProcessor {
 
     return cleanedError || "Unknown error occurred";
   }
+
   //------------------------------------------------------
   // Send a request to the Priority API for a single item
   private async sendRequest(item: QueueItem): Promise<QueueItemResponse> {
@@ -752,8 +761,8 @@ export class QueueProcessor {
     };
   }
   //------------------------------------------------------
-  // Apply rate limiting between requests
 
+  // Apply rate limiting between requests
   private async applyRateLimit(): Promise<void> {
     // console.log(
     //   `Queue ${this.queueId}: queue.length=${this.queue.length}, errorCount503=${this.errorCount503}, backoffActive=${this.backoffActive}`
@@ -860,6 +869,7 @@ export class QueueProcessor {
     await new Promise((resolve) => setTimeout(resolve, delay));
   }
   //------------------------------------------------------
+
   // Update the progress tracker
   private updateProgress(): void {
     ProgressTracker.updateProgress(
@@ -874,6 +884,7 @@ export class QueueProcessor {
     }
   }
   //------------------------------------------------------
+
   // Get result data for database updates
   public getResultData() {
     return {
