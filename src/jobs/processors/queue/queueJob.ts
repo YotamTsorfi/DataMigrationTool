@@ -11,6 +11,7 @@ import { QueueItem } from "../../../types/jobTypes";
 
 /**
  * Process records using grid-based processing (horizontal parallel, vertical sequential)
+ * with support for delta processing
  */
 export async function processWithQueues(
   recordCount: number,
@@ -28,11 +29,42 @@ export async function processWithQueues(
   // Get system configuration
   const config = await configService.getConfig();
 
-  // TODO - Check new personal access token expiration
+  // Determine if this is a delta job
+  const isDelta = jobType.toLowerCase().includes("delta");
+  const isChildDelta = isDelta && jobType.toLowerCase().includes("child");
 
-  // console.log(
-  //   `processWithQueues received customWhereClause: ${customWhereClause}`
-  // );
+  let parentTableName: string | undefined;
+
+  // If this is a child delta job, get the parent table name
+  if (isChildDelta) {
+    try {
+      interface JobTypeInfo {
+        dbParentTableName: string;
+      }
+
+      const jobTypeInfo = await DatabaseService.executeQuery<JobTypeInfo>(
+        `SELECT dbParentTableName FROM PriorityJobTypes WHERE JobTypeName = @jobTypeName`,
+        { jobTypeName: jobType }
+      );
+
+      if (jobTypeInfo && jobTypeInfo.length > 0) {
+        parentTableName = jobTypeInfo[0].dbParentTableName;
+        console.log(
+          `Child delta job ${jobType} detected. Parent table: ${parentTableName}`
+        );
+      }
+    } catch (error) {
+      console.error(
+        `Error fetching parent table for child delta job ${jobType}:`,
+        error
+      );
+    }
+  }
+
+  console.log(
+    `Processing ${isDelta ? "DELTA" : "standard"} job ${jobType}${isChildDelta ? " (CHILD)" : ""}`
+  );
+
   // Initialize ErrorBufferService at the beginning of the function
   const errorBuffer = ErrorBufferService.getInstance();
   errorBuffer.configure({
@@ -52,9 +84,7 @@ export async function processWithQueues(
     10
   );
 
-  // TODO - Check CHUNK_SIZE
   // Set chunk size for processing
-  // This is the number of rows to process in each database fetch operation
   const CHUNK_SIZE = 100000;
 
   // Initialize progress tracking for this job
@@ -83,7 +113,7 @@ export async function processWithQueues(
       customWhereClause = clause === null ? undefined : clause;
     }
 
-    // Fetch data chunk from database
+    // Fetch data chunk from database with delta support
     const perfMonitor = new PerformanceMonitor();
     perfMonitor.startDbFetch();
     const rows = await fetchDataChunk(
@@ -91,7 +121,10 @@ export async function processWithQueues(
       lastRowId,
       chunkSize,
       customWhereClause,
-      caseId
+      caseId,
+      isDelta,
+      isChildDelta,
+      parentTableName
     );
     perfMonitor.endDbFetch();
 
@@ -126,6 +159,7 @@ export async function processWithQueues(
           tableName
         );
         queue.setUpdateBatchTable(updateBatchTable);
+        queue.setDeltaMode(isDelta, isChildDelta);
         horizontalQueues.push(queue);
       }
 
@@ -165,6 +199,18 @@ export async function processWithQueues(
         const queueItems: QueueItem[] = verticalBatch.map((row, vIndex) => {
           const batchId = uuidv4();
 
+          // For child delta records that need parent priority ID, format it properly
+          if (
+            isDelta &&
+            isChildDelta &&
+            row.__deltaMetadata &&
+            row.__deltaMetadata.parent_priority_id &&
+            row.__deltaMetadata.is_new === 1 &&
+            row.__deltaMetadata.is_modified === 0
+          ) {
+            row.__deltaMetadata.parent_priority_id += `/${priorityScreenName}_SUBFORM`;
+          }
+
           return {
             row: row,
             index: i + startIndex + vIndex + processedCount,
@@ -175,6 +221,9 @@ export async function processWithQueues(
             tableName,
             priorityScreenName,
             priorityIdField,
+            isDelta,
+            isChildDelta,
+            deltaMetadata: row.__deltaMetadata,
           };
         });
 
@@ -188,7 +237,6 @@ export async function processWithQueues(
         );
       }
 
-      //
       const progressUpdates = new Map();
 
       // Process each queue in parallel - each queue processes its vertical batch in order
@@ -235,6 +283,10 @@ export async function processWithQueues(
           // Set the progress listener for this queue
           queue.setProgressListener(updateListener);
 
+          /*
+           * Each queue processes its items sequentially to maintain order within the queue.
+           * However, all queues run in parallel to maximize throughput.
+           */
           // Process the queue and return the result
           return queue.process();
         });
@@ -271,7 +323,6 @@ export async function processWithQueues(
     totalProcessedRecords = processedCount;
 
     // Ensure we're flushing errors regularly
-    // This is optional, since the ErrorBufferService will flush based on size/time
     if (totalFailureCount > 0 && totalFailureCount % 500 === 0) {
       await errorBuffer.flush();
     }
