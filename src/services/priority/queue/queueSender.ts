@@ -80,7 +80,7 @@ export async function sendParentChildQueue(
   // Create a unique batch ID for this single record
   const batchId = uuidv4();
   const config = await configService.getConfig();
-  const logFailedToFile = config.LOG_FAILED_REQUESTS_TO_FILE === "true";
+  const logFailedToFile = Boolean(config.LOG_FAILED_REQUESTS_TO_FILE);
 
   // Initialize performance monitoring
   const perfMonitor = new PerformanceMonitor();

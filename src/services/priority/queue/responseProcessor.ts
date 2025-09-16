@@ -57,8 +57,7 @@ export async function processParentChildResponse(
 ): Promise<ProcessResponseResult> {
   try {
     const config = await configService.getConfig();
-    const logMissingSubformToFile =
-      config.LOG_MISSING_SUBFORM_TO_FILE === "true";
+    const logMissingSubformToFile = Boolean(config.LOG_MISSING_SUBFORM_TO_FILE);
 
     // Start measuring DB update time
     const dbUpdateStart = performance.now();
