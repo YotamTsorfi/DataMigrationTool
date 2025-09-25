@@ -41,7 +41,9 @@ export async function fetchDataChunk(
       chunkSize,
       customWhereClause,
       caseId,
-      isDelta ? "is_eligible = 1" : "is_eligible = 1 AND is_new = 1",
+      isDelta
+        ? "is_eligible = 1 AND delta_action != 0 AND delta_action IS NOT NULL AND (Status != 'Completed' OR Status IS NULL)"
+        : "is_eligible = 1 AND is_new = 1",
       isDelta,
       isChildDelta,
       parentTableName
@@ -67,7 +69,7 @@ export function transformDatabaseRecords(
     RowId: number;
     Data: string;
     is_new?: number;
-    is_modified?: number;
+    delta_action?: number;
     priority_id?: string | null;
     reference_id?: string | null;
     parent_priority_id?: string | null;
@@ -85,7 +87,7 @@ export function transformDatabaseRecords(
           ...parsedData,
           __deltaMetadata: {
             is_new: record.is_new || 0,
-            is_modified: record.is_modified || 0,
+            delta_action: record.delta_action || 0,
             priority_id: record.priority_id || null,
             reference_id: record.reference_id || null,
             parent_priority_id: record.parent_priority_id || null,

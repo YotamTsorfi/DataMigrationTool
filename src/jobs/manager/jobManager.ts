@@ -238,7 +238,7 @@ class JobManager {
         // For delta jobs, only check is_eligible
         if (isDelta) {
           if (tableInfo.hasColumn("is_eligible")) {
-            countQuery += ` AND is_eligible = 1`;
+            countQuery += ` AND is_eligible = 1 AND delta_action != 0 AND delta_action IS NOT NULL AND (Status != 'Completed' OR Status IS NULL)`;
           }
         } else {
           // For regular jobs, check both is_eligible and is_new

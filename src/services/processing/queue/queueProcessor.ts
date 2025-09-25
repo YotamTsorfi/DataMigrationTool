@@ -344,10 +344,8 @@ export class QueueProcessor {
 
         if (isDelta) {
           // For delta processing, we need to determine if it's an insert or update
-          const isNew =
-            deltaMetadata?.is_new === 1 && deltaMetadata?.is_modified === 0;
-          const isModified =
-            deltaMetadata?.is_modified === 1 && deltaMetadata?.is_new === 0;
+          const isNew = deltaMetadata?.delta_action === 1;
+          const isUpdate = deltaMetadata?.delta_action === 2;
 
           // For child delta items that are new, use parent_priority_id in the URL
           if (isNew && isChildDelta && deltaMetadata?.parent_priority_id) {
@@ -359,7 +357,7 @@ export class QueueProcessor {
             );
           }
           // For modified items, use priority_id for PATCH operations
-          else if (isModified && deltaMetadata?.priority_id) {
+          else if (isUpdate && deltaMetadata?.priority_id) {
             // For updates, send a PATCH request with the existing priority_id
             response = await this.sendDeltaRequest(
               item,
@@ -393,7 +391,8 @@ export class QueueProcessor {
           let priorityId = null;
 
           if (isDelta) {
-            if (deltaMetadata?.is_modified === 1) {
+            // To update = delta_action === 2
+            if (deltaMetadata?.delta_action === 2) {
               // For updates, keep the existing priority_id from metadata
               priorityId = deltaMetadata.priority_id;
             } else {
@@ -572,8 +571,10 @@ export class QueueProcessor {
       __jobId,
       __priorityScreenName,
       __deltaMetadata,
-      ...requestData
+      ...requestDataWithMeta
     } = item.row;
+
+    const { __deltaMetadata: removed, ...requestData } = requestDataWithMeta;
 
     // Also remove metadata if it exists at the top level
     if ("__deltaMetadata" in requestData) {
@@ -870,8 +871,11 @@ export class QueueProcessor {
       __tableName,
       __jobId,
       __priorityScreenName,
-      ...requestData
+      __deltaMetadata,
+      ...requestDataWithMeta
     } = item.row;
+
+    const { __deltaMetadata: removed, ...requestData } = requestDataWithMeta;
 
     while (retryCount < maxRetries) {
       try {

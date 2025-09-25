@@ -1,6 +1,6 @@
 export interface DeltaMetadata {
   is_new: number;
-  is_modified: number;
+  delta_action: number;
   priority_id: string | null;
   reference_id: string | null;
   parent_priority_id?: string | null;

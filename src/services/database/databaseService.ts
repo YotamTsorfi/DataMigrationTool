@@ -811,7 +811,7 @@ export class DatabaseService {
       RowId: number;
       Data: string;
       is_new?: number;
-      is_modified?: number;
+      delta_action?: number;
       priority_id?: string | null;
       reference_id?: string | null;
       parent_priority_id?: string | null;
@@ -821,9 +821,10 @@ export class DatabaseService {
     perfMonitor.startDbFetch();
 
     try {
-      // For delta processing, we only need is_eligible = 1
+      // For delta processing
       if (isDelta) {
-        baseWhereClause = "is_eligible = 1";
+        baseWhereClause =
+          "is_eligible = 1 AND delta_action != 0 AND delta_action IS NOT NULL AND (Status != 'Completed' OR Status IS NULL)";
       }
 
       // Build the WHERE clause with the base condition
@@ -843,7 +844,7 @@ export class DatabaseService {
       let selectClause = "RowId, Data";
       if (isDelta) {
         selectClause =
-          "RowId, Data, is_new, is_modified, priority_id, reference_id";
+          "RowId, Data, is_new, delta_action, priority_id, reference_id";
       }
 
       const query = `
@@ -868,7 +869,7 @@ export class DatabaseService {
         RowId: number;
         Data: string;
         is_new?: number;
-        is_modified?: number;
+        delta_action?: number;
         priority_id?: string | null;
         reference_id?: string | null;
         parent_priority_id?: string | null;
@@ -878,8 +879,7 @@ export class DatabaseService {
       if (isDelta && isChildDelta && parentTableName && rowsData.length > 0) {
         // Get all reference_ids for new child records
         const newChildRecords = rowsData.filter(
-          (row: any) =>
-            row.is_new === 1 && row.is_modified === 0 && row.reference_id
+          (row: any) => row.delta_action === 1 && row.reference_id
         );
 
         if (newChildRecords.length > 0) {
@@ -897,11 +897,17 @@ export class DatabaseService {
               referenceIdParamsObj[`refId${idx}`] = id;
             });
 
+            // Add caseId to the parameters object if it exists
+            if (caseId) {
+              referenceIdParamsObj.caseId = caseId;
+            }
+
             // Query to get parent priority_ids
             const parentQuery = `
             SELECT reference_id, priority_id 
             FROM ${parentTableName}
-            WHERE reference_id IN (${referenceIdParams})
+            WHERE reference_id IN (${referenceIdParams})   
+              AND case_id = @caseId AND is_eligible = 1
           `;
 
             const parentData = await this.executeQuery(
@@ -919,11 +925,7 @@ export class DatabaseService {
 
             // Enrich child records with parent priority_ids
             rowsData.forEach((row: any) => {
-              if (
-                row.is_new === 1 &&
-                row.is_modified === 0 &&
-                row.reference_id
-              ) {
+              if (row.delta_action === 1 && row.reference_id) {
                 const parentPriorityId = parentPriorityMap.get(
                   row.reference_id
                 );

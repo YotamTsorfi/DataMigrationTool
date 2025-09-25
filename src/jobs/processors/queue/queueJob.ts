@@ -205,8 +205,7 @@ export async function processWithQueues(
             isChildDelta &&
             row.__deltaMetadata &&
             row.__deltaMetadata.parent_priority_id &&
-            row.__deltaMetadata.is_new === 1 &&
-            row.__deltaMetadata.is_modified === 0
+            row.__deltaMetadata.delta_action === 1
           ) {
             row.__deltaMetadata.parent_priority_id += `/${priorityScreenName}_SUBFORM`;
           }
