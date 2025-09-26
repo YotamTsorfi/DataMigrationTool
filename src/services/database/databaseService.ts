@@ -412,7 +412,7 @@ export class DatabaseService {
             ? null
             : update.priority_id === null
               ? null
-              : String(update.priority_id),
+              : update.priority_id,
         is_new: update.is_new,
         StatusCode: update.StatusCode || null,
       };

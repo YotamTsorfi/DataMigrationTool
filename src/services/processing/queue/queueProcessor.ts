@@ -530,9 +530,8 @@ export class QueueProcessor {
       // If direct field is available at the top level
       if (responseData[item.priorityIdField] !== undefined) {
         const idValue = responseData[item.priorityIdField];
-        return idValue !== null && idValue !== undefined
-          ? String(idValue)
-          : null;
+        // Return the exact value as-is without String() conversion
+        return idValue !== null && idValue !== undefined ? idValue : null;
       }
       // For batch responses that might have nested structure
       else if (
@@ -540,9 +539,8 @@ export class QueueProcessor {
         responseData.body[item.priorityIdField] !== undefined
       ) {
         const idValue = responseData.body[item.priorityIdField];
-        return idValue !== null && idValue !== undefined
-          ? String(idValue)
-          : null;
+        // Return the exact value as-is without String() conversion
+        return idValue !== null && idValue !== undefined ? idValue : null;
       }
     }
 
