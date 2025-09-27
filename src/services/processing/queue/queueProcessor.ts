@@ -93,9 +93,9 @@ export class QueueProcessor {
    */
   public setRateLimit(limit: number): void {
     this.rateLimit = limit;
-    console.log(
-      `Queue ${this.queueId}: Rate limit set to ${limit} requests/minute`
-    );
+    // console.log(
+    //   `Queue ${this.queueId}: Rate limit set to ${limit} requests/minute`
+    // );
   }
 
   /**
@@ -104,7 +104,7 @@ export class QueueProcessor {
    */
   public setMinDelay(delay: number): void {
     this.minDelay = delay;
-    console.log(`Queue ${this.queueId}: Minimum delay set to ${delay}ms`);
+    // console.log(`Queue ${this.queueId}: Minimum delay set to ${delay}ms`);
   }
 
   /**
@@ -114,9 +114,9 @@ export class QueueProcessor {
   public setConcurrency(limit: number): void {
     this.concurrencyLimit = limit;
     this.normalConcurrency = limit;
-    console.log(
-      `Queue ${this.queueId}: Concurrency limit set to ${limit} items`
-    );
+    // console.log(
+    //   `Queue ${this.queueId}: Concurrency limit set to ${limit} items`
+    // );
   }
 
   /**
