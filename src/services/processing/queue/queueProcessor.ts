@@ -591,7 +591,7 @@ export class QueueProcessor {
         // For PATCH requests or child records, targetId already contains the full path
         const url = `${baseUrl}${company}/${targetId}`;
 
-        console.log(`Delta ${method} request to: ${url}`);
+        // console.log(`Delta ${method} request to: ${url}`);
 
         const response = await axios({
           method,
