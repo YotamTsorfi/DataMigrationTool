@@ -67,7 +67,8 @@ export function extractPriorityId(
   // First try direct field access
   if (responseBody && responseBody[idFieldName] !== undefined) {
     const idValue = responseBody[idFieldName];
-    return idValue !== null && idValue !== undefined ? String(idValue) : null;
+    // Return the exact value as-is without String() conversion
+    return idValue !== null && idValue !== undefined ? idValue : null;
   }
 
   // Then try special AU fields which might contain the ID
@@ -75,11 +76,8 @@ export function extractPriorityId(
     if (key === idFieldName || key.includes("_AU")) {
       const value = responseBody[key];
       if (typeof value === "string" && value.includes("=")) {
-        // Extract from pattern like "(FIELDNAME='value')"
-        const match = value.match(/'([^']+)'/);
-        if (match && match[1]) {
-          return match[1];
-        }
+        // Return the full AU value directly instead of extracting just the quoted part
+        return value;
       }
     }
   }
@@ -90,7 +88,7 @@ export function extractPriorityId(
       // Look for typical ID patterns in any field
       const idMatch = responseBody[key].match(/\([A-Z]+=(['"])([^'"]+)\1\)/);
       if (idMatch && idMatch[2]) {
-        return idMatch[0];
+        return idMatch[0]; // Return the full match as-is
       }
     }
   }
@@ -143,7 +141,7 @@ export function extractChildPriorityId(
 
         // First try the configured priority_id field
         if (matchingRecord[idFieldName]) {
-          return String(matchingRecord[idFieldName]);
+          return matchingRecord[idFieldName];
         }
 
         // Then check for AU fields in this specific record
@@ -180,7 +178,7 @@ export function extractChildPriorityId(
           if (matchFound) {
             // Found a matching record - extract its ID
             if (responseRecord[idFieldName]) {
-              return String(responseRecord[idFieldName]);
+              return responseRecord[idFieldName];
             }
 
             // Check for AU fields in this record
@@ -205,7 +203,7 @@ export function extractChildPriorityId(
           const indexedRecord = subform[childIndex];
 
           if (indexedRecord[idFieldName]) {
-            return String(indexedRecord[idFieldName]);
+            return indexedRecord[idFieldName];
           }
 
           // Check for AU fields in this indexed record
@@ -223,7 +221,7 @@ export function extractChildPriorityId(
     // For single child record (HasSiblings=false)
     else if (typeof subform === "object" && subform !== null) {
       if (subform[idFieldName]) {
-        return String(subform[idFieldName]);
+        return subform[idFieldName];
       }
 
       // Check for AU fields in the single subform
@@ -262,7 +260,7 @@ export function extractChildPriorityId(
   // Check for direct field access in the response body
   if (responseBody && responseBody[idFieldName]) {
     const idValue = responseBody[idFieldName];
-    return idValue !== null && idValue !== undefined ? String(idValue) : null;
+    return idValue !== null && idValue !== undefined ? idValue : null;
   }
 
   // Try special AU fields which might contain the ID

@@ -15,10 +15,9 @@
     "axios": "^1.10.0",
     "moment-timezone": "^0.6.0",
     "postcss": "^8.4.31",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
     "react-router-dom": "^7.6.2",
-    "react-scripts": "^5.0.1",
     "react-toastify": "^11.0.5",
     "recharts": "^2.15.4",
     "socket.io-client": "^4.8.1",
@@ -60,5 +59,9 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "form-data": "^4.0.4",
+    "react-scripts": "^5.0.1"
   }
 }

@@ -187,6 +187,12 @@ class JobManager {
       logErrors: logErrors,
     });
 
+    // Determine if this is a delta job
+    const isDelta = jobRequest.jobType.toLowerCase().includes("delta");
+    console.log(
+      `Job ${jobId} is ${isDelta ? "a DELTA job" : "a standard job"}`
+    );
+
     // Update the job status to "Running"
     await this.updateJobStatus(jobId, "Running");
 
@@ -229,13 +235,20 @@ class JobManager {
         // Add table-specific conditions if we know the table structure
         const tableInfo = await this.getTableStructure(jobRequest.tableName);
 
-        // Only add conditions for columns that actually exist
-        if (tableInfo.hasColumn("is_eligible")) {
-          countQuery += ` AND is_eligible = 1`;
-        }
+        // For delta jobs, only check is_eligible
+        if (isDelta) {
+          if (tableInfo.hasColumn("is_eligible")) {
+            countQuery += ` AND is_eligible = 1 AND delta_action != 0 AND delta_action IS NOT NULL AND (Status != 'Completed' OR Status IS NULL)`;
+          }
+        } else {
+          // For regular jobs, check both is_eligible and is_new
+          if (tableInfo.hasColumn("is_eligible")) {
+            countQuery += ` AND is_eligible = 1`;
+          }
 
-        if (tableInfo.hasColumn("is_new")) {
-          countQuery += ` AND is_new = 1`;
+          if (tableInfo.hasColumn("is_new")) {
+            countQuery += ` AND is_new = 1`;
+          }
         }
 
         if (jobRequest.caseId && tableInfo.hasColumn("case_id")) {
@@ -247,9 +260,14 @@ class JobManager {
           countQuery += ` AND ${customWhereClause}`;
         }
 
-        console.log(`Count query for all records: ${countQuery}`);
+        console.log(
+          `Count query for ${isDelta ? "delta" : "standard"} job: ${countQuery}`
+        );
 
-        const countResult = await DatabaseService.executeQuery(countQuery);
+        const countResult = await DatabaseService.executeQuery(
+          countQuery,
+          jobRequest.caseId ? { CaseId: jobRequest.caseId } : undefined
+        );
 
         if (countResult && countResult.length > 0) {
           const totalCount = (countResult[0] as { totalCount: number })

@@ -96,6 +96,72 @@ router.post(
   }
 );
 
+// Add a route specifically for delta jobs
+router.post(
+  "/start-delta-job/:type",
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { type } = req.params;
+      const jobRequest = req.body;
+
+      // Validate processing type
+      if (type !== "batch" && type !== "queue") {
+        res.status(400).json({
+          success: false,
+          error: "Processing type must be 'batch' or 'queue'",
+        });
+        return;
+      }
+
+      // Validate that this is a delta job
+      if (!jobRequest.jobType.toLowerCase().includes("delta")) {
+        res.status(400).json({
+          success: false,
+          error:
+            "This endpoint is only for delta jobs. Job type must include 'delta'",
+        });
+        return;
+      }
+
+      // Validate case ID
+      if (
+        !jobRequest.caseId ||
+        !jobRequest.caseId.toLowerCase().includes("delta")
+      ) {
+        res.status(400).json({
+          success: false,
+          error: "Delta jobs require a case ID that includes 'delta'",
+        });
+        return;
+      }
+
+      // Add processing type to job request
+      jobRequest.processingType = type;
+
+      const jobManager = new JobManager();
+      const jobId = await jobManager.createJob(jobRequest);
+
+      // Start job asynchronously
+      jobManager
+        .startJob(jobId, jobRequest)
+        .catch((error) =>
+          console.error(`Error running delta job ${jobId}:`, error)
+        );
+
+      res.status(202).json({
+        success: true,
+        jobId,
+        message: `Delta job started with ${type} processing, check progress via status endpoint`,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: formatErrorMessage(error),
+      });
+    }
+  }
+);
+
 // Endpoint to cancel a running job
 router.post("/cancel/:jobId", async (req, res) => {
   try {

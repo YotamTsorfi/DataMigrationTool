@@ -33,6 +33,8 @@ const httpsAgent = new https.Agent({
  * Processes a queue of items by sending them to Priority API individually
  */
 export class QueueProcessor {
+  private isDelta: boolean = false;
+  private isChildDelta: boolean = false;
   private queue: QueueItem[] = [];
   private queueId: string;
   private jobId: string;
@@ -74,6 +76,11 @@ export class QueueProcessor {
     this.performanceMonitor.startOperation();
   }
 
+  public setDeltaMode(isDelta: boolean, isChildDelta: boolean = false): void {
+    this.isDelta = isDelta;
+    this.isChildDelta = isChildDelta;
+  }
+
   public setUpdateBatchTable(update: boolean): void {
     this.updateBatchTable = update;
   }
@@ -86,9 +93,9 @@ export class QueueProcessor {
    */
   public setRateLimit(limit: number): void {
     this.rateLimit = limit;
-    console.log(
-      `Queue ${this.queueId}: Rate limit set to ${limit} requests/minute`
-    );
+    // console.log(
+    //   `Queue ${this.queueId}: Rate limit set to ${limit} requests/minute`
+    // );
   }
 
   /**
@@ -97,7 +104,7 @@ export class QueueProcessor {
    */
   public setMinDelay(delay: number): void {
     this.minDelay = delay;
-    console.log(`Queue ${this.queueId}: Minimum delay set to ${delay}ms`);
+    // console.log(`Queue ${this.queueId}: Minimum delay set to ${delay}ms`);
   }
 
   /**
@@ -107,9 +114,9 @@ export class QueueProcessor {
   public setConcurrency(limit: number): void {
     this.concurrencyLimit = limit;
     this.normalConcurrency = limit;
-    console.log(
-      `Queue ${this.queueId}: Concurrency limit set to ${limit} items`
-    );
+    // console.log(
+    //   `Queue ${this.queueId}: Concurrency limit set to ${limit} items`
+    // );
   }
 
   /**
@@ -144,7 +151,7 @@ export class QueueProcessor {
   public getQueueId(): string {
     return this.queueId;
   }
-
+  //-------------------------------------------------------------------
   // Start processing the queue
   public async process(): Promise<QueueProcessorResult> {
     if (this.processing) {
@@ -172,11 +179,9 @@ export class QueueProcessor {
     const batchId = uuidv4();
 
     try {
-      // console.log(`Queue ${this.queueId} starting processing ${this.queue.length} items`);
-      //// Explanation:
-      //// - We process items in batches of CONCURRENT_ITEMS (40) to improve performance.
-      //// - Each batch is processed in parallel using Promise.all.
-      //// Process all items in the queue
+      // We process items in batches of CONCURRENT_ITEMS (40) to improve performance.
+      // Each batch is processed in parallel using Promise.all.
+      // Process all items in the queue
       for (let i = 0; i < this.queue.length; i += QUEUE_CONCURRENT_ITEMS) {
         const batch = this.queue.slice(i, i + QUEUE_CONCURRENT_ITEMS);
 
@@ -328,50 +333,84 @@ export class QueueProcessor {
       }
       // Standard process for parent-only items
       else {
-        const response = await this.sendRequest(item);
+        // Determine if this is a delta item
+        const isDelta = "isDelta" in item && item.isDelta === true;
+        const isChildDelta =
+          "isChildDelta" in item && item.isChildDelta === true;
+        const deltaMetadata =
+          "deltaMetadata" in item ? (item as any).deltaMetadata : null;
+
+        let response;
+
+        if (isDelta) {
+          // For delta processing, we need to determine if it's an insert or update
+          const isNew = deltaMetadata?.delta_action === 1;
+          const isUpdate = deltaMetadata?.delta_action === 2;
+
+          // For child delta items that are new, use parent_priority_id in the URL
+          if (isNew && isChildDelta && deltaMetadata?.parent_priority_id) {
+            // For new child records, send to the parent's subform
+            response = await this.sendDeltaRequest(
+              item,
+              "POST",
+              deltaMetadata?.parent_priority_id
+            );
+          }
+          // For modified items, use priority_id for PATCH operations
+          else if (isUpdate && deltaMetadata?.priority_id) {
+            // For updates, send a PATCH request with the existing priority_id
+            response = await this.sendDeltaRequest(
+              item,
+              "PATCH",
+              deltaMetadata.priority_id
+            );
+          }
+          // For new non-child items, use standard POST
+          else if (isNew) {
+            // For new records, use standard POST
+            response = await this.sendRequest(item);
+          }
+          // Fallback if conditions are not met
+          else {
+            console.warn(`Cannot determine operation type for delta item:`, {
+              isDelta,
+              isChildDelta,
+              metadata: deltaMetadata,
+            });
+            response = await this.sendRequest(item);
+          }
+        } else {
+          // Standard non-delta processing
+          response = await this.sendRequest(item);
+        }
 
         if (response.success) {
           this.successCount++;
 
-          // Extract Priority ID from successful response using the dynamic field
+          // Extract Priority ID with specific handling for delta
           let priorityId = null;
-          if (
-            response.data &&
-            typeof response.data === "object" &&
-            item.priorityIdField
-          ) {
-            try {
-              // If direct field is available at the top level
-              if (response.data[item.priorityIdField] !== undefined) {
-                const idValue = response.data[item.priorityIdField];
-                priorityId =
-                  idValue !== null && idValue !== undefined
-                    ? String(idValue)
-                    : null;
-              }
-              // For batch responses that might have nested structure
-              else if (
-                response.data.body &&
-                response.data.body[item.priorityIdField] !== undefined
-              ) {
-                const idValue = response.data.body[item.priorityIdField];
-                priorityId =
-                  idValue !== null && idValue !== undefined
-                    ? String(idValue)
-                    : null;
-              }
-            } catch (err) {
-              if (err && typeof err === "object" && "message" in err) {
-                console.warn(
-                  `Error extracting priority_id: ${(err as any).message}`
-                );
-              } else {
-                console.warn(`Error extracting priority_id:`, err);
-              }
-              priorityId = null;
+
+          if (isDelta) {
+            // To update = delta_action === 2
+            if (deltaMetadata?.delta_action === 2) {
+              // For updates, keep the existing priority_id from metadata
+              priorityId = deltaMetadata.priority_id;
+            } else {
+              // For new records, extract from response
+              priorityId = this.extractPriorityIdFromResponse(
+                response.data,
+                item
+              );
             }
+          } else {
+            // Standard priority ID extraction
+            priorityId = this.extractPriorityIdFromResponse(
+              response.data,
+              item
+            );
           }
 
+          // Create update record
           this.updateRows.push({
             RowId: item.row.RowId,
             BatchId: item.batchId,
@@ -381,11 +420,12 @@ export class QueueProcessor {
             CleanError: null,
             JobId: item.jobId,
             priority_id: priorityId,
-            is_new: 0,
+            is_new: isDelta ? deltaMetadata?.is_new : 0,
             StatusCode: response.status || 200,
           });
         } else {
           this.failureCount++;
+
           // Update the error rows with a cleaned error message
           const cleanErrorMessage = this.formatErrorMessage(
             response.error || "",
@@ -393,6 +433,7 @@ export class QueueProcessor {
             response.errorData
           );
 
+          // For delta failures, handle priority_id and is_new accordingly
           this.updateRows.push({
             RowId: item.row.RowId,
             BatchId: item.batchId,
@@ -401,8 +442,8 @@ export class QueueProcessor {
             Error: cleanErrorMessage,
             CleanError: generateCleanError(cleanErrorMessage),
             JobId: item.jobId,
-            priority_id: null,
-            is_new: 1,
+            priority_id: isDelta ? deltaMetadata?.priority_id : null,
+            is_new: isDelta ? deltaMetadata?.is_new : 1,
             StatusCode: response.status || 500,
           });
 
@@ -444,6 +485,11 @@ export class QueueProcessor {
         this.progressListener(this.successCount, this.failureCount);
       }
 
+      // Check if the item has delta metadata
+      const isDelta = "isDelta" in item && item.isDelta === true;
+      const deltaMetadata =
+        "deltaMetadata" in item ? (item as any).deltaMetadata : null;
+
       this.updateRows.push({
         RowId: item.row.RowId,
         BatchId: item.batchId,
@@ -452,8 +498,8 @@ export class QueueProcessor {
         Error: errorMessage,
         CleanError: generateCleanError(errorMessage),
         JobId: item.jobId,
-        priority_id: null,
-        is_new: 1,
+        priority_id: isDelta ? deltaMetadata?.priority_id : null,
+        is_new: isDelta ? deltaMetadata?.is_new : 1,
       });
 
       this.errorRows.push({
@@ -467,7 +513,202 @@ export class QueueProcessor {
       });
     }
   }
+  //------------------------------------------------------
+  /**
+   * Extract Priority ID from response data
+   */
+  private extractPriorityIdFromResponse(
+    responseData: any,
+    item: QueueItem
+  ): string | null {
+    if (!responseData || typeof responseData !== "object") {
+      return null;
+    }
 
+    // Try to get priority ID using the specified field
+    if (item.priorityIdField) {
+      // If direct field is available at the top level
+      if (responseData[item.priorityIdField] !== undefined) {
+        const idValue = responseData[item.priorityIdField];
+        // Return the exact value as-is without String() conversion
+        return idValue !== null && idValue !== undefined ? idValue : null;
+      }
+      // For batch responses that might have nested structure
+      else if (
+        responseData.body &&
+        responseData.body[item.priorityIdField] !== undefined
+      ) {
+        const idValue = responseData.body[item.priorityIdField];
+        // Return the exact value as-is without String() conversion
+        return idValue !== null && idValue !== undefined ? idValue : null;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Send a delta request (POST or PATCH) to the Priority API
+   */
+  private async sendDeltaRequest(
+    item: QueueItem,
+    method: "POST" | "PATCH",
+    targetId: string
+  ): Promise<QueueItemResponse> {
+    const maxRetries = 3;
+    let retryCount = 0;
+    const config = await configService.getConfig();
+    const timeout = config.TIME_OUT || 240000;
+
+    // Remove internal fields from the object
+    const {
+      RowId,
+      __batchId,
+      __jobType,
+      __tableName,
+      __jobId,
+      __priorityScreenName,
+      __deltaMetadata,
+      ...requestDataWithMeta
+    } = item.row;
+
+    const { __deltaMetadata: removed, ...requestData } = requestDataWithMeta;
+
+    // Also remove metadata if it exists at the top level
+    if ("__deltaMetadata" in requestData) {
+      delete requestData.__deltaMetadata;
+    }
+
+    while (retryCount < maxRetries) {
+      try {
+        // Prepare the URL for the request
+        let baseUrl = config.PRIORITY_BASE_URL;
+        if (!baseUrl.endsWith("/")) baseUrl += "/";
+        let company = config.PRIORITY_COMPANY;
+        if (company.endsWith("/")) company = company.slice(0, -1);
+
+        // Construct the full URL for the request
+        // For PATCH requests or child records, targetId already contains the full path
+        const url = `${baseUrl}${company}/${targetId}`;
+
+        console.log(`Delta ${method} request to: ${url}`);
+
+        const response = await axios({
+          method,
+          url,
+          data: requestData,
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            "OData-Version": "4.0",
+            Authorization: `Basic ${Buffer.from(`${config.PRIORITY_PAT}:${config.PRIORITY_PASSWORD}`).toString("base64")}`,
+          },
+          timeout,
+          httpAgent,
+          httpsAgent,
+        });
+
+        this.totalRequests++;
+        return {
+          success: true,
+          status: response.status,
+          data: response.data,
+          row: item.row,
+        };
+      } catch (error: any) {
+        retryCount++;
+        const errorMessage = formatAxiosError(error);
+
+        // Extract the full error response data
+        const errorData = axios.isAxiosError(error)
+          ? error.response?.data
+          : null;
+
+        // Handle service unavailable (HTTP 503)
+        if (axios.isAxiosError(error) && error.response?.status === 503) {
+          this.total503Errors++;
+          this.totalRequests++;
+          this.errorCount503++;
+          this.lastErrorTimeStamp = Date.now();
+
+          // Check for specific 503 error types from response headers
+          const retryAfter = error.response.headers["retry-after"];
+          const errorType = error.response.headers["x-error-type"] || "unknown";
+
+          // Calculate adaptive delay with server guidance
+          let delayMs = retryAfter
+            ? parseInt(retryAfter) * 1000
+            : 1000 * Math.pow(2, retryCount);
+
+          // Add randomness to prevent thundering herd
+          delayMs += Math.floor(Math.random() * 500);
+
+          // For server overload, optionally add extra delay
+          if (errorType === "overload" && delayMs < 5000) {
+            delayMs = Math.max(delayMs, 5000);
+          }
+
+          if (this.logRetries) {
+            console.log(
+              `Service unavailable (503 - ${errorType}). Retry attempt ${retryCount}/${maxRetries} after ${delayMs}ms delay.`
+            );
+          }
+
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+          continue;
+        }
+        // Handle rate limiting (HTTP 429)
+        if (axios.isAxiosError(error) && error.response?.status === 429) {
+          const retryAfter = error.response.headers["retry-after"];
+          let delayMs = retryAfter
+            ? parseInt(retryAfter) * 1000
+            : 500 * Math.pow(2, retryCount);
+          delayMs += Math.floor(Math.random() * 500);
+
+          if (this.logRetries) {
+            console.log(
+              `Rate limit exceeded (429). Retry attempt ${retryCount} after ${delayMs}ms delay. ${errorMessage}`
+            );
+          }
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+          continue;
+        }
+
+        // Only retry on network errors and 5xx server errors
+        if (
+          axios.isAxiosError(error) &&
+          (error.code === "ETIMEDOUT" ||
+            error.code === "ECONNABORTED" ||
+            error.code === "ECONNREFUSED" ||
+            (error.response?.status && error.response.status >= 500))
+        ) {
+          const delay = 1000 * Math.pow(2, retryCount);
+          if (this.logRetries) {
+            console.log(
+              `Retry attempt ${retryCount} after error: ${errorMessage}. Delay: ${delay}ms`
+            );
+          }
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        } else {
+          // If the error is not a retryable error, log it and return the error response
+          return {
+            success: false,
+            status: error.response?.status || 0,
+            error: errorMessage,
+            errorData: errorData,
+            row: item.row,
+          };
+        }
+      }
+    }
+
+    return {
+      success: false,
+      status: 0,
+      error: `Failed after ${maxRetries} retries`,
+      row: item.row,
+    };
+  }
   //------------------------------------------------------
   // Format error message to be more user friendly
   private formatErrorMessage(
@@ -628,8 +869,11 @@ export class QueueProcessor {
       __tableName,
       __jobId,
       __priorityScreenName,
-      ...requestData
+      __deltaMetadata,
+      ...requestDataWithMeta
     } = item.row;
+
+    const { __deltaMetadata: removed, ...requestData } = requestDataWithMeta;
 
     while (retryCount < maxRetries) {
       try {

@@ -252,7 +252,7 @@ export async function processParentChildResponse(
               // Force each priority_id to be an explicit string or null
               priority_id:
                 update.priority_id !== null && update.priority_id !== undefined
-                  ? String(update.priority_id)
+                  ? update.priority_id
                   : null,
               // Make sure other fields match their expected types
               is_new: Number(update.is_new),

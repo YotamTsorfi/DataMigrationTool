@@ -240,7 +240,7 @@ export function processApiResponse(
     if (responseItem?.status < 400 && responseItem?.body) {
       // Use the priorityIdField parameter to determine which field to check
       if (priorityIdField && responseItem.body[priorityIdField] !== undefined) {
-        priorityId = responseItem.body[priorityIdField].toString();
+        priorityId = responseItem.body[priorityIdField];
         // console.log(`Found ${priorityIdField} ID: ${priorityId}`);
       } else if (
         responseItem.body["@odata.context"] &&
