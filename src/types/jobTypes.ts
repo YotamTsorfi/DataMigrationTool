@@ -1,4 +1,16 @@
-// Interface for queue items
+export interface DeltaMetadata {
+  is_new: number;
+  delta_action: number;
+  priority_id: string | null;
+  reference_id: string | null;
+  parent_priority_id?: string | null;
+}
+
+// Enhanced queue item with delta metadata
+export interface DeltaQueueItem extends QueueItem {
+  isDelta: boolean;
+  deltaMetadata?: DeltaMetadata;
+}
 
 export interface ParentRecord {
   RowId: number;

@@ -412,7 +412,7 @@ export class DatabaseService {
             ? null
             : update.priority_id === null
               ? null
-              : String(update.priority_id),
+              : update.priority_id,
         is_new: update.is_new,
         StatusCode: update.StatusCode || null,
       };
@@ -786,6 +786,7 @@ export class DatabaseService {
    *
    * Retrieves records that match the specified criteria with optimized performance.
    * This is a lower-level database function that returns raw database records.
+   * including support for delta processing and parent-child relationships.
    *
    * @param tableName - The source table to query
    * @param lastRowId - The ID to start fetching from (for pagination)
@@ -801,12 +802,31 @@ export class DatabaseService {
     chunkSize: number,
     customWhereClause?: string,
     caseId?: string,
-    baseWhereClause: string = "is_eligible = 1 AND is_new = 1"
-  ): Promise<Array<{ RowId: number; Data: string }>> {
+    baseWhereClause: string = "is_eligible = 1 AND is_new = 1",
+    isDelta: boolean = false,
+    isChildDelta: boolean = false,
+    parentTableName?: string
+  ): Promise<
+    Array<{
+      RowId: number;
+      Data: string;
+      is_new?: number;
+      delta_action?: number;
+      priority_id?: string | null;
+      reference_id?: string | null;
+      parent_priority_id?: string | null;
+    }>
+  > {
     const perfMonitor = new PerformanceMonitor();
     perfMonitor.startDbFetch();
 
     try {
+      // For delta processing
+      if (isDelta) {
+        baseWhereClause =
+          "is_eligible = 1 AND delta_action != 0 AND delta_action IS NOT NULL AND (Status != 'Completed' OR Status IS NULL)";
+      }
+
       // Build the WHERE clause with the base condition
       let whereClause = `RowId > @lastRowId AND ${baseWhereClause}`;
 
@@ -820,12 +840,19 @@ export class DatabaseService {
         whereClause += ` AND (${customWhereClause})`;
       }
 
+      // Select delta metadata fields for delta processing
+      let selectClause = "RowId, Data";
+      if (isDelta) {
+        selectClause =
+          "RowId, Data, is_new, delta_action, priority_id, reference_id";
+      }
+
       const query = `
-        SELECT TOP (@chunkSize) RowId, Data
-        FROM ${tableName}
-        WHERE ${whereClause}
-        ORDER BY RowId ASC
-      `;
+      SELECT TOP (@chunkSize) ${selectClause}
+      FROM ${tableName}
+      WHERE ${whereClause}
+      ORDER BY RowId ASC
+    `;
 
       // Prepare query parameters
       const params: Record<string, any> = {
@@ -837,11 +864,79 @@ export class DatabaseService {
         params.caseId = caseId;
       }
 
-      // Execute the query and return raw results
-      const rowsData = await this.executeQuery<{ RowId: number; Data: string }>(
-        query,
-        params
-      );
+      // Execute the query and get base results
+      const rowsData = await this.executeQuery<{
+        RowId: number;
+        Data: string;
+        is_new?: number;
+        delta_action?: number;
+        priority_id?: string | null;
+        reference_id?: string | null;
+        parent_priority_id?: string | null;
+      }>(query, params);
+
+      // For child delta tables, fetch parent information
+      if (isDelta && isChildDelta && parentTableName && rowsData.length > 0) {
+        // Get all reference_ids for new child records
+        const newChildRecords = rowsData.filter(
+          (row: any) => row.delta_action === 1 && row.reference_id
+        );
+
+        if (newChildRecords.length > 0) {
+          const referenceIds = newChildRecords
+            .map((row: any) => row.reference_id)
+            .filter(Boolean);
+
+          if (referenceIds.length > 0) {
+            // Create a parameter for each reference_id to avoid SQL injection
+            const referenceIdParams = referenceIds
+              .map((_, idx) => `@refId${idx}`)
+              .join(", ");
+            const referenceIdParamsObj: Record<string, any> = {};
+            referenceIds.forEach((id, idx) => {
+              referenceIdParamsObj[`refId${idx}`] = id;
+            });
+
+            // Add caseId to the parameters object if it exists
+            if (caseId) {
+              referenceIdParamsObj.caseId = caseId;
+            }
+
+            // Query to get parent priority_ids
+            const parentQuery = `
+            SELECT reference_id, priority_id 
+            FROM ${parentTableName}
+            WHERE reference_id IN (${referenceIdParams})   
+              AND case_id = @caseId AND is_eligible = 1
+          `;
+
+            const parentData = await this.executeQuery(
+              parentQuery,
+              referenceIdParamsObj
+            );
+
+            // Create a lookup map for parent priority_ids
+            const parentPriorityMap = new Map();
+            parentData.forEach((parent: any) => {
+              if (parent.reference_id && parent.priority_id) {
+                parentPriorityMap.set(parent.reference_id, parent.priority_id);
+              }
+            });
+
+            // Enrich child records with parent priority_ids
+            rowsData.forEach((row: any) => {
+              if (row.delta_action === 1 && row.reference_id) {
+                const parentPriorityId = parentPriorityMap.get(
+                  row.reference_id
+                );
+                if (parentPriorityId) {
+                  row.parent_priority_id = parentPriorityId;
+                }
+              }
+            });
+          }
+        }
+      }
 
       perfMonitor.endDbFetch();
       return rowsData;

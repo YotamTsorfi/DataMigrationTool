@@ -128,6 +128,25 @@ const BatchProcessor: React.FC = () => {
   };
   //---------------------------------------------
   /**
+   * Determines if the selected job type is a delta job based on its name
+   * @returns boolean indicating if the current job is a delta job
+   */
+  const isDeltaJob = (): boolean => {
+    return selectedJobType.toLowerCase().includes("delta");
+  };
+
+  /**
+   * Validates case ID for delta jobs to ensure it contains 'delta'
+   * @returns boolean indicating if the case ID is valid for the job type
+   */
+  const isValidCaseId = (): boolean => {
+    if (isDeltaJob()) {
+      return selectedCaseId.toLowerCase().includes("delta");
+    }
+    return true; // Non-delta jobs don't have special case ID requirements
+  };
+  //---------------------------------------------
+  /**
    * Clears the WHERE clause for the selected job type
    */
   const clearWhereClause = async (): Promise<void> => {
@@ -307,33 +326,55 @@ const BatchProcessor: React.FC = () => {
       if (!isValid) return;
     }
 
+    // For delta jobs, validate that the case ID contains 'delta'
+    if (isDeltaJob() && !isValidCaseId()) {
+      toast.error("Delta jobs require a case ID that includes 'delta'");
+      return;
+    }
+
     setIsProcessing(true);
 
     try {
-      // Use the specific endpoint for processing type and include the WHERE clause
-      await axios.post(
-        `${process.env.REACT_APP_API_URL}/job/start-with-type/${processingType}`,
-        {
-          processAllRecords,
-          recordCount: processAllRecords ? -1 : recordCount,
-          startRow: processAllRecords ? 1 : startRow,
-          tableName,
-          priorityScreenName,
-          jobType: selectedJobType,
-          priorityIdField,
-          priorityLinkedField,
-          priorityJobTypeId,
-          customWhereClause: customWhereClause.trim() || undefined,
-          caseId: selectedCaseId,
-        }
-      );
+      // Determine which endpoint to use based on job type
+      const endpoint = isDeltaJob()
+        ? `${process.env.REACT_APP_API_URL}/job/start-delta-job/${processingType}`
+        : `${process.env.REACT_APP_API_URL}/job/start-with-type/${processingType}`;
 
-      // toast.success(`Job started using ${processingType} processing`);
-    } catch (error) {
-      console.error("Batch process error:", error);
-      toast.error(
-        `Failed to start job: ${error instanceof Error ? error.message : "Unknown error"}`
+      // Prepare request payload
+      const payload = {
+        processAllRecords,
+        recordCount: processAllRecords ? -1 : recordCount,
+        startRow: processAllRecords ? 1 : startRow,
+        tableName,
+        priorityScreenName,
+        jobType: selectedJobType,
+        priorityIdField,
+        priorityLinkedField,
+        priorityJobTypeId,
+        customWhereClause: customWhereClause.trim() || undefined,
+        caseId: selectedCaseId,
+      };
+
+      await axios.post(endpoint, payload);
+
+      // Show appropriate success message based on job type
+      toast.success(
+        isDeltaJob()
+          ? `Delta job started with ${processingType} processing`
+          : `Job started with ${processingType} processing`
       );
+    } catch (error) {
+      console.error("Process error:", error);
+
+      // Extract and display error message
+      let errorMessage = "Unknown error occurred";
+      if (axios.isAxiosError(error) && error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
+      toast.error(`Failed to start job: ${errorMessage}`);
     } finally {
       setIsProcessing(false);
     }
@@ -412,6 +453,27 @@ const BatchProcessor: React.FC = () => {
                     </option>
                   ))}
                 </select>
+                {isDeltaJob() && (
+                  <InfoBox
+                    style={{
+                      marginTop: "10px",
+                      backgroundColor: "#e8f4fd",
+                      borderColor: "#4dabf7",
+                    }}
+                  >
+                    <strong>Delta Job Selected</strong>
+                    <p>
+                      This is a delta job that processes only new or modified
+                      records.
+                      {selectedJobType.toLowerCase().includes("child") &&
+                        " This job includes parent-child relationships."}
+                    </p>
+                    <p>
+                      <strong>Important:</strong> Delta jobs require a case ID
+                      that contains 'delta'.
+                    </p>
+                  </InfoBox>
+                )}
               </InputLabel>
               <InputLabel style={{ display: "flex", alignItems: "center" }}>
                 <br />
@@ -586,7 +648,9 @@ const BatchProcessor: React.FC = () => {
           >
             {isProcessing
               ? "Processing..."
-              : `Process with ${processingType.charAt(0).toUpperCase() + processingType.slice(1)}`}
+              : isDeltaJob()
+                ? `Process Delta with ${processingType.charAt(0).toUpperCase() + processingType.slice(1)}`
+                : `Process with ${processingType.charAt(0).toUpperCase() + processingType.slice(1)}`}
           </SecureButton>
         </SectionContainer>
 
