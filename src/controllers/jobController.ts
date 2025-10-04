@@ -97,3 +97,67 @@ export const getActiveCaseIds = async (
     });
   }
 };
+
+/**
+ * Gets the count of records to be added and updated for a delta job
+ * @param req - Express request object with tableName and caseId query parameters
+ * @param res - Express response object
+ */
+export const getDeltaRecordCounts = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { tableName, caseId } = req.query;
+
+    if (!tableName || !caseId) {
+      res.status(400).json({
+        success: false,
+        error: "Table name and case ID are required",
+      });
+      return;
+    }
+
+    const pool = await poolPromise;
+    if (!pool) {
+      throw new Error("Database connection pool is null");
+    }
+
+    // Get counts for delta_action=1 (add) and delta_action=2 (update)
+    const result = await pool.request().query(`
+      SELECT 
+        delta_action,
+        COUNT(*) as count
+      FROM ${tableName}
+      WHERE case_id = '${caseId}'
+        AND delta_action IN (1, 2)
+      GROUP BY delta_action
+    `);
+
+    // Process results into a more usable format
+    const counts = {
+      toAdd: 0,
+      toUpdate: 0,
+    };
+
+    result.recordset.forEach((row: any) => {
+      if (row.delta_action === 1) {
+        counts.toAdd = row.count;
+      } else if (row.delta_action === 2) {
+        counts.toUpdate = row.count;
+      }
+    });
+
+    res.status(200).json({
+      success: true,
+      data: counts,
+    });
+  } catch (error) {
+    console.error("Error getting delta record counts:", error);
+    res.status(500).json({
+      success: false,
+      error:
+        error instanceof Error ? error.message : "Failed to get record counts",
+    });
+  }
+};

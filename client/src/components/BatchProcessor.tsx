@@ -26,8 +26,60 @@ import { useAuthProtection } from "./withAuthProtection";
 import { fetchChildJobs as fetchChildJobsFromService } from "../services/jobTypesService";
 import { IChildJob } from "./JobTypesManager/JobTypesManager";
 import CaseIdSelector from "./CaseIdSelector";
+
+//---------------------------------------------
+// Icon components using inline SVG instead of react-icons
+interface IconProps {
+  style?: React.CSSProperties;
+}
+
+const FaSpinner: React.FC<IconProps> = ({ style }) => (
+  <svg
+    style={{
+      width: "16px",
+      height: "16px",
+      fill: "currentColor",
+      ...style,
+    }}
+    viewBox="0 0 512 512"
+  >
+    <path d="M304 48C304 74.51 282.5 96 256 96C229.5 96 208 74.51 208 48C208 21.49 229.5 0 256 0C282.5 0 304 21.49 304 48zM304 464C304 490.5 282.5 512 256 512C229.5 512 208 490.5 208 464C208 437.5 229.5 416 256 416C282.5 416 304 437.5 304 464zM0 256C0 229.5 21.49 208 48 208C74.51 208 96 229.5 96 256C96 282.5 74.51 304 48 304C21.49 304 0 282.5 0 256zM512 256C512 282.5 490.5 304 464 304C437.5 304 416 282.5 416 256C416 229.5 437.5 208 464 208C490.5 208 512 229.5 512 256zM74.98 437C56.23 418.3 56.23 387.7 74.98 368.1C93.73 349.4 124.3 349.4 143 368.1C161.7 386.8 161.7 417.4 143 436.1C124.3 454.8 93.73 454.8 74.98 437zM437 74.98C418.3 56.23 418.3 25.77 437 7.029C455.7-11.68 486.3-11.68 505 7.029C523.7 25.77 523.7 56.31 505 74.98C486.3 93.65 455.7 93.65 437 74.98z" />
+  </svg>
+);
+
+const FaChevronDown: React.FC<IconProps> = ({ style }) => (
+  <svg
+    style={{
+      width: "16px",
+      height: "16px",
+      fill: "currentColor",
+      ...style,
+    }}
+    viewBox="0 0 448 512"
+  >
+    <path d="M201.4 374.6c12.5 12.5 32.8 12.5 45.3 0l160-160c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L224 306.7 86.6 169.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l160 160z" />
+  </svg>
+);
+
+const FaChevronUp: React.FC<IconProps> = ({ style }) => (
+  <svg
+    style={{
+      width: "16px",
+      height: "16px",
+      fill: "currentColor",
+      ...style,
+    }}
+    viewBox="0 0 448 512"
+  >
+    <path d="M201.4 137.4c12.5-12.5 32.8-12.5 45.3 0l160 160c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L224 205.3 86.6 342.6c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3l160-160z" />
+  </svg>
+);
 //---------------------------------------------
 
+interface DeltaRecordCounts {
+  toAdd: number;
+  toUpdate: number;
+}
 interface JobType {
   JobTypeId: number;
   JobTypeName: string;
@@ -70,8 +122,53 @@ const BatchProcessor: React.FC = () => {
   const [isLoadingChildJobs, setIsLoadingChildJobs] = useState(false);
 
   const [selectedCaseId, setSelectedCaseId] = useState<string>("");
+
+  const [deltaRecordCounts, setDeltaRecordCounts] =
+    useState<DeltaRecordCounts | null>(null);
+  const [isLoadingCounts, setIsLoadingCounts] = useState(false);
+  const [showDeltaCounts, setShowDeltaCounts] = useState(false);
   //---------------------------------------------
 
+  /**
+   * Fetches the counts of records to be added and updated for a delta job
+   */
+  const fetchDeltaRecordCounts = async (): Promise<void> => {
+    if (!isDeltaJob() || !selectedCaseId || !tableName) {
+      setDeltaRecordCounts(null);
+      return;
+    }
+
+    setIsLoadingCounts(true);
+    setDeltaRecordCounts(null);
+
+    try {
+      const response = await axios.get(
+        `${process.env.REACT_APP_API_URL}/job/delta-record-counts`,
+        {
+          params: {
+            tableName,
+            caseId: selectedCaseId,
+          },
+        }
+      );
+
+      if (response.data.success) {
+        setDeltaRecordCounts(response.data.data);
+      } else {
+        toast.error("Error fetching record counts: " + response.data.error);
+      }
+    } catch (error) {
+      console.error("Error fetching delta record counts:", error);
+      let errorMessage = "Failed to fetch record counts";
+      if (axios.isAxiosError(error) && error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      }
+      toast.error(errorMessage);
+    } finally {
+      setIsLoadingCounts(false);
+    }
+  };
+  //---------------------------------------------
   const handleProcessAllRecordsChange = (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
@@ -472,6 +569,174 @@ const BatchProcessor: React.FC = () => {
                       <strong>Important:</strong> Delta jobs require a case ID
                       that contains 'delta'.
                     </p>
+
+                    {selectedCaseId && (
+                      <div style={{ marginTop: "10px" }}>
+                        <button
+                          onClick={() => {
+                            setShowDeltaCounts(!showDeltaCounts);
+                            if (!deltaRecordCounts && !isLoadingCounts) {
+                              fetchDeltaRecordCounts();
+                            }
+                          }}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            width: "100%",
+                            padding: "8px 12px",
+                            backgroundColor: "#4dabf7",
+                            color: "white",
+                            border: "none",
+                            borderRadius: "4px",
+                            cursor: "pointer",
+                            fontSize: "14px",
+                            fontWeight: "bold",
+                          }}
+                        >
+                          <span>Show Record Counts for {selectedCaseId}</span>
+                          {showDeltaCounts ? (
+                            <FaChevronUp />
+                          ) : (
+                            <FaChevronDown />
+                          )}
+                        </button>
+
+                        {showDeltaCounts && (
+                          <div
+                            style={{
+                              padding: "10px",
+                              backgroundColor: "#f8f9fa",
+                              borderRadius: "4px",
+                              marginTop: "8px",
+                              border: "1px solid #dee2e6",
+                            }}
+                          >
+                            <h4 style={{ margin: "0 0 10px 0" }}>
+                              Delta Record Counts:
+                            </h4>
+
+                            {isLoadingCounts ? (
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  padding: "20px",
+                                }}
+                              >
+                                <FaSpinner
+                                  style={{
+                                    animation: "spin 1s linear infinite",
+                                    marginRight: "10px",
+                                    fontSize: "20px",
+                                    color: "#4dabf7",
+                                  }}
+                                />
+                                <span>
+                                  Loading record counts... (may take up to 30
+                                  seconds)
+                                </span>
+                                <style>
+                                  {`
+                        @keyframes spin {
+                          0% { transform: rotate(0deg); }
+                          100% { transform: rotate(360deg); }
+                        }
+                      `}
+                                </style>
+                              </div>
+                            ) : deltaRecordCounts ? (
+                              <div>
+                                <div
+                                  style={{
+                                    display: "grid",
+                                    gridTemplateColumns: "1fr 1fr",
+                                    gap: "8px",
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      padding: "10px",
+                                      backgroundColor: "#e8f4fd",
+                                      borderRadius: "4px",
+                                      textAlign: "center",
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        fontSize: "24px",
+                                        fontWeight: "bold",
+                                      }}
+                                    >
+                                      {deltaRecordCounts.toAdd.toLocaleString()}
+                                    </div>
+                                    <div>Records to Add</div>
+                                  </div>
+                                  <div
+                                    style={{
+                                      padding: "10px",
+                                      backgroundColor: "#e8f4fd",
+                                      borderRadius: "4px",
+                                      textAlign: "center",
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        fontSize: "24px",
+                                        fontWeight: "bold",
+                                      }}
+                                    >
+                                      {deltaRecordCounts.toUpdate.toLocaleString()}
+                                    </div>
+                                    <div>Records to Update</div>
+                                  </div>
+                                </div>
+                                <div
+                                  style={{
+                                    marginTop: "8px",
+                                    padding: "10px",
+                                    backgroundColor: "#d4edda",
+                                    borderRadius: "4px",
+                                    textAlign: "center",
+                                    fontWeight: "bold",
+                                  }}
+                                >
+                                  <span>
+                                    Total Records:{" "}
+                                    {(
+                                      deltaRecordCounts.toAdd +
+                                      deltaRecordCounts.toUpdate
+                                    ).toLocaleString()}
+                                  </span>
+                                </div>
+                              </div>
+                            ) : (
+                              <p>No delta records found for this case ID.</p>
+                            )}
+
+                            <button
+                              onClick={fetchDeltaRecordCounts}
+                              disabled={isLoadingCounts}
+                              style={{
+                                marginTop: "10px",
+                                padding: "6px 12px",
+                                backgroundColor: "#6c757d",
+                                color: "white",
+                                border: "none",
+                                borderRadius: "4px",
+                                cursor: isLoadingCounts
+                                  ? "not-allowed"
+                                  : "pointer",
+                                opacity: isLoadingCounts ? 0.7 : 1,
+                              }}
+                            >
+                              Refresh Counts
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </InfoBox>
                 )}
               </InputLabel>

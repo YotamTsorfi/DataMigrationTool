@@ -1,6 +1,10 @@
 import express, { Request, Response, Router } from "express";
 import { priorityAuthMiddleware } from "../middleware/priorityAuth";
-import { getJobTypes, getActiveCaseIds } from "../controllers/jobController";
+import {
+  getJobTypes,
+  getActiveCaseIds,
+  getDeltaRecordCounts,
+} from "../controllers/jobController";
 import { JobManager } from "../jobs/manager/jobManager";
 import ProgressTracker from "../utils/progressTracker";
 import { formatErrorMessage } from "../utils/errorHandler";
@@ -9,6 +13,8 @@ import { JobCancellationService } from "../utils/jobCancellationService";
 const router: Router = express.Router();
 router.use(priorityAuthMiddleware);
 
+// Route for delta record counts
+router.get("/delta-record-counts", getDeltaRecordCounts);
 //-----------------------------------
 //Router for case-related API endpoints
 router.get("/active-case-ids", getActiveCaseIds);
