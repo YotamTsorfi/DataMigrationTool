@@ -478,7 +478,7 @@ async function performDatabaseUpdatesAsync(
             const sanitized = strValue
               .replace(/\p{C}/gu, "")
               // .replace(/[\\"']/g, "")
-              .substring(0, 50);
+              .substring(0, 255);
             row.priority_id = sanitized || null;
 
             if (!sanitized || sanitized.length === 0) {
