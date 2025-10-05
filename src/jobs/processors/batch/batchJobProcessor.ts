@@ -304,7 +304,7 @@ async function processBatches(
   const results = [];
 
   // Process in chunks
-  const CHUNK_SIZE = 100000;
+  const CHUNK_SIZE = parseInt(config.FETCH_CHUNK_SIZE || "20000", 10);
   let processedCount = 0;
   let lastRowId = startRow - 1;
 

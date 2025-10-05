@@ -888,40 +888,53 @@ export class DatabaseService {
             .filter(Boolean);
 
           if (referenceIds.length > 0) {
-            // Create a parameter for each reference_id to avoid SQL injection
-            const referenceIdParams = referenceIds
-              .map((_, idx) => `@refId${idx}`)
-              .join(", ");
-            const referenceIdParamsObj: Record<string, any> = {};
-            referenceIds.forEach((id, idx) => {
-              referenceIdParamsObj[`refId${idx}`] = id;
-            });
-
-            // Add caseId to the parameters object if it exists
-            if (caseId) {
-              referenceIdParamsObj.caseId = caseId;
-            }
-
-            // Query to get parent priority_ids
-            const parentQuery = `
-            SELECT reference_id, priority_id 
-            FROM ${parentTableName}
-            WHERE reference_id IN (${referenceIdParams})   
-              AND case_id = @caseId AND is_eligible = 1
-          `;
-
-            const parentData = await this.executeQuery(
-              parentQuery,
-              referenceIdParamsObj
-            );
-
-            // Create a lookup map for parent priority_ids
+            // Create a Map to store all parent priority IDs
             const parentPriorityMap = new Map();
-            parentData.forEach((parent: any) => {
-              if (parent.reference_id && parent.priority_id) {
-                parentPriorityMap.set(parent.reference_id, parent.priority_id);
+
+            // Process reference IDs in batches to avoid SQL parameter limit
+            const BATCH_SIZE = 2000; // SQL Server max params is 2100, use 2000 to be safe
+
+            // Process reference IDs in batches
+            for (let i = 0; i < referenceIds.length; i += BATCH_SIZE) {
+              const batchReferenceIds = referenceIds.slice(i, i + BATCH_SIZE);
+
+              // Create parameters for this batch
+              const referenceIdParams = batchReferenceIds
+                .map((_, idx) => `@refId${idx}`)
+                .join(", ");
+              const referenceIdParamsObj: Record<string, any> = {};
+              batchReferenceIds.forEach((id, idx) => {
+                referenceIdParamsObj[`refId${idx}`] = id;
+              });
+
+              // Add caseId to the parameters object if it exists
+              if (caseId) {
+                referenceIdParamsObj.caseId = caseId;
               }
-            });
+
+              // Query to get parent priority_ids for this batch
+              const parentQuery = `
+              SELECT reference_id, priority_id 
+              FROM ${parentTableName}
+              WHERE reference_id IN (${referenceIdParams})   
+                AND case_id = @caseId AND is_eligible = 1
+            `;
+
+              const parentBatchData = await this.executeQuery(
+                parentQuery,
+                referenceIdParamsObj
+              );
+
+              // Add results to our map
+              parentBatchData.forEach((parent: any) => {
+                if (parent.reference_id && parent.priority_id) {
+                  parentPriorityMap.set(
+                    parent.reference_id,
+                    parent.priority_id
+                  );
+                }
+              });
+            }
 
             // Enrich child records with parent priority_ids
             rowsData.forEach((row: any) => {

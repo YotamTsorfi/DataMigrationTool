@@ -84,8 +84,8 @@ export async function processWithQueues(
     10
   );
 
-  // Set chunk size for processing
-  const CHUNK_SIZE = 100000;
+  // Set chunk size for processing - now dynamic from database config
+  const CHUNK_SIZE = parseInt(config.FETCH_CHUNK_SIZE || "20000", 10);
 
   // Initialize progress tracking for this job
   ProgressTracker.initJob(jobId, recordCount, jobType);

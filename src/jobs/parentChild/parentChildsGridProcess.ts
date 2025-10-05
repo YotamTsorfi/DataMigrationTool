@@ -63,7 +63,7 @@ export async function processParentChildGridBatches(
     10
   );
   const VERTICAL_BATCH_SIZE = parseInt(config.VERTICAL_BATCH_SIZE || "100", 10);
-  const CHUNK_SIZE = 100000; // Number of rows to fetch in each database call
+  const CHUNK_SIZE = parseInt(config.FETCH_CHUNK_SIZE || "20000", 10);
 
   // Initialize progress tracking
   ProgressTracker.initJob(jobId, totalRecords, jobType);
