@@ -182,7 +182,7 @@ export async function processParentChildWithQueues(
     }
   }
   // Updated chunk size to match processWithQueues
-  const CHUNK_SIZE = 100000;
+  const CHUNK_SIZE = parseInt(config.FETCH_CHUNK_SIZE || "20000", 10);
 
   // Initialize progress tracking
   ProgressTracker.initJob(jobId, totalRecords, jobType);
