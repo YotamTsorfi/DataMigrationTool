@@ -130,6 +130,7 @@ export const getDeltaRecordCounts = async (
         COUNT(*) as count
       FROM ${tableName}
       WHERE case_id = '${caseId}'
+        AND is_eligible = 1
         AND delta_action IN (1, 2)
       GROUP BY delta_action
     `);
