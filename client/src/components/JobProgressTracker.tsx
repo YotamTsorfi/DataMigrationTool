@@ -81,6 +81,13 @@ const JobProgressTracker: React.FC<JobProgressTrackerProps> = ({ jobId }) => {
     );
   };
 
+  const calculatePercentage = (job: JobProgress): number => {
+    if (!job.totalRecords) return 0;
+    return Math.round(
+      ((job.successCount + job.failureCount) / job.totalRecords) * 100
+    );
+  };
+
   useEffect(() => {
     // Connect to socket server
     const socketClient = io(process.env.REACT_APP_API_URL);
@@ -171,14 +178,15 @@ const JobProgressTracker: React.FC<JobProgressTrackerProps> = ({ jobId }) => {
               <h4>Job: {job.jobId}</h4>
               <ProgressContainer>
                 <ProgressDetails>
-                  <span>Progress: {job.percentage}%</span>
+                  <span>Progress: {calculatePercentage(job)}%</span>
                   <span>
-                    {job.processedRecords} / {job.totalRecords} records
+                    {job.successCount + job.failureCount} / {job.totalRecords}{" "}
+                    records
                   </span>
                 </ProgressDetails>
                 <ProgressBarOuter>
                   <ProgressBarInner
-                    width={job.percentage}
+                    width={calculatePercentage(job)}
                     $status={job.status}
                   />
                 </ProgressBarOuter>
