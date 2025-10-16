@@ -13,7 +13,7 @@ const requiredEnvVars = [
 requiredEnvVars.forEach((envVar) => {
   if (!process.env[envVar]) {
     throw new Error(
-      `❌ ${envVar} is not defined in the environment variables.`,
+      `❌ ${envVar} is not defined in the environment variables.`
     );
   }
 });
@@ -38,5 +38,5 @@ export const config = {
     },
   },
 
-  port: parseInt(process.env.SERVER_PORT || "3002", 10),
+  port: parseInt(process.env.SERVER_PORT || "3007", 10),
 };
