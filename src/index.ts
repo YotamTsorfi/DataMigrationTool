@@ -30,13 +30,22 @@ const app = express();
 const port = config.port;
 const httpServer = createServer(app);
 
-const allowedOrigins = [
-  `http://localhost:${port}`,
-  `http://172.34.0.10:${port}`,
-  "http://172.34.0.10:3007",
-  "http://localhost:3007",
-];
+// Dynamically build allowed origins from environment variables
+const clientPorts = process.env.CLIENT_PORTS?.split(",").map((p) =>
+  p.trim()
+) || ["3000", "3007"];
+const allowedHosts = process.env.ALLOWED_HOSTS?.split(",").map((h) =>
+  h.trim()
+) || ["localhost", "172.34.0.10"];
 
+// Generate all combinations of hosts and ports
+const allowedOrigins = allowedHosts.flatMap((host) =>
+  // Include server port and all client ports
+  [port, ...clientPorts].map((p) => `http://${host}:${p}`)
+);
+
+// For debugging purposes
+console.log("🔒 CORS allowed origins:", allowedOrigins);
 // Initialize Socket.IO
 const io = new Server(httpServer, {
   cors: {
