@@ -120,23 +120,20 @@ router.post(
       }
 
       // Validate that this is a delta job
-      if (!jobRequest.jobType.toLowerCase().includes("delta")) {
+      if (!jobRequest.isDelta) {
         res.status(400).json({
           success: false,
           error:
-            "This endpoint is only for delta jobs. Job type must include 'delta'",
+            "This endpoint is only for delta jobs. Use the regular endpoint for non-delta jobs.",
         });
         return;
       }
 
       // Validate case ID
-      if (
-        !jobRequest.caseId ||
-        !jobRequest.caseId.toLowerCase().includes("delta")
-      ) {
+      if (!jobRequest.caseId) {
         res.status(400).json({
           success: false,
-          error: "Delta jobs require a case ID that includes 'delta'",
+          error: "Delta jobs require a valid case ID",
         });
         return;
       }

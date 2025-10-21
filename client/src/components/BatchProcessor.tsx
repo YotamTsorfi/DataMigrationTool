@@ -127,6 +127,8 @@ const BatchProcessor: React.FC = () => {
     useState<DeltaRecordCounts | null>(null);
   const [isLoadingCounts, setIsLoadingCounts] = useState(false);
   const [showDeltaCounts, setShowDeltaCounts] = useState(false);
+
+  const [isProcessingDeltaJob, setIsProcessingDeltaJob] = useState(false);
   //---------------------------------------------
 
   /**
@@ -229,18 +231,7 @@ const BatchProcessor: React.FC = () => {
    * @returns boolean indicating if the current job is a delta job
    */
   const isDeltaJob = (): boolean => {
-    return selectedJobType.toLowerCase().includes("delta");
-  };
-
-  /**
-   * Validates case ID for delta jobs to ensure it contains 'delta'
-   * @returns boolean indicating if the case ID is valid for the job type
-   */
-  const isValidCaseId = (): boolean => {
-    if (isDeltaJob()) {
-      return selectedCaseId.toLowerCase().includes("delta");
-    }
-    return true; // Non-delta jobs don't have special case ID requirements
+    return isProcessingDeltaJob;
   };
   //---------------------------------------------
   /**
@@ -423,9 +414,9 @@ const BatchProcessor: React.FC = () => {
       if (!isValid) return;
     }
 
-    // For delta jobs, validate that the case ID contains 'delta'
-    if (isDeltaJob() && !isValidCaseId()) {
-      toast.error("Delta jobs require a case ID that includes 'delta'");
+    // For delta jobs, validate that a case ID is provided
+    if (isProcessingDeltaJob && !selectedCaseId) {
+      toast.error("Delta jobs require a valid case ID");
       return;
     }
 
@@ -433,7 +424,7 @@ const BatchProcessor: React.FC = () => {
 
     try {
       // Determine which endpoint to use based on job type
-      const endpoint = isDeltaJob()
+      const endpoint = isProcessingDeltaJob
         ? `${process.env.REACT_APP_API_URL}/job/start-delta-job/${processingType}`
         : `${process.env.REACT_APP_API_URL}/job/start-with-type/${processingType}`;
 
@@ -450,13 +441,14 @@ const BatchProcessor: React.FC = () => {
         priorityJobTypeId,
         customWhereClause: customWhereClause.trim() || undefined,
         caseId: selectedCaseId,
+        isDelta: isProcessingDeltaJob,
       };
 
       await axios.post(endpoint, payload);
 
       // Show appropriate success message based on job type
       toast.success(
-        isDeltaJob()
+        isProcessingDeltaJob
           ? `Delta job started with ${processingType} processing`
           : `Job started with ${processingType} processing`
       );
@@ -550,196 +542,214 @@ const BatchProcessor: React.FC = () => {
                     </option>
                   ))}
                 </select>
-                {isDeltaJob() && (
-                  <InfoBox
-                    style={{
-                      marginTop: "10px",
-                      backgroundColor: "#e8f4fd",
-                      borderColor: "#4dabf7",
-                    }}
-                  >
-                    <strong>Delta Job Selected</strong>
-                    <p>
-                      This is a delta job that processes only new or modified
-                      records.
-                      {selectedJobType.toLowerCase().includes("child") &&
-                        " This job includes parent-child relationships."}
-                    </p>
-                    <p>
-                      <strong>Important:</strong> Delta jobs require a case ID
-                      that contains 'delta'.
-                    </p>
+              </InputLabel>
 
-                    {selectedCaseId && (
-                      <div style={{ marginTop: "10px" }}>
-                        <button
-                          onClick={() => {
-                            setShowDeltaCounts(!showDeltaCounts);
-                            if (!deltaRecordCounts && !isLoadingCounts) {
-                              fetchDeltaRecordCounts();
-                            }
-                          }}
+              <InputLabel
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  marginTop: "10px",
+                }}
+              >
+                Process as Delta Job:
+                <input
+                  type="checkbox"
+                  checked={isProcessingDeltaJob}
+                  onChange={(e) => setIsProcessingDeltaJob(e.target.checked)}
+                  style={{ marginLeft: "10px" }}
+                />
+                <div className="info-tooltip">
+                  Delta jobs process only new or modified records since the last
+                  run
+                </div>
+              </InputLabel>
+
+              {isProcessingDeltaJob && (
+                <InfoBox
+                  style={{
+                    marginTop: "10px",
+                    backgroundColor: "#e8f4fd",
+                    borderColor: "#4dabf7",
+                  }}
+                >
+                  <strong>Delta Job Selected</strong>
+                  <p>
+                    This is a delta job that processes only new or modified
+                    records.
+                    {selectedJobType.toLowerCase().includes("child") &&
+                      " This job includes parent-child relationships."}
+                  </p>
+                  <p>
+                    <strong>Important:</strong> Delta jobs require a case ID
+                    that contains 'delta'.
+                  </p>
+
+                  {selectedCaseId && (
+                    <div style={{ marginTop: "10px" }}>
+                      <button
+                        onClick={() => {
+                          setShowDeltaCounts(!showDeltaCounts);
+                          if (!deltaRecordCounts && !isLoadingCounts) {
+                            fetchDeltaRecordCounts();
+                          }
+                        }}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          width: "100%",
+                          padding: "8px 12px",
+                          backgroundColor: "#4dabf7",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "4px",
+                          cursor: "pointer",
+                          fontSize: "14px",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        <span>Show Record Counts for {selectedCaseId}</span>
+                        {showDeltaCounts ? <FaChevronUp /> : <FaChevronDown />}
+                      </button>
+
+                      {showDeltaCounts && (
+                        <div
                           style={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            width: "100%",
-                            padding: "8px 12px",
-                            backgroundColor: "#4dabf7",
-                            color: "white",
-                            border: "none",
+                            padding: "10px",
+                            backgroundColor: "#f8f9fa",
                             borderRadius: "4px",
-                            cursor: "pointer",
-                            fontSize: "14px",
-                            fontWeight: "bold",
+                            marginTop: "8px",
+                            border: "1px solid #dee2e6",
                           }}
                         >
-                          <span>Show Record Counts for {selectedCaseId}</span>
-                          {showDeltaCounts ? (
-                            <FaChevronUp />
-                          ) : (
-                            <FaChevronDown />
-                          )}
-                        </button>
+                          <h4 style={{ margin: "0 0 10px 0" }}>
+                            Delta Record Counts:
+                          </h4>
 
-                        {showDeltaCounts && (
-                          <div
-                            style={{
-                              padding: "10px",
-                              backgroundColor: "#f8f9fa",
-                              borderRadius: "4px",
-                              marginTop: "8px",
-                              border: "1px solid #dee2e6",
-                            }}
-                          >
-                            <h4 style={{ margin: "0 0 10px 0" }}>
-                              Delta Record Counts:
-                            </h4>
-
-                            {isLoadingCounts ? (
-                              <div
+                          {isLoadingCounts ? (
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                padding: "20px",
+                              }}
+                            >
+                              <FaSpinner
                                 style={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  padding: "20px",
+                                  animation: "spin 1s linear infinite",
+                                  marginRight: "10px",
+                                  fontSize: "20px",
+                                  color: "#4dabf7",
                                 }}
-                              >
-                                <FaSpinner
-                                  style={{
-                                    animation: "spin 1s linear infinite",
-                                    marginRight: "10px",
-                                    fontSize: "20px",
-                                    color: "#4dabf7",
-                                  }}
-                                />
-                                <span>
-                                  Loading record counts... (may take up to 30
-                                  seconds)
-                                </span>
-                                <style>
-                                  {`
+                              />
+                              <span>
+                                Loading record counts... (may take up to 30
+                                seconds)
+                              </span>
+                              <style>
+                                {`
                         @keyframes spin {
                           0% { transform: rotate(0deg); }
                           100% { transform: rotate(360deg); }
                         }
                       `}
-                                </style>
-                              </div>
-                            ) : deltaRecordCounts ? (
-                              <div>
+                              </style>
+                            </div>
+                          ) : deltaRecordCounts ? (
+                            <div>
+                              <div
+                                style={{
+                                  display: "grid",
+                                  gridTemplateColumns: "1fr 1fr",
+                                  gap: "8px",
+                                }}
+                              >
                                 <div
                                   style={{
-                                    display: "grid",
-                                    gridTemplateColumns: "1fr 1fr",
-                                    gap: "8px",
-                                  }}
-                                >
-                                  <div
-                                    style={{
-                                      padding: "10px",
-                                      backgroundColor: "#e8f4fd",
-                                      borderRadius: "4px",
-                                      textAlign: "center",
-                                    }}
-                                  >
-                                    <div
-                                      style={{
-                                        fontSize: "24px",
-                                        fontWeight: "bold",
-                                      }}
-                                    >
-                                      {deltaRecordCounts.toAdd.toLocaleString()}
-                                    </div>
-                                    <div>Records to Add</div>
-                                  </div>
-                                  <div
-                                    style={{
-                                      padding: "10px",
-                                      backgroundColor: "#e8f4fd",
-                                      borderRadius: "4px",
-                                      textAlign: "center",
-                                    }}
-                                  >
-                                    <div
-                                      style={{
-                                        fontSize: "24px",
-                                        fontWeight: "bold",
-                                      }}
-                                    >
-                                      {deltaRecordCounts.toUpdate.toLocaleString()}
-                                    </div>
-                                    <div>Records to Update</div>
-                                  </div>
-                                </div>
-                                <div
-                                  style={{
-                                    marginTop: "8px",
                                     padding: "10px",
-                                    backgroundColor: "#d4edda",
+                                    backgroundColor: "#e8f4fd",
                                     borderRadius: "4px",
                                     textAlign: "center",
-                                    fontWeight: "bold",
                                   }}
                                 >
-                                  <span>
-                                    Total Records:{" "}
-                                    {(
-                                      deltaRecordCounts.toAdd +
-                                      deltaRecordCounts.toUpdate
-                                    ).toLocaleString()}
-                                  </span>
+                                  <div
+                                    style={{
+                                      fontSize: "24px",
+                                      fontWeight: "bold",
+                                    }}
+                                  >
+                                    {deltaRecordCounts.toAdd.toLocaleString()}
+                                  </div>
+                                  <div>Records to Add</div>
+                                </div>
+                                <div
+                                  style={{
+                                    padding: "10px",
+                                    backgroundColor: "#e8f4fd",
+                                    borderRadius: "4px",
+                                    textAlign: "center",
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      fontSize: "24px",
+                                      fontWeight: "bold",
+                                    }}
+                                  >
+                                    {deltaRecordCounts.toUpdate.toLocaleString()}
+                                  </div>
+                                  <div>Records to Update</div>
                                 </div>
                               </div>
-                            ) : (
-                              <p>No delta records found for this case ID.</p>
-                            )}
+                              <div
+                                style={{
+                                  marginTop: "8px",
+                                  padding: "10px",
+                                  backgroundColor: "#d4edda",
+                                  borderRadius: "4px",
+                                  textAlign: "center",
+                                  fontWeight: "bold",
+                                }}
+                              >
+                                <span>
+                                  Total Records:{" "}
+                                  {(
+                                    deltaRecordCounts.toAdd +
+                                    deltaRecordCounts.toUpdate
+                                  ).toLocaleString()}
+                                </span>
+                              </div>
+                            </div>
+                          ) : (
+                            <p>No delta records found for this case ID.</p>
+                          )}
 
-                            <button
-                              onClick={fetchDeltaRecordCounts}
-                              disabled={isLoadingCounts}
-                              style={{
-                                marginTop: "10px",
-                                padding: "6px 12px",
-                                backgroundColor: "#6c757d",
-                                color: "white",
-                                border: "none",
-                                borderRadius: "4px",
-                                cursor: isLoadingCounts
-                                  ? "not-allowed"
-                                  : "pointer",
-                                opacity: isLoadingCounts ? 0.7 : 1,
-                              }}
-                            >
-                              Refresh Counts
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </InfoBox>
-                )}
-              </InputLabel>
+                          <button
+                            onClick={fetchDeltaRecordCounts}
+                            disabled={isLoadingCounts}
+                            style={{
+                              marginTop: "10px",
+                              padding: "6px 12px",
+                              backgroundColor: "#6c757d",
+                              color: "white",
+                              border: "none",
+                              borderRadius: "4px",
+                              cursor: isLoadingCounts
+                                ? "not-allowed"
+                                : "pointer",
+                              opacity: isLoadingCounts ? 0.7 : 1,
+                            }}
+                          >
+                            Refresh Counts
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </InfoBox>
+              )}
+
               <InputLabel style={{ display: "flex", alignItems: "center" }}>
                 <br />
                 Process all records:
