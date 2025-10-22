@@ -28,6 +28,7 @@ export const ChildJobForm: React.FC<ChildJobFormProps> = ({
     priority_id: null,
     refParentJobId: parentJobType.JobTypeId || null,
     HasSiblings: false,
+    isReady: false,
     ...childJob,
   });
 
@@ -210,6 +211,19 @@ export const ChildJobForm: React.FC<ChildJobFormProps> = ({
             data-auth-protected="true"
           />
           <label htmlFor="HasSiblings">Has Siblings</label>
+        </div>
+
+        <div className="form-group checkbox-group">
+          <input
+            type="checkbox"
+            id="isReady"
+            name="isReady"
+            checked={formState.isReady || false}
+            onChange={handleChange}
+            disabled={!isAuthenticated}
+            data-auth-protected="true"
+          />
+          <label htmlFor="isReady">Is Ready</label>
         </div>
 
         <div className="form-actions">

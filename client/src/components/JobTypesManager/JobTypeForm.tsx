@@ -27,6 +27,8 @@ export const JobTypeForm: React.FC<JobTypeFormProps> = ({
     SourceSystem: null,
     priority_id: null,
     linkedField: null,
+    dbParentTableName: null,
+    HebrewName: null,
     RunOrder: 0,
     ...jobType,
   });
@@ -227,6 +229,34 @@ export const JobTypeForm: React.FC<JobTypeFormProps> = ({
           />
         </div>
 
+        <div className="form-group">
+          <label htmlFor="dbParentTableName">
+            dbParentTableName (optional):
+          </label>
+          <input
+            type="text"
+            id="dbParentTableName"
+            name="dbParentTableName"
+            value={formState.dbParentTableName || ""}
+            onChange={handleChange}
+            disabled={!isAuthenticated}
+            data-auth-protected="true"
+          />
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="HebrewName">Hebrew Name (optional):</label>
+          <input
+            type="text"
+            id="HebrewName"
+            name="HebrewName"
+            value={formState.HebrewName || ""}
+            onChange={handleChange}
+            disabled={!isAuthenticated}
+            data-auth-protected="true"
+          />
+        </div>
+
         <div className="form-group checkbox-group">
           <input
             type="checkbox"
@@ -243,6 +273,24 @@ export const JobTypeForm: React.FC<JobTypeFormProps> = ({
             data-auth-protected="true"
           />
           <label htmlFor="hasDependency">Has Dependency</label>
+        </div>
+
+        <div className="form-group checkbox-group">
+          <input
+            type="checkbox"
+            id="isReady"
+            name="isReady"
+            checked={formState.isReady || false}
+            onChange={(e) => {
+              setFormState({
+                ...formState,
+                isReady: e.target.checked,
+              });
+            }}
+            disabled={!isAuthenticated}
+            data-auth-protected="true"
+          />
+          <label htmlFor="isReady">Is Ready</label>
         </div>
 
         <div className="form-group">
