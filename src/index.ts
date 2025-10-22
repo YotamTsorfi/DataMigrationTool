@@ -7,6 +7,7 @@ import path from "path";
 import loadEnvironmentVariables from "./config/envLoader";
 loadEnvironmentVariables();
 
+import { ConnectionManager } from "./utils/connectionManager";
 import express from "express";
 import cors from "cors";
 import { createServer } from "http";
@@ -56,25 +57,7 @@ const io = new Server(httpServer, {
 });
 export { io };
 
-io.on("connection", (socket) => {
-  // Extract client information to identify users
-  const clientInfo = {
-    id: socket.id,
-    ip: socket.handshake.address,
-    origin: socket.handshake.headers.origin || "Unknown",
-    userAgent: socket.handshake.headers["user-agent"],
-  };
-
-  console.log("🟢 Client connected:", {
-    id: clientInfo.id,
-    ip: clientInfo.ip,
-    origin: clientInfo.origin,
-  });
-
-  socket.on("disconnect", () => {
-    console.log("🔴 Client disconnected:", socket.id);
-  });
-});
+const connectionManager = new ConnectionManager(io);
 
 // Middleware
 app.use(
@@ -140,6 +123,11 @@ process.on("SIGTERM", () => {
   console.log("⚠️ Received SIGTERM. Performing graceful shutdown...");
   writeToLogFile("general.log", "[INFO] Server shutting down...");
   PerformanceMonitor.logServerMetrics();
+
+  // Close all socket connections first
+  connectionManager.closeAllConnections();
+
+  // Then close the HTTP server
   httpServer.close(() => {
     console.log("✅ Server closed");
     process.exit(0);
