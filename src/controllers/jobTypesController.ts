@@ -11,12 +11,13 @@ class JobTypesController {
   public async getAllJobTypes(req: Request, res: Response): Promise<void> {
     try {
       const jobTypes = await DatabaseService.executeQuery(`
-        SELECT 
-          JobTypeId, JobTypeName, DBTableName, ScreenName, 
-          SourceSystem, priority_id, linkedField, RunOrder, isReady, hasDependency
-        FROM PriorityJobTypes
-        ORDER BY RunOrder ASC
-      `);
+      SELECT 
+        JobTypeId, JobTypeName, DBTableName, ScreenName, 
+        SourceSystem, priority_id, linkedField, RunOrder, isReady, hasDependency,
+        dbParentTableName, HebrewName
+      FROM PriorityJobTypes
+      ORDER BY RunOrder ASC
+    `);
 
       res.json(jobTypes);
     } catch (error) {
@@ -34,12 +35,13 @@ class JobTypesController {
 
       const jobType = await DatabaseService.executeQuery(
         `
-        SELECT 
-          JobTypeId, JobTypeName, DBTableName, ScreenName, 
-          SourceSystem, priority_id, linkedField, RunOrder, isReady, hasDependency
-        FROM PriorityJobTypes
-        WHERE JobTypeId = @id
-      `,
+      SELECT 
+        JobTypeId, JobTypeName, DBTableName, ScreenName, 
+        SourceSystem, priority_id, linkedField, RunOrder, isReady, hasDependency,
+        dbParentTableName, HebrewName
+      FROM PriorityJobTypes
+      WHERE JobTypeId = @id
+    `,
         { id }
       );
 
@@ -70,6 +72,9 @@ class JobTypesController {
         linkedField,
         RunOrder,
         hasDependency,
+        dbParentTableName,
+        HebrewName,
+        isReady,
       } = req.body;
 
       // Validate required fields
@@ -104,12 +109,14 @@ class JobTypesController {
 
       const result = await DatabaseService.executeQuery(
         `
-      INSERT INTO PriorityJobTypes (JobTypeId, JobTypeName, DBTableName, ScreenName, SourceSystem, priority_id, linkedField, RunOrder, hasDependency)
-      OUTPUT INSERTED.JobTypeId, INSERTED.JobTypeName, INSERTED.DBTableName, INSERTED.ScreenName, 
-          INSERTED.SourceSystem, INSERTED.priority_id, INSERTED.linkedField, INSERTED.RunOrder,
-          INSERTED.isReady, INSERTED.hasDependency
-      VALUES (@JobTypeId, @JobTypeName, @DBTableName, @ScreenName, @SourceSystem, @priority_id, @linkedField, @RunOrder, @hasDependency)
-    `,
+    INSERT INTO PriorityJobTypes (JobTypeId, JobTypeName, DBTableName, ScreenName, SourceSystem, 
+                               priority_id, linkedField, RunOrder, hasDependency, dbParentTableName, HebrewName, isReady)
+    OUTPUT INSERTED.JobTypeId, INSERTED.JobTypeName, INSERTED.DBTableName, INSERTED.ScreenName, 
+        INSERTED.SourceSystem, INSERTED.priority_id, INSERTED.linkedField, INSERTED.RunOrder,
+        INSERTED.isReady, INSERTED.hasDependency, INSERTED.dbParentTableName, INSERTED.HebrewName
+    VALUES (@JobTypeId, @JobTypeName, @DBTableName, @ScreenName, @SourceSystem, @priority_id, 
+            @linkedField, @RunOrder, @hasDependency, @dbParentTableName, @HebrewName, @isReady)
+  `,
         {
           JobTypeId,
           JobTypeName,
@@ -120,6 +127,9 @@ class JobTypesController {
           linkedField: linkedField || null,
           RunOrder: RunOrder || 0,
           hasDependency: hasDependency !== undefined ? hasDependency : false,
+          dbParentTableName: dbParentTableName || null,
+          HebrewName: HebrewName || null,
+          isReady: isReady !== undefined ? isReady : false,
         }
       );
 
@@ -144,6 +154,9 @@ class JobTypesController {
         linkedField,
         RunOrder,
         hasDependency,
+        dbParentTableName,
+        HebrewName,
+        isReady,
       } = req.body;
 
       // Validate required fields
@@ -169,21 +182,24 @@ class JobTypesController {
 
       const result = await DatabaseService.executeQuery(
         `
-        UPDATE PriorityJobTypes
-        SET 
-          JobTypeName = @JobTypeName,
-          DBTableName = @DBTableName,
-          ScreenName = @ScreenName,
-          SourceSystem = @SourceSystem,
-          priority_id = @priority_id,
-          linkedField = @linkedField,
-          RunOrder = @RunOrder,
-          hasDependency = @hasDependency
-        OUTPUT INSERTED.JobTypeId, INSERTED.JobTypeName, INSERTED.DBTableName, INSERTED.ScreenName, 
-              INSERTED.SourceSystem, INSERTED.priority_id, INSERTED.linkedField, INSERTED.RunOrder,
-              INSERTED.isReady, INSERTED.hasDependency
-        WHERE JobTypeId = @id
-      `,
+      UPDATE PriorityJobTypes
+      SET 
+        JobTypeName = @JobTypeName,
+        DBTableName = @DBTableName,
+        ScreenName = @ScreenName,
+        SourceSystem = @SourceSystem,
+        priority_id = @priority_id,
+        linkedField = @linkedField,
+        RunOrder = @RunOrder,
+        hasDependency = @hasDependency,
+        dbParentTableName = @dbParentTableName,
+        HebrewName = @HebrewName,
+        isReady = @isReady
+      OUTPUT INSERTED.JobTypeId, INSERTED.JobTypeName, INSERTED.DBTableName, INSERTED.ScreenName, 
+            INSERTED.SourceSystem, INSERTED.priority_id, INSERTED.linkedField, INSERTED.RunOrder,
+            INSERTED.isReady, INSERTED.hasDependency, INSERTED.dbParentTableName, INSERTED.HebrewName
+      WHERE JobTypeId = @id
+    `,
         {
           id,
           JobTypeName,
@@ -194,6 +210,9 @@ class JobTypesController {
           linkedField: linkedField || null,
           RunOrder: RunOrder || 0,
           hasDependency: hasDependency !== undefined ? hasDependency : false,
+          dbParentTableName: dbParentTableName || null,
+          HebrewName: HebrewName || null,
+          isReady: isReady !== undefined ? isReady : false,
         }
       );
 
@@ -302,6 +321,7 @@ class JobTypesController {
         priority_id,
         refParentJobId,
         HasSiblings,
+        isReady,
       } = req.body;
 
       // Validate required fields
@@ -350,10 +370,12 @@ class JobTypesController {
 
       const result = await DatabaseService.executeQuery(
         `
-      INSERT INTO PriorityChildJob (ChildJobeId, JobTypeName, DBTableName, ScreenName, SourceSystem, priority_id, refParentJobId, HasSiblings)
+      INSERT INTO PriorityChildJob (ChildJobeId, JobTypeName, DBTableName, ScreenName, SourceSystem, 
+                                   priority_id, refParentJobId, HasSiblings, isReady)
       OUTPUT INSERTED.ChildJobeId, INSERTED.JobTypeName, INSERTED.DBTableName, INSERTED.ScreenName, 
              INSERTED.SourceSystem, INSERTED.priority_id, INSERTED.refParentJobId, INSERTED.HasSiblings, INSERTED.isReady
-      VALUES (@ChildJobeId, @JobTypeName, @DBTableName, @ScreenName, @SourceSystem, @priority_id, @refParentJobId, @HasSiblings)
+      VALUES (@ChildJobeId, @JobTypeName, @DBTableName, @ScreenName, @SourceSystem, @priority_id, 
+              @refParentJobId, @HasSiblings, @isReady)
       `,
         {
           ChildJobeId,
@@ -364,6 +386,7 @@ class JobTypesController {
           priority_id: priority_id || null,
           refParentJobId,
           HasSiblings: HasSiblings !== undefined ? HasSiblings : false,
+          isReady: isReady !== undefined ? isReady : false,
         }
       );
 
@@ -388,6 +411,7 @@ class JobTypesController {
         priority_id,
         refParentJobId,
         HasSiblings,
+        isReady,
       } = req.body;
 
       // Validate required fields
@@ -427,18 +451,19 @@ class JobTypesController {
 
       const result = await DatabaseService.executeQuery(
         `
-        UPDATE PriorityChildJob
-        SET 
-          JobTypeName = @JobTypeName,
-          DBTableName = @DBTableName,
-          ScreenName = @ScreenName,
-          SourceSystem = @SourceSystem,
-          priority_id = @priority_id,
-          refParentJobId = @refParentJobId,
-          HasSiblings = @HasSiblings
-        OUTPUT INSERTED.ChildJobeId, INSERTED.JobTypeName, INSERTED.DBTableName, INSERTED.ScreenName, 
-               INSERTED.SourceSystem, INSERTED.priority_id, INSERTED.refParentJobId, INSERTED.HasSiblings
-        WHERE ChildJobeId = @id
+      UPDATE PriorityChildJob
+      SET 
+        JobTypeName = @JobTypeName,
+        DBTableName = @DBTableName,
+        ScreenName = @ScreenName,
+        SourceSystem = @SourceSystem,
+        priority_id = @priority_id,
+        refParentJobId = @refParentJobId,
+        HasSiblings = @HasSiblings,
+        isReady = @isReady
+      OUTPUT INSERTED.ChildJobeId, INSERTED.JobTypeName, INSERTED.DBTableName, INSERTED.ScreenName, 
+             INSERTED.SourceSystem, INSERTED.priority_id, INSERTED.refParentJobId, INSERTED.HasSiblings, INSERTED.isReady
+      WHERE ChildJobeId = @id
       `,
         {
           id,
@@ -449,6 +474,7 @@ class JobTypesController {
           priority_id: priority_id || null,
           refParentJobId,
           HasSiblings,
+          isReady: isReady !== undefined ? isReady : false,
         }
       );
 

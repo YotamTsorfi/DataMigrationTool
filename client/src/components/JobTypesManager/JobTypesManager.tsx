@@ -30,6 +30,8 @@ export interface IJobType {
   SourceSystem: string | null;
   priority_id: string | null;
   linkedField: string | null;
+  dbParentTableName: string | null;
+  HebrewName: string | null;
   RunOrder: number;
   isReady?: boolean;
   hasDependency?: boolean;
