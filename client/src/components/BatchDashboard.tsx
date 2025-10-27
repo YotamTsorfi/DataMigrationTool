@@ -63,6 +63,8 @@ interface BatchRecord {
   JobId: string;
   LastProcessedIndex: number;
   ErrorMessage: string;
+  case_id?: string;
+  Company?: string;
 }
 
 interface ErrorRecord {
@@ -87,6 +89,8 @@ interface JobHistoryRecord {
   FailureCount: number;
   TableName: string;
   ScreenName: string;
+  case_id?: string;
+  Company?: string;
 }
 
 // Helper function to format dates
@@ -528,6 +532,8 @@ const BatchDashboard: React.FC = () => {
                 <th>Total Records</th>
                 <th>Success</th>
                 <th>Failure</th>
+                <th>Company</th>
+                <th>Case Id</th>
               </tr>
             </thead>
             <tbody>
@@ -556,6 +562,8 @@ const BatchDashboard: React.FC = () => {
                       ? job.FailureCount.toLocaleString()
                       : "0"}
                   </td>
+                  <td>{job.Company ?? "N/A"}</td> {/* display Company */}
+                  <td>{job.case_id ?? "N/A"}</td> {/* display Case Id */}
                 </tr>
               ))}
             </tbody>
