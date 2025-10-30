@@ -4,13 +4,21 @@
  * This component is used to filter job processing data based on the selected case ID.
  */
 import React, { useState, useEffect } from "react";
+import styled from "styled-components";
 import axios from "axios";
+import { SelectControl } from "./BatchProcessorStyles";
 
 interface CaseIdSelectorProps {
   onCaseIdSelect: (caseId: string) => void;
   selectedCaseId?: string;
   className?: string;
 }
+
+const HelperText = styled.div`
+  margin-top: 6px;
+  font-size: 12px;
+  color: #6b7280;
+`;
 
 const CaseIdSelector: React.FC<CaseIdSelectorProps> = ({
   onCaseIdSelect,
@@ -67,18 +75,33 @@ const CaseIdSelector: React.FC<CaseIdSelectorProps> = ({
 
   return (
     <div className={`case-id-selector ${className || ""}`}>
-      <select
+      <SelectControl
         id="case-id-select"
         value={selectedCaseId || ""}
         onChange={(e) => onCaseIdSelect(e.target.value)}
-        className="form-control"
+        aria-label="Select Case ID"
       >
-        {caseIds.map((caseId: string) => (
-          <option key={caseId} value={caseId}>
-            {caseId}
-          </option>
-        ))}
-      </select>
+        <option value="" disabled>
+          Select Case ID…
+        </option>
+        {caseIds.map((caseId: string) => {
+          const isFull = caseId.toLowerCase() === "full";
+          const label = isFull ? "full — All records" : caseId;
+          return (
+            <option key={caseId} value={caseId}>
+              {label}
+            </option>
+          );
+        })}
+      </SelectControl>
+      {selectedCaseId && (
+        <HelperText>
+          Selected case:{" "}
+          {selectedCaseId.toLowerCase() === "full"
+            ? "full (All records)"
+            : selectedCaseId}
+        </HelperText>
+      )}
     </div>
   );
 };

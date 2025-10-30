@@ -95,6 +95,94 @@ export const Button = styled.button`
   }
 `;
 
+// Modern, accessible form controls
+export const TextInput = styled.input<{ $hasError?: boolean }>`
+  width: 100%;
+  height: 38px;
+  padding: 8px 12px;
+  border: 1px solid ${(p) => (p.$hasError ? "#dc3545" : "#d0d7de")};
+  border-radius: 8px;
+  background: #fff;
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.4;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease;
+
+  &:hover {
+    border-color: ${(p) => (p.$hasError ? "#dc3545" : "#9aa4af")};
+  }
+
+  &:focus {
+    outline: none;
+    border-color: ${(p) => (p.$hasError ? "#dc3545" : "#4dabf7")};
+    box-shadow: 0 0 0 3px
+      ${(p) =>
+        p.$hasError ? "rgba(220, 53, 69, 0.25)" : "rgba(77, 171, 247, 0.3)"};
+  }
+
+  &::placeholder {
+    color: #9aa4af;
+  }
+
+  &:disabled {
+    background: #f5f6f8;
+    color: #6b7280;
+    cursor: not-allowed;
+  }
+`;
+
+export const SelectControl = styled.select<{ $hasError?: boolean }>`
+  width: 100%;
+  height: 38px;
+  padding: 8px 36px 8px 12px;
+  border: 1px solid ${(p) => (p.$hasError ? "#dc3545" : "#d0d7de")};
+  border-radius: 8px;
+  background: #fff;
+  color: #111827;
+  font-size: 14px;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg fill='none' height='24' viewBox='0 0 24 24' width='24' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M7 10l5 5 5-5' stroke='%239AA4AF' stroke-linecap='round' stroke-linejoin='round' stroke-width='2'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 16px 16px;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+
+  &:hover {
+    border-color: ${(p) => (p.$hasError ? "#dc3545" : "#9aa4af")};
+  }
+
+  &:focus {
+    outline: none;
+    border-color: ${(p) => (p.$hasError ? "#dc3545" : "#4dabf7")};
+    box-shadow: 0 0 0 3px
+      ${(p) =>
+        p.$hasError ? "rgba(220, 53, 69, 0.25)" : "rgba(77, 171, 247, 0.3)"};
+  }
+
+  &:disabled {
+    background: #f5f6f8;
+    color: #6b7280;
+    cursor: not-allowed;
+  }
+`;
+
+export const CheckboxInput = styled.input.attrs({ type: "checkbox" })`
+  width: 18px;
+  height: 18px;
+  accent-color: #4dabf7; /* modern, native coloring */
+  cursor: pointer;
+
+  &:disabled {
+    accent-color: #9aa4af;
+    cursor: not-allowed;
+  }
+`;
+
 export const TableContainer = styled.div`
   max-height: 300px;
   overflow-y: auto;
@@ -118,9 +206,13 @@ export const Td = styled.td`
 `;
 
 export const ReadOnlyInput = styled.input`
-  background-color: #f0f0f0;
-  border: 1px solid #ccc;
-  color: #666;
+  width: 100%;
+  height: 38px;
+  padding: 8px 12px;
+  background-color: #f7f7f9;
+  border: 1px solid #d0d7de;
+  color: #495057;
+  border-radius: 8px;
   cursor: not-allowed;
 `;
 
