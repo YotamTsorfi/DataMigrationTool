@@ -15,12 +15,12 @@ import {
   ErrorMessage,
   InfoBox,
   ButtonGroup,
-  Table,
-  Th,
-  Td,
-  TableContainer,
+  TextInput,
+  SelectControl,
+  CheckboxInput,
 } from "./BatchProcessorStyles";
 import JobProgressTracker from "./JobProgressTracker";
+import ChildJobs from "./ChildJobs";
 import SecureButton from "./SecureButton";
 import { useAuthProtection } from "./withAuthProtection";
 import { fetchChildJobs as fetchChildJobsFromService } from "../services/jobTypesService";
@@ -529,7 +529,7 @@ const BatchProcessor: React.FC = () => {
             <InputContainer style={{ flex: 0.4 }}>
               <InputLabel>
                 Job Type:
-                <select
+                <SelectControl
                   value={selectedJobType}
                   onChange={handleJobTypeChange}
                   style={{ direction: "rtl" }} // Ensure base direction is left-to-right
@@ -541,7 +541,7 @@ const BatchProcessor: React.FC = () => {
                       {job.HebrewName ? `- ${job.HebrewName}` : ""}
                     </option>
                   ))}
-                </select>
+                </SelectControl>
               </InputLabel>
 
               <InputLabel
@@ -552,8 +552,7 @@ const BatchProcessor: React.FC = () => {
                 }}
               >
                 Process as Delta Job:
-                <input
-                  type="checkbox"
+                <CheckboxInput
                   checked={isProcessingDeltaJob}
                   onChange={(e) => setIsProcessingDeltaJob(e.target.checked)}
                   style={{ marginLeft: "10px" }}
@@ -753,8 +752,7 @@ const BatchProcessor: React.FC = () => {
               <InputLabel style={{ display: "flex", alignItems: "center" }}>
                 <br />
                 Process all records:
-                <input
-                  type="checkbox"
+                <CheckboxInput
                   checked={processAllRecords}
                   onChange={handleProcessAllRecordsChange}
                   style={{ marginRight: "8px" }}
@@ -771,7 +769,7 @@ const BatchProcessor: React.FC = () => {
               <br />
               <InputLabel>
                 Record Count:
-                <input
+                <TextInput
                   type="number"
                   value={recordCount}
                   onChange={(e) => setRecordCount(Number(e.target.value))}
@@ -780,7 +778,7 @@ const BatchProcessor: React.FC = () => {
               </InputLabel>
               <InputLabel>
                 Start Row:
-                <input
+                <TextInput
                   type="number"
                   value={startRow}
                   onChange={(e) => setStartRow(Number(e.target.value))}
@@ -823,45 +821,6 @@ const BatchProcessor: React.FC = () => {
                   readOnly
                 />
               </InputLabel>
-            </InputContainer>
-
-            {/* Right column - Child jobs display */}
-            <InputContainer style={{ flex: 0.6 }}>
-              <h3>Child Jobs</h3>
-              {isLoadingChildJobs ? (
-                <p>Loading child jobs...</p>
-              ) : Array.isArray(childJobs) && childJobs.length > 0 ? (
-                <TableContainer>
-                  <Table>
-                    <thead>
-                      <tr>
-                        <Th>Job Type Name</Th>
-                        <Th>DB Table</Th>
-                        <Th>Screen Name</Th>
-                        <Th>Has Siblings</Th>
-                        <Th>Priority ID</Th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {childJobs.map((childJob) => (
-                        <tr
-                          key={childJob.ChildJobeId || `child-${Math.random()}`}
-                        >
-                          <Td>{childJob.JobTypeName}</Td>
-                          <Td>{childJob.DBTableName}</Td>
-                          <Td>{childJob.ScreenName}</Td>
-                          <Td>{childJob.HasSiblings ? "Yes" : "No"}</Td>
-                          <Td>{childJob.priority_id || "-"}</Td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </Table>
-                </TableContainer>
-              ) : selectedJobType ? (
-                <p>No child jobs found for this job type.</p>
-              ) : (
-                <p>Select a job type to view child jobs.</p>
-              )}
             </InputContainer>
           </div>
 
@@ -915,6 +874,15 @@ const BatchProcessor: React.FC = () => {
               </ButtonGroup>
             </WhereClauseContainer>
           )}
+
+          {/* Child jobs display (moved under WHERE Clause) */}
+          <div style={{ marginTop: "20px" }}>
+            <ChildJobs
+              childJobs={childJobs}
+              isLoading={isLoadingChildJobs}
+              selectedJobType={selectedJobType}
+            />
+          </div>
 
           <SecureButton
             onClick={handleBatchProcess}
