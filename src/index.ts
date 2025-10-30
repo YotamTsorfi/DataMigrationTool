@@ -116,22 +116,82 @@ httpServer.listen(port, "0.0.0.0", () => {
     });
 
   PerformanceMonitor.logServerMetrics();
+
+  // Notify PM2 that the app is ready when wait_ready is true
+  if (typeof process.send === "function") {
+    try {
+      process.send("ready");
+    } catch (e) {
+      // ignore if not running under PM2
+    }
+  }
 });
 
-// Graceful shutdown
-process.on("SIGTERM", () => {
-  console.log("⚠️ Received SIGTERM. Performing graceful shutdown...");
-  writeToLogFile("general.log", "[INFO] Server shutting down...");
-  PerformanceMonitor.logServerMetrics();
+// Handle server errors (e.g., EADDRINUSE) to log clearly and exit
+httpServer.on("error", (err: any) => {
+  const code = (err && err.code) || "";
+  if (code === "EADDRINUSE") {
+    const msg = `FATAL: Port ${port} already in use (EADDRINUSE).`;
+    console.error(msg);
+    writeToLogFile("error.log", `[ERROR] ${msg}`);
+    // Exit so PM2 can attempt a clean restart instead of overlapping
+    process.exit(1);
+  } else {
+    writeToLogFile(
+      "error.log",
+      `[ERROR] HTTP server error: ${err?.message || err}`
+    );
+  }
+});
+
+// Centralized graceful shutdown
+function handleGracefulShutdown(reason: string): void {
+  console.log(`⚠️ Received ${reason}. Performing graceful shutdown...`);
+  writeToLogFile(
+    "general.log",
+    `[INFO] Server shutting down due to ${reason}...`
+  );
+  try {
+    PerformanceMonitor.logServerMetrics();
+  } catch (e) {
+    // Ignore metrics logging errors during shutdown
+    writeToLogFile(
+      "error.log",
+      `[WARN] Failed to log server metrics on shutdown: ${e}`
+    );
+  }
 
   // Close all socket connections first
-  connectionManager.closeAllConnections();
+  try {
+    connectionManager.closeAllConnections();
+  } catch (e) {
+    // Ignore connection close errors during shutdown
+    writeToLogFile(
+      "error.log",
+      `[WARN] Failed to close all connections on shutdown: ${e}`
+    );
+  }
 
-  // Then close the HTTP server
+  // Then stop accepting new connections and close existing ones
   httpServer.close(() => {
     console.log("✅ Server closed");
     process.exit(0);
   });
+
+  // Safety exit after timeout to avoid hanging forever
+  setTimeout(() => {
+    console.error("💥 Force exiting after shutdown timeout");
+    process.exit(1);
+  }, 30000).unref();
+}
+
+// Graceful shutdown hooks (PM2/OS)
+process.on("SIGTERM", () => handleGracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => handleGracefulShutdown("SIGINT"));
+process.on("message", (msg: any) => {
+  if (msg === "shutdown") {
+    handleGracefulShutdown("PM2 shutdown");
+  }
 });
 
 process.on("uncaughtException", (error) => {
