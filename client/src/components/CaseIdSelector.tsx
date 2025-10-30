@@ -86,7 +86,7 @@ const CaseIdSelector: React.FC<CaseIdSelectorProps> = ({
         </option>
         {caseIds.map((caseId: string) => {
           const isFull = caseId.toLowerCase() === "full";
-          const label = isFull ? "full — All records" : caseId;
+          const label = isFull ? "full" : caseId;
           return (
             <option key={caseId} value={caseId}>
               {label}

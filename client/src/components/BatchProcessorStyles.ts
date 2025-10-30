@@ -98,7 +98,7 @@ export const Button = styled.button`
 // Modern, accessible form controls
 export const TextInput = styled.input<{ $hasError?: boolean }>`
   width: 100%;
-  height: 38px;
+  height: 10px;
   padding: 8px 12px;
   border: 1px solid ${(p) => (p.$hasError ? "#dc3545" : "#d0d7de")};
   border-radius: 8px;
@@ -207,7 +207,7 @@ export const Td = styled.td`
 
 export const ReadOnlyInput = styled.input`
   width: 100%;
-  height: 38px;
+  height: 10px;
   padding: 8px 12px;
   background-color: #f7f7f9;
   border: 1px solid #d0d7de;
