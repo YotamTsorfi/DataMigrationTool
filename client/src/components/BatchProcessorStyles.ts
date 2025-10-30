@@ -79,7 +79,7 @@ export const InputLabel = styled.label`
   display: flex;
   flex-direction: column;
   margin-right: 10px;
-  min-width: 280px;
+  min-width: 600px;
   width: auto; /* Set a fixed width */
 `;
 
