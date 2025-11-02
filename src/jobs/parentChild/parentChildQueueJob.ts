@@ -68,6 +68,9 @@ export async function processParentChildWithQueues(
     10
   );
 
+  // Updated chunk size to match processWithQueues
+  let CHUNK_SIZE = parseInt(config.FETCH_CHUNK_SIZE || "20000", 10);
+
   // Log initial configuration to both console and file
   const initialConfigMessage = `[Job ${jobId}] Initial configuration: HORIZONTAL_BATCH_SIZE=${HORIZONTAL_BATCH_SIZE}, VERTICAL_BATCH_SIZE=${VERTICAL_BATCH_SIZE}, QUEUE_RATE_LIMIT=${QUEUE_RATE_LIMIT}, QUEUE_MIN_DELAY=${QUEUE_MIN_DELAY}, QUEUE_CONCURRENT_ITEMS=${QUEUE_CONCURRENT_ITEMS}`;
   console.log(initialConfigMessage);
@@ -85,6 +88,7 @@ export async function processParentChildWithQueues(
         "QUEUE_RATE_LIMIT",
         "QUEUE_MIN_DELAY",
         "QUEUE_CONCURRENT_ITEMS",
+        "FETCH_CHUNK_SIZE",
       ].includes(change.key)
     );
 
@@ -97,6 +101,7 @@ export async function processParentChildWithQueues(
       QUEUE_RATE_LIMIT,
       QUEUE_MIN_DELAY,
       QUEUE_CONCURRENT_ITEMS,
+      CHUNK_SIZE,
     };
 
     // Update local configuration values
@@ -117,6 +122,9 @@ export async function processParentChildWithQueues(
         case "QUEUE_CONCURRENT_ITEMS":
           QUEUE_CONCURRENT_ITEMS = Number(change.newValue);
           break;
+        case "FETCH_CHUNK_SIZE":
+          CHUNK_SIZE = Number(change.newValue);
+          break;
       }
     });
 
@@ -126,13 +134,14 @@ export async function processParentChildWithQueues(
       VERTICAL_BATCH_SIZE=${VERTICAL_BATCH_SIZE} (was ${previousConfig.VERTICAL_BATCH_SIZE}), 
       QUEUE_RATE_LIMIT=${QUEUE_RATE_LIMIT} (was ${previousConfig.QUEUE_RATE_LIMIT}), 
       QUEUE_MIN_DELAY=${QUEUE_MIN_DELAY} (was ${previousConfig.QUEUE_MIN_DELAY}), 
-      QUEUE_CONCURRENT_ITEMS=${QUEUE_CONCURRENT_ITEMS} (was ${previousConfig.QUEUE_CONCURRENT_ITEMS})`;
+      QUEUE_CONCURRENT_ITEMS=${QUEUE_CONCURRENT_ITEMS} (was ${previousConfig.QUEUE_CONCURRENT_ITEMS}), 
+      CHUNK_SIZE=${CHUNK_SIZE} (was ${previousConfig.CHUNK_SIZE})`;
 
     console.log(configChangedMessage);
     writeToLogFile(CONFIG_LOG_FILE, configChangedMessage);
 
     // Log current active configuration for reference
-    const currentConfigMessage = `[Job ${jobId}] Current active configuration: HORIZONTAL_BATCH_SIZE=${HORIZONTAL_BATCH_SIZE}, VERTICAL_BATCH_SIZE=${VERTICAL_BATCH_SIZE}, QUEUE_RATE_LIMIT=${QUEUE_RATE_LIMIT}, QUEUE_MIN_DELAY=${QUEUE_MIN_DELAY}, QUEUE_CONCURRENT_ITEMS=${QUEUE_CONCURRENT_ITEMS}`;
+    const currentConfigMessage = `[Job ${jobId}] Current active configuration: HORIZONTAL_BATCH_SIZE=${HORIZONTAL_BATCH_SIZE}, VERTICAL_BATCH_SIZE=${VERTICAL_BATCH_SIZE}, QUEUE_RATE_LIMIT=${QUEUE_RATE_LIMIT}, QUEUE_MIN_DELAY=${QUEUE_MIN_DELAY}, QUEUE_CONCURRENT_ITEMS=${QUEUE_CONCURRENT_ITEMS}, CHUNK_SIZE=${CHUNK_SIZE}`;
     writeToLogFile(CONFIG_LOG_FILE, currentConfigMessage);
   };
 
@@ -153,7 +162,7 @@ export async function processParentChildWithQueues(
       // Get direct database values
       const result = await DatabaseService.executeQuery(`
       SELECT ConfigKey, ConfigValue FROM PrioritySystemConfig
-      WHERE ConfigKey IN ('HORIZONTAL_BATCH_SIZE', 'VERTICAL_BATCH_SIZE', 'QUEUE_RATE_LIMIT', 'QUEUE_MIN_DELAY', 'QUEUE_CONCURRENT_ITEMS')
+      WHERE ConfigKey IN ('HORIZONTAL_BATCH_SIZE', 'VERTICAL_BATCH_SIZE', 'QUEUE_RATE_LIMIT', 'QUEUE_MIN_DELAY', 'QUEUE_CONCURRENT_ITEMS', 'FETCH_CHUNK_SIZE')
     `);
 
       writeToLogFile(
@@ -181,8 +190,6 @@ export async function processParentChildWithQueues(
       writeToLogFile(CONFIG_LOG_FILE, errorMessage);
     }
   }
-  // Updated chunk size to match processWithQueues
-  const CHUNK_SIZE = parseInt(config.FETCH_CHUNK_SIZE || "20000", 10);
 
   // Initialize progress tracking
   ProgressTracker.initJob(jobId, totalRecords, jobType);

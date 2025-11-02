@@ -3,11 +3,18 @@ import PerformanceMonitor from "../../../utils/performanceMonitor";
 import ProgressTracker from "../../../utils/progressTracker";
 import { ErrorBufferService } from "../../../utils/errorBufferService";
 import { JobCancellationService } from "../../../utils/jobCancellationService";
-import { configService } from "../../../config/configService";
+import {
+  configService,
+  ConfigChangeEvent,
+} from "../../../config/configService";
 import { DatabaseService } from "../../../services/database/databaseService";
 import { fetchDataChunk } from "../../../services/database/dataService";
 import { QueueProcessor } from "../../../services/processing/queue/queueProcessor";
 import { QueueItem } from "../../../types/jobTypes";
+import { writeToLogFile } from "../../../config/logger";
+
+// Define the config log file name
+const CONFIG_LOG_FILE = "config_changes.log";
 
 /**
  * Process records using grid-based processing (horizontal parallel, vertical sequential)
@@ -73,19 +80,140 @@ export async function processWithQueues(
     flushInterval: 120000, // 2 minutes
   });
 
-  // Set horizontal batch size from configuration or use default
-  const HORIZONTAL_BATCH_SIZE = parseInt(
+  // Initial configuration - now using let for dynamic updates
+  let HORIZONTAL_BATCH_SIZE = parseInt(
     config.HORIZONTAL_BATCH_SIZE || "40",
     10
   );
-  // Set vertical batch size from configuration or use default
-  const VERTICAL_BATCH_SIZE = parseInt(
-    config.VERTICAL_BATCH_SIZE || "1000",
+  let VERTICAL_BATCH_SIZE = parseInt(config.VERTICAL_BATCH_SIZE || "1000", 10);
+  let QUEUE_RATE_LIMIT = parseInt(config.QUEUE_RATE_LIMIT || "1000", 10);
+  let QUEUE_MIN_DELAY = parseInt(config.QUEUE_MIN_DELAY || "30", 10);
+  let QUEUE_CONCURRENT_ITEMS = parseInt(
+    config.QUEUE_CONCURRENT_ITEMS || "500",
     10
   );
 
   // Set chunk size for processing - now dynamic from database config
-  const CHUNK_SIZE = parseInt(config.FETCH_CHUNK_SIZE || "20000", 10);
+  let CHUNK_SIZE = parseInt(config.FETCH_CHUNK_SIZE || "20000", 10);
+
+  // Log initial configuration to both console and file
+  const initialConfigMessage = `[Job ${jobId}] Initial configuration: HORIZONTAL_BATCH_SIZE=${HORIZONTAL_BATCH_SIZE}, VERTICAL_BATCH_SIZE=${VERTICAL_BATCH_SIZE}, QUEUE_RATE_LIMIT=${QUEUE_RATE_LIMIT}, QUEUE_MIN_DELAY=${QUEUE_MIN_DELAY}, QUEUE_CONCURRENT_ITEMS=${QUEUE_CONCURRENT_ITEMS}, CHUNK_SIZE=${CHUNK_SIZE}`;
+  console.log(initialConfigMessage);
+  writeToLogFile(CONFIG_LOG_FILE, initialConfigMessage);
+
+  // Log database configuration values directly
+  await verifyDatabaseConfiguration(jobId);
+
+  // Setup configuration change listener
+  const handleConfigChanges = (changes: ConfigChangeEvent[]): void => {
+    const relevantChanges = changes.filter((change) =>
+      [
+        "HORIZONTAL_BATCH_SIZE",
+        "VERTICAL_BATCH_SIZE",
+        "QUEUE_RATE_LIMIT",
+        "QUEUE_MIN_DELAY",
+        "QUEUE_CONCURRENT_ITEMS",
+        "FETCH_CHUNK_SIZE",
+      ].includes(change.key)
+    );
+
+    if (relevantChanges.length === 0) return;
+
+    // Store previous values for logging
+    const previousConfig = {
+      HORIZONTAL_BATCH_SIZE,
+      VERTICAL_BATCH_SIZE,
+      QUEUE_RATE_LIMIT,
+      QUEUE_MIN_DELAY,
+      QUEUE_CONCURRENT_ITEMS,
+      CHUNK_SIZE,
+    };
+
+    // Update local configuration values
+    relevantChanges.forEach((change) => {
+      switch (change.key) {
+        case "HORIZONTAL_BATCH_SIZE":
+          HORIZONTAL_BATCH_SIZE = parseInt(String(change.newValue), 10);
+          break;
+        case "VERTICAL_BATCH_SIZE":
+          VERTICAL_BATCH_SIZE = parseInt(String(change.newValue), 10);
+          break;
+        case "QUEUE_RATE_LIMIT":
+          QUEUE_RATE_LIMIT = parseInt(String(change.newValue), 10);
+          break;
+        case "QUEUE_MIN_DELAY":
+          QUEUE_MIN_DELAY = parseInt(String(change.newValue), 10);
+          break;
+        case "QUEUE_CONCURRENT_ITEMS":
+          QUEUE_CONCURRENT_ITEMS = parseInt(String(change.newValue), 10);
+          break;
+        case "FETCH_CHUNK_SIZE":
+          CHUNK_SIZE = parseInt(String(change.newValue), 10);
+          break;
+      }
+    });
+
+    // Log configuration changes
+    const configChangedMessage = `[Job ${jobId}] CONFIGURATION CHANGED: 
+      HORIZONTAL_BATCH_SIZE=${HORIZONTAL_BATCH_SIZE} (was ${previousConfig.HORIZONTAL_BATCH_SIZE}), 
+      VERTICAL_BATCH_SIZE=${VERTICAL_BATCH_SIZE} (was ${previousConfig.VERTICAL_BATCH_SIZE}), 
+      QUEUE_RATE_LIMIT=${QUEUE_RATE_LIMIT} (was ${previousConfig.QUEUE_RATE_LIMIT}), 
+      QUEUE_MIN_DELAY=${QUEUE_MIN_DELAY} (was ${previousConfig.QUEUE_MIN_DELAY}), 
+      QUEUE_CONCURRENT_ITEMS=${QUEUE_CONCURRENT_ITEMS} (was ${previousConfig.QUEUE_CONCURRENT_ITEMS}),
+      CHUNK_SIZE=${CHUNK_SIZE} (was ${previousConfig.CHUNK_SIZE})`;
+
+    console.log(configChangedMessage);
+    writeToLogFile(CONFIG_LOG_FILE, configChangedMessage);
+
+    // Log current active configuration for reference
+    const currentConfigMessage = `[Job ${jobId}] Current active configuration: HORIZONTAL_BATCH_SIZE=${HORIZONTAL_BATCH_SIZE}, VERTICAL_BATCH_SIZE=${VERTICAL_BATCH_SIZE}, QUEUE_RATE_LIMIT=${QUEUE_RATE_LIMIT}, QUEUE_MIN_DELAY=${QUEUE_MIN_DELAY}, QUEUE_CONCURRENT_ITEMS=${QUEUE_CONCURRENT_ITEMS}, CHUNK_SIZE=${CHUNK_SIZE}`;
+    writeToLogFile(CONFIG_LOG_FILE, currentConfigMessage);
+  };
+
+  // Subscribe to configuration changes
+  configService.onConfigChangeBatch(handleConfigChanges);
+
+  /**
+   * Utility function to verify the current configuration values in the database
+   */
+  async function verifyDatabaseConfiguration(jobId: string): Promise<void> {
+    try {
+      // Define interface for database row
+      interface ConfigRow {
+        ConfigKey: string;
+        ConfigValue: string;
+      }
+
+      // Get direct database values
+      const result = await DatabaseService.executeQuery(`
+        SELECT ConfigKey, ConfigValue FROM PrioritySystemConfig
+        WHERE ConfigKey IN ('HORIZONTAL_BATCH_SIZE', 'VERTICAL_BATCH_SIZE', 'QUEUE_RATE_LIMIT', 'QUEUE_MIN_DELAY', 'QUEUE_CONCURRENT_ITEMS', 'FETCH_CHUNK_SIZE')
+      `);
+
+      writeToLogFile(
+        CONFIG_LOG_FILE,
+        `[Job ${jobId}] Direct database configuration values:`
+      );
+
+      if (result && Array.isArray(result)) {
+        (result as ConfigRow[]).forEach((row) => {
+          writeToLogFile(
+            CONFIG_LOG_FILE,
+            `  ${row.ConfigKey}: ${row.ConfigValue}`
+          );
+        });
+      } else {
+        writeToLogFile(
+          CONFIG_LOG_FILE,
+          `  No configuration values found in database`
+        );
+      }
+    } catch (error) {
+      const errorMessage = `[Job ${jobId}] Error verifying database configuration: ${error instanceof Error ? error.message : String(error)}`;
+      console.error(errorMessage);
+      writeToLogFile(CONFIG_LOG_FILE, errorMessage);
+    }
+  }
 
   // Initialize progress tracking for this job
   ProgressTracker.initJob(jobId, recordCount, jobType);
@@ -129,6 +257,10 @@ export async function processWithQueues(
     perfMonitor.endDbFetch();
 
     if (rows.length === 0) break;
+
+    // Log configuration before each main processing chunk
+    const chunkConfigMessage = `[Job ${jobId}] Processing chunk of ${rows.length} records with configuration: HORIZONTAL_BATCH_SIZE=${HORIZONTAL_BATCH_SIZE}, VERTICAL_BATCH_SIZE=${VERTICAL_BATCH_SIZE}`;
+    writeToLogFile(CONFIG_LOG_FILE, chunkConfigMessage);
 
     // Divide the rows into horizontal and vertical batches
     for (
@@ -332,6 +464,13 @@ export async function processWithQueues(
 
   // Finalize progress tracking for this job
   ProgressTracker.completeJob(jobId, totalSuccessCount, totalFailureCount);
+
+  const completionMessage = `Queue job completed: ${processedCount} records (${totalSuccessCount} success, ${totalFailureCount} failed)`;
+  console.log(completionMessage);
+  writeToLogFile(CONFIG_LOG_FILE, `[Job ${jobId}] ${completionMessage}`);
+
+  // Unsubscribe from configuration changes before completing
+  configService.offConfigChangeBatch(handleConfigChanges);
 
   // Return only the summary of results for each queue
   return results.map((result) => ({
