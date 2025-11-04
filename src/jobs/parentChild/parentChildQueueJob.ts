@@ -71,8 +71,14 @@ export async function processParentChildWithQueues(
   // Updated chunk size to match processWithQueues
   let CHUNK_SIZE = parseInt(config.FETCH_CHUNK_SIZE || "20000", 10);
 
+  const ENABLE_RATE_LIMITING =
+    config.ENABLE_RATE_LIMITING === undefined
+      ? true
+      : config.ENABLE_RATE_LIMITING === true ||
+        config.ENABLE_RATE_LIMITING === "true";
+
   // Log initial configuration to both console and file
-  const initialConfigMessage = `[Job ${jobId}] Initial configuration: HORIZONTAL_BATCH_SIZE=${HORIZONTAL_BATCH_SIZE}, VERTICAL_BATCH_SIZE=${VERTICAL_BATCH_SIZE}, QUEUE_RATE_LIMIT=${QUEUE_RATE_LIMIT}, QUEUE_MIN_DELAY=${QUEUE_MIN_DELAY}, QUEUE_CONCURRENT_ITEMS=${QUEUE_CONCURRENT_ITEMS}`;
+  const initialConfigMessage = `[Job ${jobId}] Initial configuration: HORIZONTAL_BATCH_SIZE=${HORIZONTAL_BATCH_SIZE}, VERTICAL_BATCH_SIZE=${VERTICAL_BATCH_SIZE}, QUEUE_RATE_LIMIT=${QUEUE_RATE_LIMIT}, QUEUE_MIN_DELAY=${QUEUE_MIN_DELAY}, QUEUE_CONCURRENT_ITEMS=${QUEUE_CONCURRENT_ITEMS}, ENABLE_RATE_LIMITING=${ENABLE_RATE_LIMITING}`;
   console.log(initialConfigMessage);
   writeToLogFile(CONFIG_LOG_FILE, initialConfigMessage);
 
@@ -89,6 +95,7 @@ export async function processParentChildWithQueues(
         "QUEUE_MIN_DELAY",
         "QUEUE_CONCURRENT_ITEMS",
         "FETCH_CHUNK_SIZE",
+        "ENABLE_RATE_LIMITING",
       ].includes(change.key)
     );
 
@@ -102,7 +109,10 @@ export async function processParentChildWithQueues(
       QUEUE_MIN_DELAY,
       QUEUE_CONCURRENT_ITEMS,
       CHUNK_SIZE,
+      ENABLE_RATE_LIMITING,
     };
+
+    let currentEnableRateLimiting = ENABLE_RATE_LIMITING;
 
     // Update local configuration values
     relevantChanges.forEach((change) => {
@@ -125,6 +135,12 @@ export async function processParentChildWithQueues(
         case "FETCH_CHUNK_SIZE":
           CHUNK_SIZE = Number(change.newValue);
           break;
+        case "ENABLE_RATE_LIMITING":
+          currentEnableRateLimiting =
+            change.newValue === true ||
+            change.newValue === "true" ||
+            String(change.newValue).toLowerCase() === "true";
+          break;
       }
     });
 
@@ -135,13 +151,24 @@ export async function processParentChildWithQueues(
       QUEUE_RATE_LIMIT=${QUEUE_RATE_LIMIT} (was ${previousConfig.QUEUE_RATE_LIMIT}), 
       QUEUE_MIN_DELAY=${QUEUE_MIN_DELAY} (was ${previousConfig.QUEUE_MIN_DELAY}), 
       QUEUE_CONCURRENT_ITEMS=${QUEUE_CONCURRENT_ITEMS} (was ${previousConfig.QUEUE_CONCURRENT_ITEMS}), 
-      CHUNK_SIZE=${CHUNK_SIZE} (was ${previousConfig.CHUNK_SIZE})`;
+      CHUNK_SIZE=${CHUNK_SIZE} (was ${previousConfig.CHUNK_SIZE}),
+      ENABLE_RATE_LIMITING=${currentEnableRateLimiting} (was ${previousConfig.ENABLE_RATE_LIMITING})`;
 
     console.log(configChangedMessage);
     writeToLogFile(CONFIG_LOG_FILE, configChangedMessage);
 
+    if (currentEnableRateLimiting !== previousConfig.ENABLE_RATE_LIMITING) {
+      console.log(
+        `[Job ${jobId}] Rate limiting ${currentEnableRateLimiting ? "ENABLED" : "DISABLED"} - updating active queues`
+      );
+      writeToLogFile(
+        CONFIG_LOG_FILE,
+        `[Job ${jobId}] Rate limiting ${currentEnableRateLimiting ? "ENABLED" : "DISABLED"}`
+      );
+    }
+
     // Log current active configuration for reference
-    const currentConfigMessage = `[Job ${jobId}] Current active configuration: HORIZONTAL_BATCH_SIZE=${HORIZONTAL_BATCH_SIZE}, VERTICAL_BATCH_SIZE=${VERTICAL_BATCH_SIZE}, QUEUE_RATE_LIMIT=${QUEUE_RATE_LIMIT}, QUEUE_MIN_DELAY=${QUEUE_MIN_DELAY}, QUEUE_CONCURRENT_ITEMS=${QUEUE_CONCURRENT_ITEMS}, CHUNK_SIZE=${CHUNK_SIZE}`;
+    const currentConfigMessage = `[Job ${jobId}] Current active configuration: HORIZONTAL_BATCH_SIZE=${HORIZONTAL_BATCH_SIZE}, VERTICAL_BATCH_SIZE=${VERTICAL_BATCH_SIZE}, QUEUE_RATE_LIMIT=${QUEUE_RATE_LIMIT}, QUEUE_MIN_DELAY=${QUEUE_MIN_DELAY}, QUEUE_CONCURRENT_ITEMS=${QUEUE_CONCURRENT_ITEMS}, CHUNK_SIZE=${CHUNK_SIZE}, ENABLE_RATE_LIMITING=${currentEnableRateLimiting}`;
     writeToLogFile(CONFIG_LOG_FILE, currentConfigMessage);
   };
 
@@ -272,7 +299,7 @@ export async function processParentChildWithQueues(
           );
 
           // Apply current dynamic settings to queue
-          queue.setRateLimitEnabled(true);
+          queue.setRateLimitEnabled(ENABLE_RATE_LIMITING);
           queue.setUpdateBatchTable(updateBatchTable);
           queue.setConcurrency(QUEUE_CONCURRENT_ITEMS);
           queue.setRateLimit(QUEUE_RATE_LIMIT);
