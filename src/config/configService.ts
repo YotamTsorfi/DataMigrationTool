@@ -53,6 +53,9 @@ class ConfigurationService {
     EMAIL_FROM: "Priority Job System <noreply@carmelton-migration.com>",
     EMAIL_TO: "<yotamt@one1.co.il>",
 
+    // 🔥 הוסף את השורה הזו
+    ENABLE_RATE_LIMITING: true, // ברירת מחדל: מופעל
+
     // Custom WHERE clauses for different job types
     WHERE_CLAUSES: {},
   };
