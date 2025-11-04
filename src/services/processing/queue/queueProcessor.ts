@@ -1028,37 +1028,51 @@ export class QueueProcessor {
 
     // Calculate time-based error decay
     const timeElapsedSinceError = (Date.now() - this.lastErrorTimeStamp) / 1000; // in seconds
-    if (timeElapsedSinceError > 60 && this.errorCount503 > 0) {
-      // Reduce error count over time if no recent errors
-      this.errorCount503 = Math.max(0, this.errorCount503 - 1);
-      console.log(
-        `Queue ${this.queueId}: Decaying error count to ${this.errorCount503}`
-      );
+
+    if (timeElapsedSinceError > 30 && this.errorCount503 > 0) {
+      // Reduce error count more aggressively if no recent errors
+      const decayAmount = Math.max(1, Math.floor(this.errorCount503 * 0.2));
+      this.errorCount503 = Math.max(0, this.errorCount503 - decayAmount);
+
+      // Only log significant decay
+      if (decayAmount > 1) {
+        console.log(
+          `Queue ${this.queueId}: Decaying error count by ${decayAmount} to ${this.errorCount503}`
+        );
+      }
     }
 
     // Track consecutive successes to recover from backoff
     if (!recentErrors) {
       this.consecutiveSuccesses++;
 
-      // Allow recovery based on both consecutive successes and error rate
-      if (
-        this.backoffActive &&
-        (this.consecutiveSuccesses > 100 ||
-          (errorRate < 0.5 && this.consecutiveSuccesses > 50))
-      ) {
-        console.log(
-          `Queue ${this.queueId}: Exiting backoff mode - ${this.consecutiveSuccesses} consecutive successes, error rate ${errorRate.toFixed(2)}%`
-        );
-        this.backoffActive = false;
-        this.errorCount503 = 0;
+      // 🔥 More aggressive recovery logic
+      if (this.backoffActive) {
+        // Exit backoff if conditions are good
+        const shouldExitBackoff =
+          this.consecutiveSuccesses > 50 ||
+          (errorRate < 1.0 && this.consecutiveSuccesses > 30) ||
+          (timeElapsedSinceError > 60 && this.errorCount503 < 3) ||
+          this.errorCount503 === 0;
+
+        if (shouldExitBackoff) {
+          console.log(
+            `Queue ${this.queueId}: Exiting backoff mode - ${this.consecutiveSuccesses} consecutive successes, error rate ${errorRate.toFixed(2)}%, ${Math.floor(timeElapsedSinceError)}s since last error`
+          );
+          this.backoffActive = false;
+          this.errorCount503 = 0;
+          this.consecutiveSuccesses = 0;
+        }
       }
     } else {
       this.consecutiveSuccesses = 0;
 
-      // More nuanced entry into backoff mode
+      // 🔥 More conservative entry into backoff mode
       if (
         !this.backoffActive &&
-        (this.errorCount503 > 2 || (errorRate > 2.0 && this.total503Errors > 3))
+        this.errorCount503 > 5 && // Increased threshold
+        errorRate > 3.0 && // Higher error rate required
+        this.total503Errors > 5
       ) {
         console.log(
           `Queue ${this.queueId}: Entering backoff mode - ${this.errorCount503} recent 503 errors, error rate ${errorRate.toFixed(2)}%`
@@ -1067,16 +1081,16 @@ export class QueueProcessor {
       }
     }
 
-    // Implement progressive backoff levels instead of binary on/off
+    // Implement progressive backoff levels
     let concurrencyMultiplier = 1.0;
     if (this.backoffActive) {
-      // Calculate severity based on error count and rate
-      if (errorRate > 5.0 || this.errorCount503 > 10) {
-        concurrencyMultiplier = 0.4; // Severe reduction - 40% of normal
-      } else if (errorRate > 2.0 || this.errorCount503 > 5) {
-        concurrencyMultiplier = 0.6; // Moderate reduction - 60% of normal
+      // 🔥 Less aggressive reduction
+      if (errorRate > 8.0 || this.errorCount503 > 15) {
+        concurrencyMultiplier = 0.5; // Severe: 50%
+      } else if (errorRate > 5.0 || this.errorCount503 > 10) {
+        concurrencyMultiplier = 0.7; // Moderate: 70%
       } else {
-        concurrencyMultiplier = 0.8; // Light reduction - 80% of normal
+        concurrencyMultiplier = 0.85; // Light: 85%
       }
     }
 
@@ -1085,14 +1099,12 @@ export class QueueProcessor {
       this.normalConcurrency * concurrencyMultiplier
     );
 
-    // Only log when the concurrency changes
-    if (
-      Math.floor(this.normalConcurrency * concurrencyMultiplier) !==
-      this.concurrencyLimit
-    ) {
+    // Only log when concurrency actually changes
+    if (effectiveConcurrency !== this.concurrencyLimit) {
       console.log(
-        `Queue ${this.queueId}: Adjusting concurrency to ${effectiveConcurrency} (${Math.round(concurrencyMultiplier * 100)}% of normal)`
+        `Queue ${this.queueId}: Adjusting concurrency to ${effectiveConcurrency} (${Math.round(concurrencyMultiplier * 100)}% of normal) - errorCount=${this.errorCount503}, errorRate=${errorRate.toFixed(2)}%`
       );
+      this.concurrencyLimit = effectiveConcurrency;
     }
 
     // Apply adaptive delay based on error conditions
@@ -1101,9 +1113,10 @@ export class QueueProcessor {
     if (recentErrors && this.errorCount503 > 0) {
       // More sophisticated adaptive delay formula with ceiling
       const baseDelay = Math.min(500, 10 * Math.pow(this.errorCount503, 1.5));
-      delay = Math.floor(baseDelay * (1 + Math.random() * 0.2)); // Add small jitter
+      delay = Math.floor(baseDelay * (1 + Math.random() * 0.2));
 
-      if (delay > this.minDelay * 2) {
+      // Only log significant delays
+      if (delay > this.minDelay * 3) {
         console.log(
           `Queue ${this.queueId}: Applying throttling delay: ${delay}ms due to ${this.errorCount503} 503 errors`
         );
