@@ -268,8 +268,8 @@ export async function processParentChildWithQueues(
       if (rows.length === 0) break;
 
       // Log configuration before each main processing chunk
-      const chunkConfigMessage = `[Job ${jobId}] Processing chunk of ${rows.length} records with configuration: HORIZONTAL_BATCH_SIZE=${HORIZONTAL_BATCH_SIZE}, VERTICAL_BATCH_SIZE=${VERTICAL_BATCH_SIZE}, QUEUE_CONCURRENT_ITEMS=${QUEUE_CONCURRENT_ITEMS}`;
-      writeToLogFile(CONFIG_LOG_FILE, chunkConfigMessage);
+      // const chunkConfigMessage = `[Job ${jobId}] Processing chunk of ${rows.length} records with configuration: HORIZONTAL_BATCH_SIZE=${HORIZONTAL_BATCH_SIZE}, VERTICAL_BATCH_SIZE=${VERTICAL_BATCH_SIZE}, QUEUE_CONCURRENT_ITEMS=${QUEUE_CONCURRENT_ITEMS}`;
+      // writeToLogFile(CONFIG_LOG_FILE, chunkConfigMessage);
 
       // Divide the rows into horizontal and vertical batches (same as in processWithQueues)
       for (
