@@ -390,18 +390,14 @@ export class QueueProcessor {
           // Extract Priority ID with specific handling for delta
           let priorityId = null;
 
+          // 15-12-25
+          // New requirements for delta processing:
+          // Take priority_id from the response also for updates records.
           if (isDelta) {
-            // To update = delta_action === 2
-            if (deltaMetadata?.delta_action === 2) {
-              // For updates, keep the existing priority_id from metadata
-              priorityId = deltaMetadata.priority_id;
-            } else {
-              // For new records, extract from response
-              priorityId = this.extractPriorityIdFromResponse(
-                response.data,
-                item
-              );
-            }
+            priorityId = this.extractPriorityIdFromResponse(
+              response.data,
+              item
+            );
           } else {
             // Standard priority ID extraction
             priorityId = this.extractPriorityIdFromResponse(
@@ -409,6 +405,27 @@ export class QueueProcessor {
               item
             );
           }
+
+          //OLD (Take priority_id from the response only for new records)
+          // if (isDelta) {
+          //   // To update = delta_action === 2
+          //   if (deltaMetadata?.delta_action === 2) {
+          //     // For updates, keep the existing priority_id from metadata
+          //     priorityId = deltaMetadata.priority_id;
+          //   } else {
+          //     // For new records, extract from response
+          //     priorityId = this.extractPriorityIdFromResponse(
+          //       response.data,
+          //       item
+          //     );
+          //   }
+          // } else {
+          //   // Standard priority ID extraction
+          //   priorityId = this.extractPriorityIdFromResponse(
+          //     response.data,
+          //     item
+          //   );
+          // }
 
           // Create update record
           this.updateRows.push({
