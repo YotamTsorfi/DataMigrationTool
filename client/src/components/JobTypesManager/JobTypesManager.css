@@ -1,3 +1,37 @@
+/* Wider columns for Screen Name and DB Table */
+.screen-name-column {
+  min-width: 160px;
+  max-width: 300px;
+  white-space: normal;
+  word-break: break-word;
+}
+.db-table-column {
+  min-width: 140px;
+  max-width: 260px;
+  white-space: normal;
+  word-break: break-word;
+}
+@media (max-width: 900px) {
+  .screen-name-column {
+    min-width: 90px;
+    max-width: 160px;
+  }
+  .db-table-column {
+    min-width: 80px;
+    max-width: 120px;
+  }
+}
+
+@media (max-width: 600px) {
+  .screen-name-column {
+    min-width: 60px;
+    max-width: 90px;
+  }
+  .db-table-column {
+    min-width: 50px;
+    max-width: 80px;
+  }
+}
 .job-types-manager {
   padding: 20px;
   max-width: 1200px;
@@ -83,7 +117,7 @@ table {
   width: 100%;
   border-collapse: collapse;
   min-width: 100%;
-  table-layout: fixed; /* Fixed table layout for better control */
+  table-layout: auto; /* Allow columns to size based on content */
 }
 
 th,
@@ -98,19 +132,43 @@ td {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 150px; /* Limit cell width */
+  max-width: 150px;
+}
+
+/* Wider column for Job Type Name */
+.job-type-name-column {
+  min-width: 220px;
+  max-width: 400px;
+  white-space: normal;
+  word-break: break-word;
 }
 
 /* Adjust for mobile viewports */
-@media (max-width: 768px) {
-  .section-header {
-    flex-direction: column;
-    align-items: flex-start;
+@media (max-width: 900px) {
+  .job-type-name-column {
+    min-width: 120px;
+    max-width: 200px;
   }
+  table,
+  .job-types-list,
+  .child-jobs-list {
+    font-size: 0.95em;
+  }
+}
 
-  .button-group {
-    margin-top: 10px;
-    width: 100%;
+@media (max-width: 600px) {
+  .job-type-name-column {
+    min-width: 80px;
+    max-width: 120px;
+  }
+  table,
+  .job-types-list,
+  .child-jobs-list {
+    font-size: 0.9em;
+  }
+  th,
+  td {
+    padding: 4px 6px;
   }
 }
 

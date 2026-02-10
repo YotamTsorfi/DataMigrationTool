@@ -13,9 +13,12 @@ export const WhereClauseTextarea = styled.textarea<{ $hasError?: boolean }>`
   border-radius: 4px;
   font-family: monospace;
   font-size: 14px;
-  resize: vertical;
-`;
+  box-sizing: border-box;
 
+  @media (min-width: 900px) {
+    width: 100%;
+  }
+`;
 export const ErrorMessage = styled.div`
   color: red;
   font-size: 14px;
@@ -49,8 +52,14 @@ export const MainContainer = styled.div`
   justify-content: space-between;
   padding: 20px;
   flex-wrap: wrap;
-`;
+  gap: 20px;
 
+  @media (max-width: 900px) {
+    flex-direction: column;
+    padding: 10px;
+    gap: 10px;
+  }
+`;
 export const SectionContainer = styled.div`
   padding: 20px;
   border: 1px solid #ccc;
@@ -73,38 +82,60 @@ export const InputContainer = styled.div`
   display: flex;
   flex-direction: column;
   margin-bottom: 20px;
-`;
+  gap: 12px;
 
+  @media (min-width: 700px) {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 20px;
+    align-items: flex-start;
+  }
+`;
 export const InputLabel = styled.label`
   display: flex;
   flex-direction: column;
   margin-right: 10px;
-  min-width: 600px;
-  width: auto; /* Set a fixed width */
-`;
+  min-width: 180px;
+  width: 100%;
+  font-size: 15px;
+  font-weight: 500;
+  gap: 4px;
 
+  @media (min-width: 700px) {
+    min-width: 220px;
+    max-width: 320px;
+    width: 45%;
+  }
+
+  @media (max-width: 500px) {
+    min-width: 120px;
+    font-size: 14px;
+  }
+`;
 export const Button = styled.button`
   padding: 10px 20px;
-  background-color: #007bff;
+  min-width: 0;
+  height: 38px;
   color: white;
   border: none;
   border-radius: 4px;
   cursor: pointer;
   &:disabled {
-    background-color: #ccc;
+    font-size: 15px;
   }
 `;
 
 // Modern, accessible form controls
 export const TextInput = styled.input<{ $hasError?: boolean }>`
   width: 100%;
-  height: 10px;
+  min-width: 0;
+  height: 38px;
   padding: 8px 12px;
   border: 1px solid ${(p) => (p.$hasError ? "#dc3545" : "#d0d7de")};
   border-radius: 8px;
   background: #fff;
   color: #111827;
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.4;
   transition:
     border-color 0.15s ease,
@@ -131,6 +162,12 @@ export const TextInput = styled.input<{ $hasError?: boolean }>`
     background: #f5f6f8;
     color: #6b7280;
     cursor: not-allowed;
+  }
+
+  @media (max-width: 500px) {
+    font-size: 13px;
+    padding: 6px 8px;
+    height: 32px;
   }
 `;
 
@@ -207,13 +244,20 @@ export const Td = styled.td`
 
 export const ReadOnlyInput = styled.input`
   width: 100%;
-  height: 10px;
+  min-width: 0;
+  height: 38px;
   padding: 8px 12px;
   background-color: #f7f7f9;
   border: 1px solid #d0d7de;
   color: #495057;
   border-radius: 8px;
   cursor: not-allowed;
+
+  @media (max-width: 500px) {
+    font-size: 13px;
+    padding: 6px 8px;
+    height: 32px;
+  }
 `;
 
 export const ResultsContainer = styled.div`

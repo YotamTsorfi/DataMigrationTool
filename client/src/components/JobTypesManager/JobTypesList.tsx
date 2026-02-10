@@ -28,10 +28,10 @@ export const JobTypesList: React.FC<JobTypesListProps> = ({
           <thead>
             <tr>
               <th className="narrow-column id-column">ID</th>
-              <th>Job Type Name</th>
-              <th>Screen Name</th>
+              <th className="job-type-name-column">Job Type Name</th>
+              <th className="screen-name-column">Screen Name</th>
               <th className="narrow-column">Run Order</th>
-              <th>DB Table</th>
+              <th className="db-table-column">DB Table</th>
               <th>Priority ID</th>
               <th>Reference ID</th>
               <th className="narrow-column">Ready</th>
@@ -53,10 +53,12 @@ export const JobTypesList: React.FC<JobTypesListProps> = ({
                   onClick={() => onSelect(jobType)}
                 >
                   <td>{jobType.JobTypeId}</td>
-                  <td>{jobType.JobTypeName}</td>
-                  <td>{jobType.ScreenName}</td>
+                  <td className="job-type-name-column">
+                    {jobType.JobTypeName}
+                  </td>
+                  <td className="screen-name-column">{jobType.ScreenName}</td>
                   <td>{jobType.RunOrder}</td>
-                  <td>{jobType.DBTableName}</td>
+                  <td className="db-table-column">{jobType.DBTableName}</td>
                   <td>{jobType.priority_id}</td>
                   <td>{jobType.linkedField}</td>
                   <td>{jobType.isReady ? "Yes" : "No"}</td>

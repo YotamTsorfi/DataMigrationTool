@@ -29,7 +29,7 @@ interface ConfigItem {
 
 // Group all configurations under a single category
 const groupConfigurations = (
-  configs: ConfigItem[]
+  configs: ConfigItem[],
 ): Record<string, ConfigItem[]> => {
   // Create a single category for all configuration items
   const SINGLE_CATEGORY = "System Settings";
@@ -69,7 +69,7 @@ const ConfigPanel: React.FC = () => {
     try {
       setLoading(true);
       const response = await axios.get(
-        `${process.env.REACT_APP_API_URL}/config`
+        `${process.env.REACT_APP_API_URL}/config`,
       );
 
       // Extract the config array from the response
@@ -79,7 +79,7 @@ const ConfigPanel: React.FC = () => {
 
       // Sort the configurations by ConfigId
       const sortedConfigs = configData.sort(
-        (a: ConfigItem, b: ConfigItem) => a.ConfigId - b.ConfigId
+        (a: ConfigItem, b: ConfigItem) => a.ConfigId - b.ConfigId,
       );
 
       setConfigs(sortedConfigs);
@@ -105,7 +105,7 @@ const ConfigPanel: React.FC = () => {
           value: config.ConfigValue,
           description: config.Description,
           isVisible: config.IsVisible,
-        }
+        },
       );
       console.log("Save successful, triggering toast");
       toast.success(`${config.ConfigKey} updated successfully`);
@@ -115,7 +115,7 @@ const ConfigPanel: React.FC = () => {
       toast.error(
         `Failed to update ${config.ConfigKey}: ${
           axiosError.response?.data?.error || "Unknown error"
-        }`
+        }`,
       );
     }
   };
@@ -129,7 +129,7 @@ const ConfigPanel: React.FC = () => {
 
     try {
       await axios.delete(
-        `${process.env.REACT_APP_API_URL}/config/${config.ConfigKey}`
+        `${process.env.REACT_APP_API_URL}/config/${config.ConfigKey}`,
       );
       toast.success(`${config.ConfigKey} deleted successfully`);
       fetchConfigs(); // Refresh the list
@@ -139,7 +139,7 @@ const ConfigPanel: React.FC = () => {
       toast.error(
         `Failed to delete ${config.ConfigKey}: ${
           axiosError.response?.data?.error || "Unknown error"
-        }`
+        }`,
       );
     }
   };
@@ -151,7 +151,7 @@ const ConfigPanel: React.FC = () => {
         {
           value: config.ConfigValue,
           isVisible: !config.IsVisible,
-        }
+        },
       );
       toast.success(`${config.ConfigKey} visibility updated`);
       fetchConfigs(); // Refresh the list
@@ -161,7 +161,7 @@ const ConfigPanel: React.FC = () => {
       toast.error(
         `Failed to update ${config.ConfigKey} visibility: ${
           axiosError.response?.data?.error || "Unknown error"
-        }`
+        }`,
       );
     }
   };
@@ -206,7 +206,7 @@ const ConfigPanel: React.FC = () => {
       toast.error(
         `Failed to create configuration: ${
           axiosError.response?.data?.error || "Unknown error"
-        }`
+        }`,
       );
     }
   };
@@ -400,7 +400,9 @@ const ConfigPanel: React.FC = () => {
                                 style={{ width: "32%", minWidth: "180px" }}
                               />
                               {/* Key */}
-                              <col style={{ width: "40%" }} />
+                              <col
+                                style={{ width: "50%", minWidth: "220px" }}
+                              />
                               {/* Value */}
                               <col style={{ width: "45%" }} />
                               {/* Description */}
@@ -429,6 +431,9 @@ const ConfigPanel: React.FC = () => {
                                     textAlign: "left",
                                     padding: "8px",
                                     borderBottom: "1px solid #ddd",
+                                    minWidth: "220px",
+                                    maxWidth: "400px",
+                                    wordBreak: "break-all",
                                   }}
                                 >
                                   Key
@@ -475,7 +480,7 @@ const ConfigPanel: React.FC = () => {
                               {categoryConfigs.map((config, index) => {
                                 // Find the overall index in the original array
                                 const originalIndex = configs.findIndex(
-                                  (c) => c.ConfigId === config.ConfigId
+                                  (c) => c.ConfigId === config.ConfigId,
                                 );
 
                                 return (
@@ -508,6 +513,10 @@ const ConfigPanel: React.FC = () => {
                                         borderBottom: "1px solid #eee",
                                         overflow: "hidden",
                                         textOverflow: "ellipsis",
+                                        minWidth: "220px",
+                                        maxWidth: "400px",
+                                        wordBreak: "break-all",
+                                        whiteSpace: "normal",
                                       }}
                                       title={config.ConfigKey}
                                     >
@@ -525,7 +534,7 @@ const ConfigPanel: React.FC = () => {
                                         onChange={(e) =>
                                           handleConfigChange(
                                             originalIndex,
-                                            e.target.value
+                                            e.target.value,
                                           )
                                         }
                                         disabled={disabled}
@@ -553,7 +562,7 @@ const ConfigPanel: React.FC = () => {
                                       }}
                                     >
                                       {new Date(
-                                        config.LastUpdated
+                                        config.LastUpdated,
                                       ).toLocaleString()}
                                     </td>
                                     <td
@@ -627,7 +636,7 @@ const ConfigPanel: React.FC = () => {
                     </div>
                   )}
                 </div>
-              )
+              ),
             )}
           </>
         )}
